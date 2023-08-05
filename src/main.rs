@@ -39,7 +39,7 @@ impl ShanaShot {
         _parent_window: String,
         options: ScreenshotOption,
     ) -> fdo::Result<(u32, Screenshot)> {
-        let image_buffer = if options.modal {
+        let image_buffer = if options.interactive {
             let wayinfos = WayshotConnection::new()
                 .map_err(|_| {
                     zbus::Error::Failure("Cannot create a new wayshot_connection".to_string())
@@ -103,7 +103,7 @@ impl ShanaShot {
                 }
                 SlintSelection::GlobalScreen => self
                     .wayshot_connection
-                    .screenshot_all(options.interactive)
+                    .screenshot_all(false)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
                 SlintSelection::Selection(index) => self
                     .wayshot_connection
@@ -112,7 +112,7 @@ impl ShanaShot {
             }
         } else {
             self.wayshot_connection
-                .screenshot_all(options.interactive)
+                .screenshot_all(false)
                 .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?
         };
         image_buffer.save("/tmp/wayshot.png").map_err(|e| {
