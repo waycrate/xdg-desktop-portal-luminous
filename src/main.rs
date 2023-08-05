@@ -101,13 +101,13 @@ impl ShanaShot {
                             zbus::Error::Failure(format!("Wayland screencopy failed, {e}"))
                         })?
                 }
-                SlintSelection::GlobalScreen => self
+                SlintSelection::GlobalScreen { showcursor } => self
                     .wayshot_connection
-                    .screenshot_all(false)
+                    .screenshot_all(showcursor)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
-                SlintSelection::Selection(index) => self
+                SlintSelection::Selection { index, showcursor } => self
                     .wayshot_connection
-                    .screenshot_outputs(vec![wayinfos[index as usize].clone()], false)
+                    .screenshot_outputs(vec![wayinfos[index as usize].clone()], showcursor)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
             }
         } else {

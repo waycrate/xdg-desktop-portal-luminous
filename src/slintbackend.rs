@@ -7,10 +7,10 @@ slint::include_modules!();
 use std::sync::mpsc;
 
 pub enum SlintSelection {
-    GlobalScreen,
+    GlobalScreen { showcursor: bool },
     Slurp,
     Canceled,
-    Selection(i32),
+    Selection { showcursor: bool, index: i32 },
 }
 
 fn init_slots(ui: &AppWindow, sender: mpsc::Sender<SlintSelection>) {
@@ -21,13 +21,13 @@ fn init_slots(ui: &AppWindow, sender: mpsc::Sender<SlintSelection>) {
         let _ = slint::quit_event_loop();
     });
     let sender_global = sender.clone();
-    global.on_useGlobal(move || {
-        let _ = sender_global.send(SlintSelection::GlobalScreen);
+    global.on_useGlobal(move |showcursor| {
+        let _ = sender_global.send(SlintSelection::GlobalScreen { showcursor });
         let _ = slint::quit_event_loop();
     });
 
-    global.on_selectScreen(move |index| {
-        let _ = sender.send(SlintSelection::Selection(index));
+    global.on_selectScreen(move |index, showcursor| {
+        let _ = sender.send(SlintSelection::Selection { index, showcursor });
         let _ = slint::quit_event_loop();
     });
 }

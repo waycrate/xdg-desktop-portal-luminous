@@ -1,4 +1,4 @@
-import { Button, VerticalBox , HorizontalBox, GridBox, GroupBox, ListView} from "std-widgets.slint";
+import { Button, VerticalBox , HorizontalBox, GridBox, GroupBox, ListView, CheckBox} from "std-widgets.slint";
 
 export struct ScreenInfo {
     name: string,
@@ -7,12 +7,13 @@ export struct ScreenInfo {
 
 export global SelectSlots {
     callback useSlurp();
-    callback selectScreen(int);
-    callback useGlobal();
+    callback selectScreen(int, bool);
+    callback useGlobal(bool);
 }
 
 export component AppWindow inherits Window {
     in property <[ScreenInfo]> infos: [];
+    in-out property <bool> showcursor : false ;
     no-frame: true;
     width: 1000px;
     height: 700px;
@@ -21,7 +22,7 @@ export component AppWindow inherits Window {
             Button {
                 text: "Global Screen";
                 height: 200px;
-                clicked => { SelectSlots.useGlobal() }
+                clicked => { SelectSlots.useGlobal(showcursor) }
             }
             Button {
                 text: "Slurp";
@@ -36,8 +37,15 @@ export component AppWindow inherits Window {
                 for data[index] in infos:  Button{
                     text: "\{data.name} : \{data.description}";
                     height: 80px;
-                    clicked => { SelectSlots.selectScreen(index) }
+                    clicked => { SelectSlots.selectScreen(index,showcursor) }
                 }
+            }
+        }
+        HorizontalBox {
+            alignment: end;
+            CheckBox {
+                text: "show cursor?";
+                checked <=> showcursor;
             }
         }
     }
