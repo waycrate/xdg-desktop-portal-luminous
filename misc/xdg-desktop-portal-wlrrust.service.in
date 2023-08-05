@@ -1,0 +1,10 @@
+[Unit]
+Description=Xdg Desktop Portal for wlr written with rust
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.impl.portal.desktop.wlrrust
+ExecStart=@xdg_install_dir@/xdg-desktop-portal-wlrrust
+Restart=on-failure
