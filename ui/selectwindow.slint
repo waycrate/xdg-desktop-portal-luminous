@@ -1,0 +1,44 @@
+import { Button, VerticalBox , HorizontalBox, GridBox, GroupBox, ListView} from "std-widgets.slint";
+
+export struct ScreenInfo {
+    name: string,
+    description: string
+}
+
+export global SelectSlots {
+    callback useSlurp();
+    callback selectScreen(int);
+    callback useGlobal();
+}
+
+export component AppWindow inherits Window {
+    in property <[ScreenInfo]> infos: [];
+    no-frame: true;
+    width: 1000px;
+    height: 700px;
+    VerticalBox {
+        HorizontalBox {
+            Button {
+                text: "Global Screen";
+                height: 200px;
+                clicked => { SelectSlots.useGlobal() }
+            }
+            Button {
+                text: "Slurp";
+                height: 200px;
+                clicked => { SelectSlots.useSlurp() }
+            }
+        }
+        GroupBox {
+            title: "select a screen";
+            ListView {
+                min-height : 200px;
+                for data[index] in infos:  Button{
+                    text: "\{data.name} : \{data.description}";
+                    height: 80px;
+                    clicked => { SelectSlots.selectScreen(index) }
+                }
+            }
+        }
+    }
+}
