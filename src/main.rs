@@ -23,7 +23,7 @@ pub struct Color {
 #[zvariant(signature = "dict")]
 pub struct ScreenshotOption {
     interactive: bool,
-    modal: bool,
+    modal: Option<bool>,
 }
 
 struct ShanaShot {
