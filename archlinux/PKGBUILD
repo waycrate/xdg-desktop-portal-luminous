@@ -5,7 +5,6 @@ pkgdesc='xdg-desktop-portal-wlrrust'
 arch=('x86_64' 'aarch64')
 pkgdesc='a rust wlroots xdg-desktop-portal backend'
 url='https://github.com/waycrate/xdg-desktop-portal-wlrrust'
-install=''$pkgname'.install'
 license=('BSD-2-Clause')
 depends=('xdg-desktop-portal' 'slurp')
 provides=("xdg-desktop-portal-impl")
