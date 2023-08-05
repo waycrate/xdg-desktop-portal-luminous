@@ -18,12 +18,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.72"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b13c32d80ecc7ab747b80c3784bce54ee8a7a0cc4fbda9bf4cda2cf6fe90854"
-
-[[package]]
 name = "async-broadcast"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -820,15 +814,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_spanned"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93107647184f6027e3b7dcb2e11034cf95ffa1e3a682c67951963ac69c1c007d"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1007,25 +992,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6135d499e69981f9ff0ef2167955a5333c35e36f6937d382974566b3d5b94ec"
-dependencies = [
- "serde",
- "serde_spanned",
- "toml_datetime",
- "toml_edit",
-]
-
-[[package]]
 name = "toml_datetime"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a76a9312f5ba4c2dec6b9161fdf25d87ad8a09256ccea5a556fef03c706a10f"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "toml_edit"
@@ -1034,8 +1004,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2380d56e8670370eee6566b0bfd4265f65b3f432e8c6d85623f728d4fa31f739"
 dependencies = [
  "indexmap",
- "serde",
- "serde_spanned",
  "toml_datetime",
  "winnow",
 ]
@@ -1340,14 +1308,11 @@ dependencies = [
 name = "xdg-desktop-portal-wlrrust"
 version = "0.3.4"
 dependencies = [
- "anyhow",
  "image",
  "libwayshot",
  "serde",
  "serde_repr",
- "thiserror",
  "tokio",
- "toml",
  "tracing",
  "tracing-subscriber",
  "url",
