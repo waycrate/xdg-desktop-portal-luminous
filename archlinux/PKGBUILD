@@ -1,18 +1,14 @@
-pkgname=xdg-desktop-portal-shana
-pkgver=0.3.3
+pkgname=xdg-desktop-portal-wlrrust
+pkgver=0.1.0
 pkgrel=1.0
-pkgdesc='xdg-desktop-portal-shana'
+pkgdesc='xdg-desktop-portal-wlrrust'
 arch=('x86_64' 'aarch64')
-pkgdesc='A filechooser portal backend for any desktop environment'
-url='https://github.com/Decodetalkers/xdg-desktop-portal-shana'
+pkgdesc='a rust wlroots xdg-desktop-portal backend'
+url='https://github.com/waycrate/xdg-desktop-portal-wlrrust'
 install=''$pkgname'.install'
-license=('MIT')
-depends=('xdg-desktop-portal')
+license=('BSD-2-Clause')
+depends=('xdg-desktop-portal' 'slurp')
 provides=("xdg-desktop-portal-impl")
-optdepends=("xdg-desktop-portal-gnome: provide gnome backend"
-            "xdg-desktop-portal-kde: provide kde backend"
-            "xdg-desktop-portal-gtk: provide gtk backend"
-            "xdg-desktop-portal-lxqt: provide lxqt backend")
 makedepends=('git' 'ninja' 'meson' 'rust')
 source=('source.tar.gz')
 sha256sums=('SKIP')
