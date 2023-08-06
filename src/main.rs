@@ -24,6 +24,7 @@ pub struct Color {
 pub struct ScreenshotOption {
     interactive: bool,
     modal: Option<bool>,
+    permission_store_checked: Option<bool>,
 }
 
 struct ShanaShot {
