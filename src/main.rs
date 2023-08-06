@@ -1,6 +1,7 @@
 use std::future::pending;
 use zbus::ConnectionBuilder;
 
+mod request;
 mod screenshot;
 mod slintbackend;
 
