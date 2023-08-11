@@ -4288,6 +4288,8 @@ dependencies = [
 name = "xdg-desktop-portal-wlrrust"
 version = "0.3.4"
 dependencies = [
+ "bitflags 2.3.3",
+ "enumflags2",
  "image",
  "libwayshot",
  "serde",
