@@ -40,6 +40,10 @@ impl ShanaShot {
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.Screenshot")]
 impl ShanaShot {
+    #[dbus_interface(property, name = "version")]
+    fn version(&self) -> u32 {
+        1
+    }
     fn screenshot(
         &mut self,
         handle: ObjectPath<'_>,
