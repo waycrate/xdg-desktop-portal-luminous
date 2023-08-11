@@ -42,12 +42,12 @@ impl ScreenCast {
 
     #[dbus_interface(property)]
     fn available_cursor_modes(&self) -> u32 {
-        (CursorMode::Hidden | CursorMode::Embedded).bits().into()
+        (CursorMode::Hidden | CursorMode::Embedded).bits()
     }
 
     #[dbus_interface(property)]
     fn available_source_types(&self) -> u32 {
-        (SourceType::Monitor | SourceType::Monitor).bits().into()
+        BitFlags::from_flag(SourceType::Monitor).bits()
     }
 
     async fn create_session(
