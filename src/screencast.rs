@@ -89,26 +89,33 @@ impl ScreenCast {
         _app_id: String,
         options: SelectSourcesOptions,
     ) -> zbus::fdo::Result<(u32, HashMap<String, OwnedValue>)> {
-        let mut sessions = SESSIONS.lock().await;
-        let Some(index) = sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
-            tracing::error!("No session is created or it is removed");
+        let mut locked_sessions = SESSIONS.lock().await;
+        let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
+            tracing::warn!("No session is created or it is removed");
             return Ok((2, HashMap::new()));
         };
-        sessions[index].set_options(options);
-        // TODO: do nothing here now
+        locked_sessions[index].set_options(options);
         Ok((0, HashMap::new()))
     }
 
     async fn start(
         &self,
         _request_handle: ObjectPath<'_>,
-        _session_handle: ObjectPath<'_>,
+        session_handle: ObjectPath<'_>,
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
     ) -> zbus::fdo::Result<(u32, HashMap<String, OwnedValue>)> {
-        println!("ssssss");
-        println!("{:?}", _options);
+        let locked_sessions = SESSIONS.lock().await;
+        let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
+            tracing::warn!("No session is created or it is removed");
+            return Ok((2, HashMap::new()));
+        };
+        let current_session = locked_sessions[index].clone();
+        drop(locked_sessions);
+        let show_cursor = current_session.cursor_mode.show_cursor();
+        println!("{:?}", current_session);
+        println!("{show_cursor}");
         Ok((0, HashMap::new()))
     }
 }

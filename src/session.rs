@@ -58,6 +58,12 @@ pub enum CursorMode {
     Metadata,
 }
 
+impl CursorMode {
+    pub fn show_cursor(&self) -> bool {
+        !matches!(self, CursorMode::Hidden)
+    }
+}
+
 #[derive(Default, Serialize, Deserialize, PartialEq, Eq, Debug, Copy, Clone, Type)]
 #[repr(u32)]
 /// Persistence mode for a screencast session.
