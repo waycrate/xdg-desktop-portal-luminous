@@ -1,5 +1,5 @@
-use enumflags2::bitflags;
-use zbus::{dbus_interface, SignalContext};
+use enumflags2::{bitflags, BitFlags};
+use zbus::{dbus_interface, zvariant::OwnedObjectPath, SignalContext};
 
 use serde::{Deserialize, Serialize};
 use zbus::zvariant::Type;
@@ -46,12 +46,26 @@ pub enum PersistMode {
     ExplicitlyRevoked = 2,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 // TODO: when is remote?
 pub struct Session {
-    pub source_type: SourceType,
+    pub handle_path: OwnedObjectPath,
+    pub source_type: BitFlags<SourceType>,
+    pub multiple: bool,
     pub cursor_mode: CursorMode,
     pub persist_mode: PersistMode,
+}
+
+impl Session {
+    pub fn new<P: Into<OwnedObjectPath>>(path: P) -> Self {
+        Self {
+            handle_path: path.into(),
+            source_type: SourceType::Monitor.into(),
+            multiple: false,
+            cursor_mode: CursorMode::Hidden,
+            persist_mode: PersistMode::DoNot,
+        }
+    }
 }
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.Session")]
@@ -59,7 +73,11 @@ impl Session {
     async fn close(
         &self,
         #[zbus(signal_context)] cxts: SignalContext<'_>,
+        #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<()> {
+        server
+            .remove::<Self, &OwnedObjectPath>(&self.handle_path)
+            .await?;
         Self::closed(&cxts, "Closed").await?;
         Ok(())
     }

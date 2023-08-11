@@ -72,7 +72,7 @@ impl ScreenCast {
             )
             .await?;
         server
-            .at(session_handle.clone(), Session::default())
+            .at(session_handle.clone(), Session::new(session_handle.clone()))
             .await?;
         Ok((
             0,
@@ -95,9 +95,10 @@ impl ScreenCast {
 
     async fn start(
         &self,
-        request_handle: ObjectPath<'_>,
-        session_handle: ObjectPath<'_>,
-        app_id: String,
+        _request_handle: ObjectPath<'_>,
+        _session_handle: ObjectPath<'_>,
+        _app_id: String,
+        _parent_window: String,
         _options: HashMap<String, Value<'_>>,
     ) -> zbus::fdo::Result<(u32, HashMap<String, OwnedValue>)> {
         println!("ssssss");
