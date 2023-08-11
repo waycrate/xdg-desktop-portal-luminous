@@ -6,6 +6,8 @@ use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Typ
 
 use enumflags2::BitFlags;
 
+use serde::{Deserialize, Serialize};
+
 use crate::request::RequestInterface;
 use crate::session::{append_session, CursorMode, PersistMode, Session, SourceType, SESSIONS};
 
@@ -29,6 +31,29 @@ pub struct SelectSourcesOptions {
     pub cursor_mode: Option<CursorMode>,
     pub restore_token: Option<String>,
     pub persist_mode: Option<PersistMode>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Type, Default, Debug)]
+/// A PipeWire stream.
+pub struct Stream(u32, StreamProperties);
+
+#[derive(Clone, SerializeDict, DeserializeDict, Default, Type, Debug)]
+/// The stream properties.
+#[zvariant(signature = "dict")]
+struct StreamProperties {
+    id: Option<String>,
+    position: Option<(i32, i32)>,
+    size: Option<(i32, i32)>,
+    source_type: Option<SourceType>,
+}
+
+// TODO: this is copy from ashpd, but the dict is a little different from xdg_desktop_portal
+#[derive(Clone, SerializeDict, DeserializeDict, Default, Debug, Type)]
+#[zvariant(signature = "dict")]
+struct StartReturnValue {
+    streams: Vec<Stream>,
+    persist_mode: u32,
+    restore_token: Option<String>,
 }
 
 pub struct ScreenCast;
@@ -105,17 +130,17 @@ impl ScreenCast {
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
-    ) -> zbus::fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+    ) -> zbus::fdo::Result<(u32, StartReturnValue)> {
         let locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
             tracing::warn!("No session is created or it is removed");
-            return Ok((2, HashMap::new()));
+            return Ok((2, StartReturnValue::default()));
         };
         let current_session = locked_sessions[index].clone();
         drop(locked_sessions);
         let show_cursor = current_session.cursor_mode.show_cursor();
         println!("{:?}", current_session);
         println!("{show_cursor}");
-        Ok((0, HashMap::new()))
+        Ok((0, StartReturnValue::default()))
     }
 }
