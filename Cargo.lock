@@ -4292,6 +4292,7 @@ dependencies = [
  "enumflags2",
  "image",
  "libwayshot",
+ "once_cell",
  "serde",
  "serde_repr",
  "slint",

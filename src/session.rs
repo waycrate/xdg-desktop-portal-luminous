@@ -4,6 +4,31 @@ use zbus::{dbus_interface, zvariant::OwnedObjectPath, SignalContext};
 use serde::{Deserialize, Serialize};
 use zbus::zvariant::Type;
 
+use once_cell::sync::Lazy;
+
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+use crate::screencast::SelectSourcesOptions;
+
+pub static SESSIONS: Lazy<Arc<Mutex<Vec<Session>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
+
+pub async fn append_session(session: Session) {
+    let mut sessions = SESSIONS.lock().await;
+    sessions.push(session)
+}
+
+pub async fn remove_session(session: &Session) {
+    let mut sessions = SESSIONS.lock().await;
+    let Some(index) = sessions
+        .iter()
+        .position(|the_session| the_session.handle_path == session.handle_path) else {
+        return;
+    };
+    sessions.remove(index);
+}
+
 #[bitflags]
 #[derive(Serialize, Default, Deserialize, PartialEq, Eq, Copy, Clone, Debug, Type)]
 #[repr(u32)]
@@ -46,7 +71,7 @@ pub enum PersistMode {
     ExplicitlyRevoked = 2,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 // TODO: when is remote?
 pub struct Session {
     pub handle_path: OwnedObjectPath,
@@ -66,6 +91,18 @@ impl Session {
             persist_mode: PersistMode::DoNot,
         }
     }
+    pub fn set_options(&mut self, options: SelectSourcesOptions) {
+        if let Some(types) = options.types {
+            self.source_type = types;
+        }
+        self.multiple = options.multiple.is_some_and(|content| content);
+        if let Some(cursormode) = options.cursor_mode {
+            self.cursor_mode = cursormode;
+        }
+        if let Some(persist_mode) = options.persist_mode {
+            self.persist_mode = persist_mode;
+        }
+    }
 }
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.Session")]
@@ -78,6 +115,7 @@ impl Session {
         server
             .remove::<Self, &OwnedObjectPath>(&self.handle_path)
             .await?;
+        remove_session(self).await;
         Self::closed(&cxts, "Closed").await?;
         Ok(())
     }

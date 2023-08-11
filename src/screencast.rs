@@ -7,7 +7,7 @@ use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Typ
 use enumflags2::BitFlags;
 
 use crate::request::RequestInterface;
-use crate::session::{CursorMode, PersistMode, Session, SourceType};
+use crate::session::{append_session, CursorMode, PersistMode, Session, SourceType, SESSIONS};
 
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -19,16 +19,16 @@ struct SessionCreateResult {
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
 /// Specified options for a [`Screencast::select_sources`] request.
 #[zvariant(signature = "dict")]
-struct SelectSourcesOptions {
+pub struct SelectSourcesOptions {
     /// A string that will be used as the last element of the handle.
     /// What types of content to record.
-    types: Option<BitFlags<SourceType>>,
+    pub types: Option<BitFlags<SourceType>>,
     /// Whether to allow selecting multiple sources.
-    multiple: Option<bool>,
+    pub multiple: Option<bool>,
     /// Determines how the cursor will be drawn in the screen cast stream.
-    cursor_mode: Option<CursorMode>,
-    restore_token: Option<String>,
-    persist_mode: Option<PersistMode>,
+    pub cursor_mode: Option<CursorMode>,
+    pub restore_token: Option<String>,
+    pub persist_mode: Option<PersistMode>,
 }
 
 pub struct ScreenCast;
@@ -71,9 +71,9 @@ impl ScreenCast {
                 },
             )
             .await?;
-        server
-            .at(session_handle.clone(), Session::new(session_handle.clone()))
-            .await?;
+        let current_session = Session::new(session_handle.clone());
+        append_session(current_session.clone()).await;
+        server.at(session_handle.clone(), current_session).await?;
         Ok((
             0,
             SessionCreateResult {
@@ -85,10 +85,16 @@ impl ScreenCast {
     async fn select_sources(
         &self,
         _request_handle: ObjectPath<'_>,
-        _session_handle: ObjectPath<'_>,
+        session_handle: ObjectPath<'_>,
         _app_id: String,
-        _options: SelectSourcesOptions,
+        options: SelectSourcesOptions,
     ) -> zbus::fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+        let mut sessions = SESSIONS.lock().await;
+        let Some(index) = sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
+            tracing::error!("No session is created or it is removed");
+            return Ok((2, HashMap::new()));
+        };
+        sessions[index].set_options(options);
         // TODO: do nothing here now
         Ok((0, HashMap::new()))
     }
