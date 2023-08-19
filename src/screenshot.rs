@@ -57,7 +57,9 @@ impl ShanaShot {
                 .map_err(|_| {
                     zbus::Error::Failure("Cannot create a new wayshot_connection".to_string())
                 })?
-                .get_all_outputs();
+                .get_all_outputs()
+                .clone();
+
             match slintbackend::selectgui(wayinfos.clone()) {
                 SlintSelection::Canceled => {
                     return Ok((
@@ -120,7 +122,7 @@ impl ShanaShot {
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
                 SlintSelection::Selection { index, showcursor } => self
                     .wayshot_connection
-                    .screenshot_outputs(vec![wayinfos[index as usize].clone()], showcursor)
+                    .screenshot_single_output(&wayinfos[index as usize], showcursor)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
             }
         } else {

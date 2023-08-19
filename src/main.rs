@@ -1,20 +1,24 @@
+mod request;
+mod screencast;
+mod screenshot;
+mod session;
+mod slintbackend;
+
+use screencast::ScreenCast;
+use screenshot::ShanaShot;
+
 use std::future::pending;
 use zbus::ConnectionBuilder;
 
-mod request;
-mod session;
-mod screencast;
-mod screenshot;
-mod slintbackend;
+mod pipewirethread;
 
-use screenshot::ShanaShot;
-use screencast::ScreenCast;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
     std::env::set_var("RUST_LOG", "xdg-desktop-protal-wlrrust=info");
     tracing_subscriber::fmt().init();
     tracing::info!("wlrrust Start");
+
     let _conn = ConnectionBuilder::session()?
         .name("org.freedesktop.impl.portal.desktop.wlrrust")?
         .serve_at("/org/freedesktop/portal/desktop", ShanaShot::new())?

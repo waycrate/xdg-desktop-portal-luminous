@@ -8,6 +8,7 @@ use enumflags2::BitFlags;
 
 use serde::{Deserialize, Serialize};
 
+use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
 use crate::session::{append_session, CursorMode, PersistMode, Session, SourceType, SESSIONS};
 
@@ -141,6 +142,27 @@ impl ScreenCast {
         let show_cursor = current_session.cursor_mode.show_cursor();
         println!("{:?}", current_session);
         println!("{show_cursor}");
-        Ok((0, StartReturnValue::default()))
+        let connection = libwayshot::WayshotConnection::new().unwrap();
+        let outputs = connection.get_all_outputs();
+        let output = outputs[0].clone();
+
+        let cast = ScreencastThread::start_cast(
+            false,
+            output.mode.width as u32,
+            output.mode.height as u32,
+            None,
+            output.wl_output,
+        )
+        .unwrap();
+
+        let node_id = cast.node_id();
+        Ok((
+            0,
+            StartReturnValue {
+                streams: vec![Stream(node_id, StreamProperties::default())],
+                ..Default::default()
+            },
+        ))
     }
 }
+
