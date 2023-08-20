@@ -7,11 +7,11 @@ use pipewire::{
     },
     stream::StreamState,
 };
+
 use std::{cell::RefCell, io, os::fd::IntoRawFd, rc::Rc, slice};
 
 use tokio::sync::oneshot;
 
-#[allow(unused)]
 pub struct ScreencastThread {
     node_id: u32,
     thread_stop_tx: pipewire::channel::Sender<()>,
