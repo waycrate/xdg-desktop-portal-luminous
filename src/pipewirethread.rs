@@ -1,3 +1,4 @@
+use libwayshot::reexport::WlOutput;
 use libwayshot::CaptureRegion;
 use pipewire::{
     spa::{
@@ -8,7 +9,6 @@ use pipewire::{
 };
 use std::sync::mpsc;
 use std::{cell::RefCell, io, os::fd::IntoRawFd, rc::Rc, slice};
-use libwayshot::reexport::WlOutput;
 
 #[allow(unused)]
 pub struct ScreencastThread {
@@ -153,12 +153,9 @@ fn start_stream(
                 let datas = buffer.datas_mut();
                 let fd = datas[0].as_raw().fd as i32;
                 // TODO error
-                connection.capture_output_frame_shm_fd(
-                    overlay_cursor as i32,
-                    &output,
-                    fd,
-                    capture_region,
-                ).unwrap();
+                connection
+                    .capture_output_frame_shm_fd(overlay_cursor as i32, &output, fd, capture_region)
+                    .unwrap();
             }
         })
         .register()?;

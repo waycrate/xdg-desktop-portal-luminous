@@ -51,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
 
     let _conn = ConnectionBuilder::session()?
         .name("org.freedesktop.impl.portal.desktop.wlrrust")?
-        .serve_at("/org/freedesktop/portal/desktop", ShanaShot::new())?
+        .serve_at("/org/freedesktop/portal/desktop", ShanaShot)?
         .serve_at("/org/freedesktop/portal/desktop", ScreenCast)?
         .build()
         .await?;
