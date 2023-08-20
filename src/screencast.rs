@@ -137,17 +137,41 @@ impl ScreenCast {
         };
         let current_session = locked_sessions[index].clone();
         drop(locked_sessions);
+
+        // TODO: use slurp now
         let show_cursor = current_session.cursor_mode.show_cursor();
         let connection = libwayshot::WayshotConnection::new().unwrap();
         let outputs = connection.get_all_outputs();
-        let output = outputs[0].clone();
+        let slurp = std::process::Command::new("slurp")
+            .arg("-o")
+            .output()
+            .map_err(|_| zbus::Error::Failure("Cannot find slurp".to_string()))?
+            .stdout;
+        let output = String::from_utf8_lossy(&slurp);
+        let output = output
+            .split(' ')
+            .next()
+            .ok_or(zbus::Error::Failure("Not get slurp area".to_string()))?;
+        let point: Vec<&str> = output.split(',').collect();
+        let x: i32 = point[0]
+            .parse()
+            .map_err(|_| zbus::Error::Failure("X is not correct".to_string()))?;
+        let y: i32 = point[1]
+            .parse()
+            .map_err(|_| zbus::Error::Failure("Y is not correct".to_string()))?;
+        let Some(output) = outputs
+            .iter()
+            .find(|output| output.dimensions.x == x && output.dimensions.y == y) 
+            else {
+            return Ok(PortalResponse::Other);
+        };
 
         let cast = ScreencastThread::start_cast(
             show_cursor,
             output.mode.width as u32,
             output.mode.height as u32,
             None,
-            output.wl_output,
+            output.wl_output.clone(),
         )
         .unwrap();
 
