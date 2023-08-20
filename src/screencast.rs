@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
 use crate::session::{append_session, CursorMode, PersistMode, Session, SourceType, SESSIONS};
+use crate::PortalResponse;
 
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -83,7 +84,7 @@ impl ScreenCast {
         app_id: String,
         _options: HashMap<String, Value<'_>>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
-    ) -> zbus::fdo::Result<(u32, SessionCreateResult)> {
+    ) -> zbus::fdo::Result<PortalResponse<SessionCreateResult>> {
         tracing::info!(
             "Start shot: path :{}, appid: {}",
             request_handle.as_str(),
@@ -100,12 +101,9 @@ impl ScreenCast {
         let current_session = Session::new(session_handle.clone());
         append_session(current_session.clone()).await;
         server.at(session_handle.clone(), current_session).await?;
-        Ok((
-            0,
-            SessionCreateResult {
-                handle_token: session_handle.to_string(),
-            },
-        ))
+        Ok(PortalResponse::Success(SessionCreateResult {
+            handle_token: session_handle.to_string(),
+        }))
     }
 
     async fn select_sources(
@@ -114,14 +112,14 @@ impl ScreenCast {
         session_handle: ObjectPath<'_>,
         _app_id: String,
         options: SelectSourcesOptions,
-    ) -> zbus::fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+    ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
         let mut locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
             tracing::warn!("No session is created or it is removed");
-            return Ok((2, HashMap::new()));
+            return Ok(PortalResponse::Other);
         };
         locked_sessions[index].set_options(options);
-        Ok((0, HashMap::new()))
+        Ok(PortalResponse::Success(HashMap::new()))
     }
 
     async fn start(
@@ -131,23 +129,21 @@ impl ScreenCast {
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
-    ) -> zbus::fdo::Result<(u32, StartReturnValue)> {
+    ) -> zbus::fdo::Result<PortalResponse<StartReturnValue>> {
         let locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
             tracing::warn!("No session is created or it is removed");
-            return Ok((2, StartReturnValue::default()));
+            return Ok(PortalResponse::Other);
         };
         let current_session = locked_sessions[index].clone();
         drop(locked_sessions);
         let show_cursor = current_session.cursor_mode.show_cursor();
-        println!("{:?}", current_session);
-        println!("{show_cursor}");
         let connection = libwayshot::WayshotConnection::new().unwrap();
         let outputs = connection.get_all_outputs();
         let output = outputs[0].clone();
 
         let cast = ScreencastThread::start_cast(
-            false,
+            show_cursor,
             output.mode.width as u32,
             output.mode.height as u32,
             None,
@@ -156,13 +152,9 @@ impl ScreenCast {
         .unwrap();
 
         let node_id = cast.node_id();
-        Ok((
-            0,
-            StartReturnValue {
-                streams: vec![Stream(node_id, StreamProperties::default())],
-                ..Default::default()
-            },
-        ))
+        Ok(PortalResponse::Success(StartReturnValue {
+            streams: vec![Stream(node_id, StreamProperties::default())],
+            ..Default::default()
+        }))
     }
 }
-

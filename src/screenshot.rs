@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
 use zbus::{dbus_interface, fdo, zvariant::ObjectPath};
 
+use crate::PortalResponse;
+
 #[derive(DeserializeDict, SerializeDict, Type)]
 #[zvariant(signature = "dict")]
 struct Screenshot {
@@ -50,7 +52,7 @@ impl ShanaShot {
         app_id: String,
         _parent_window: String,
         options: ScreenshotOption,
-    ) -> fdo::Result<(u32, Screenshot)> {
+    ) -> fdo::Result<PortalResponse<Screenshot>> {
         tracing::info!("Start shot: path :{}, appid: {}", handle.as_str(), app_id);
         let image_buffer = if options.interactive {
             let wayinfos = WayshotConnection::new()
@@ -61,14 +63,7 @@ impl ShanaShot {
                 .clone();
 
             match slintbackend::selectgui(wayinfos.clone()) {
-                SlintSelection::Canceled => {
-                    return Ok((
-                        1,
-                        Screenshot {
-                            uri: url::Url::from_file_path("/tmp/wayshot.png").unwrap(),
-                        },
-                    ))
-                }
+                SlintSelection::Canceled => return Ok(PortalResponse::Cancelled),
                 SlintSelection::Slurp => {
                     let slurp = std::process::Command::new("slurp")
                         .arg("-d")
@@ -134,12 +129,9 @@ impl ShanaShot {
             zbus::Error::Failure(format!("Cannot save to /tmp/wayshot.png, e: {e}"))
         })?;
         tracing::info!("Shot Finished");
-        Ok((
-            0,
-            Screenshot {
-                uri: url::Url::from_file_path("/tmp/wayshot.png").unwrap(),
-            },
-        ))
+        Ok(PortalResponse::Success(Screenshot {
+            uri: url::Url::from_file_path("/tmp/wayshot.png").unwrap(),
+        }))
     }
 
     fn pick_color(
@@ -148,7 +140,7 @@ impl ShanaShot {
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
-    ) -> fdo::Result<(u32, Color)> {
+    ) -> fdo::Result<PortalResponse<Color>> {
         let slurp = std::process::Command::new("slurp")
             .arg("-p")
             .output()
@@ -179,15 +171,12 @@ impl ShanaShot {
             .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?;
 
         let pixel = image.get_pixel(0, 0);
-        Ok((
-            0,
-            Color {
-                color: [
-                    pixel.0[0] as f64 / 256.0,
-                    pixel.0[1] as f64 / 256.0,
-                    pixel.0[2] as f64 / 256.0,
-                ],
-            },
-        ))
+        Ok(PortalResponse::Success(Color {
+            color: [
+                pixel.0[0] as f64 / 256.0,
+                pixel.0[1] as f64 / 256.0,
+                pixel.0[2] as f64 / 256.0,
+            ],
+        }))
     }
 }
