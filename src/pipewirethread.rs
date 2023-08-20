@@ -3,12 +3,13 @@ use libwayshot::CaptureRegion;
 use pipewire::{
     spa::{
         self,
-        pod::{self, serialize::PodSerializer},
+        pod::{self, deserialize::PodDeserializer, serialize::PodSerializer},
     },
     stream::StreamState,
 };
-use std::sync::mpsc;
 use std::{cell::RefCell, io, os::fd::IntoRawFd, rc::Rc, slice};
+
+use tokio::sync::oneshot;
 
 #[allow(unused)]
 pub struct ScreencastThread {
@@ -17,30 +18,33 @@ pub struct ScreencastThread {
 }
 
 impl ScreencastThread {
-    pub fn start_cast(
+    pub async fn start_cast(
         overlay_cursor: bool,
         width: u32,
         height: u32,
         capture_region: Option<CaptureRegion>,
         output: WlOutput,
     ) -> anyhow::Result<Self> {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = oneshot::channel();
         let (thread_stop_tx, thread_stop_rx) = pipewire::channel::channel::<()>();
         std::thread::spawn(move || {
-            let _ = start_stream(
-                thread_stop_rx,
-                tx,
-                overlay_cursor,
-                width,
-                height,
-                capture_region,
-                output,
-            );
+            match start_stream(overlay_cursor, width, height, capture_region, output) {
+                Ok((loop_, listener, context, node_id_rx)) => {
+                    tx.send(Ok(node_id_rx)).unwrap();
+                    let weak_loop = loop_.downgrade();
+                    let _receiver = thread_stop_rx.attach(&loop_, move |()| {
+                        weak_loop.upgrade().unwrap().quit();
+                    });
+                    loop_.run();
+                    // XXX fix segfault with opposite drop order
+                    drop(listener);
+                    drop(context);
+                }
+                Err(err) => tx.send(Err(err)).unwrap(),
+            };
         });
         Ok(Self {
-            node_id: rx
-                .recv_timeout(std::time::Duration::from_secs(1))
-                .map_err(|_| anyhow::anyhow!("Timeout"))?,
+            node_id: rx.await??.await??,
             thread_stop_tx,
         })
     }
@@ -49,20 +53,25 @@ impl ScreencastThread {
         self.node_id
     }
 
-    #[allow(unused)]
     pub fn stop(&self) {
         let _ = self.thread_stop_tx.send(());
     }
 }
+
+type PipewireStreamResult = (
+    pipewire::MainLoop,
+    pipewire::stream::StreamListener<()>,
+    pipewire::Context<pipewire::MainLoop>,
+    oneshot::Receiver<anyhow::Result<u32>>,
+);
+
 fn start_stream(
-    stop_rx: pipewire::channel::Receiver<()>,
-    sender: mpsc::Sender<u32>,
     overlay_cursor: bool,
     width: u32,
     height: u32,
     capture_region: Option<CaptureRegion>,
     output: WlOutput,
-) -> Result<(), pipewire::Error> {
+) -> Result<PipewireStreamResult, pipewire::Error> {
     let connection = libwayshot::WayshotConnection::new().unwrap();
 
     let loop_ = pipewire::MainLoop::new()?;
@@ -80,31 +89,25 @@ fn start_stream(
         },
     )?;
 
-    let mut hassend = false;
+    let (node_id_tx, node_id_rx) = oneshot::channel();
+    let mut node_id_tx = Some(node_id_tx);
     let stream_cell: Rc<RefCell<Option<pipewire::stream::Stream>>> = Rc::new(RefCell::new(None));
     let stream_cell_clone = stream_cell.clone();
 
-    let _listener = stream
+    let listener = stream
         .add_local_listener_with_user_data(())
         .state_changed(move |old, new| {
-            println!("state-changed '{:?}' -> '{:?}'", old, new);
+            tracing::info!("state-changed '{:?}' -> '{:?}'", old, new);
             match new {
-                StreamState::Streaming => {
-                    println!("Streaming");
-                }
                 StreamState::Paused => {
                     let stream = stream_cell_clone.borrow_mut();
                     let stream = stream.as_ref().unwrap();
-                    if !hassend {
-                        println!("Send");
-                        let _ = sender.send(stream.node_id());
-                        hassend = true;
+                    if let Some(node_id_tx) = node_id_tx.take() {
+                        node_id_tx.send(Ok(stream.node_id())).unwrap();
                     }
-
-                    println!("Paused");
                 }
-                StreamState::Error(_) => {
-                    println!("Errror");
+                StreamState::Error(e) => {
+                    tracing::error!("Errror! : {e}");
                 }
                 _ => {}
             }
@@ -114,7 +117,8 @@ fn start_stream(
                 return;
             }
             if let Some(pod) = pod {
-                println!("param-changed: {} {:?}", id, pod.size());
+                let value = PodDeserializer::deserialize_from::<pod::Value>(pod.as_bytes());
+                tracing::info!("param-changed: {} {:?}", id, value);
             }
         })
         .add_buffer(move |buffer| {
@@ -159,27 +163,21 @@ fn start_stream(
             }
         })
         .register()?;
+
     let format = format(width, height);
     let buffers = buffers(width, height);
 
     let params = &mut [
-        //pod::Pod::from_bytes(&values).unwrap(),
         pod::Pod::from_bytes(&format).unwrap(),
         pod::Pod::from_bytes(&buffers).unwrap(),
     ];
-    //let flags = pipewire::stream::StreamFlags::MAP_BUFFERS;
+
     let flags = pipewire::stream::StreamFlags::ALLOC_BUFFERS;
     stream.connect(spa::Direction::Output, None, flags, params)?;
 
     *stream_cell.borrow_mut() = Some(stream);
-    let weak_loop = loop_.downgrade();
-    let _receiver = stop_rx.attach(&loop_, move |_| {
-        weak_loop.upgrade().unwrap().quit();
-    });
-    loop_.run();
 
-    Ok(())
-    //Ok((loop_, node_id))
+    Ok((loop_, listener, context, node_id_rx))
 }
 
 fn value_to_bytes(value: pod::Value) -> Vec<u8> {

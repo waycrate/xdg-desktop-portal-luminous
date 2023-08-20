@@ -8,6 +8,10 @@ use enumflags2::BitFlags;
 
 use serde::{Deserialize, Serialize};
 
+use once_cell::sync::Lazy;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
 use crate::session::{append_session, CursorMode, PersistMode, Session, SourceType, SESSIONS};
@@ -56,6 +60,27 @@ struct StartReturnValue {
     streams: Vec<Stream>,
     persist_mode: u32,
     restore_token: Option<String>,
+}
+
+pub type CastSessionData = (String, ScreencastThread);
+pub static CAST_SESSIONS: Lazy<Arc<Mutex<Vec<CastSessionData>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
+
+pub async fn append_cast_session(session: CastSessionData) {
+    let mut sessions = CAST_SESSIONS.lock().await;
+    sessions.push(session)
+}
+
+pub async fn remove_cast_session(path: &str) {
+    let mut sessions = CAST_SESSIONS.lock().await;
+    let Some(index) = sessions
+        .iter()
+        .position(|the_session| the_session.0 == path) else {
+        return;
+    };
+    sessions[index].1.stop();
+    tracing::info!("session {} is stopped", sessions[index].0);
+    sessions.remove(index);
 }
 
 pub struct ScreenCast;
@@ -152,6 +177,7 @@ impl ScreenCast {
             .split(' ')
             .next()
             .ok_or(zbus::Error::Failure("Not get slurp area".to_string()))?;
+
         let point: Vec<&str> = output.split(',').collect();
         let x: i32 = point[0]
             .parse()
@@ -159,23 +185,28 @@ impl ScreenCast {
         let y: i32 = point[1]
             .parse()
             .map_err(|_| zbus::Error::Failure("Y is not correct".to_string()))?;
+
         let Some(output) = outputs
             .iter()
-            .find(|output| output.dimensions.x == x && output.dimensions.y == y) 
+            .find(|output| output.dimensions.x == x && output.dimensions.y == y)
             else {
             return Ok(PortalResponse::Other);
         };
 
-        let cast = ScreencastThread::start_cast(
+        let cast_thread = ScreencastThread::start_cast(
             show_cursor,
             output.mode.width as u32,
             output.mode.height as u32,
             None,
             output.wl_output.clone(),
         )
-        .unwrap();
+        .await
+        .map_err(|e| zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}")))?;
 
-        let node_id = cast.node_id();
+        let node_id = cast_thread.node_id();
+
+        append_cast_session((session_handle.to_string(), cast_thread)).await;
+
         Ok(PortalResponse::Success(StartReturnValue {
             streams: vec![Stream(node_id, StreamProperties::default())],
             ..Default::default()

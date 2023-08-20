@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::screencast::SelectSourcesOptions;
+use crate::screencast::{remove_cast_session, SelectSourcesOptions};
 
 pub static SESSIONS: Lazy<Arc<Mutex<Vec<Session>>>> =
     Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
@@ -26,6 +26,7 @@ pub async fn remove_session(session: &Session) {
         .position(|the_session| the_session.handle_path == session.handle_path) else {
         return;
     };
+    remove_cast_session(&session.handle_path.to_string()).await;
     sessions.remove(index);
 }
 
