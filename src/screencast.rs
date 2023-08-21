@@ -8,8 +8,14 @@ use enumflags2::BitFlags;
 
 use serde::{Deserialize, Serialize};
 
+use once_cell::sync::Lazy;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
 use crate::session::{append_session, CursorMode, PersistMode, Session, SourceType, SESSIONS};
+use crate::PortalResponse;
 
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -56,10 +62,31 @@ struct StartReturnValue {
     restore_token: Option<String>,
 }
 
-pub struct ScreenCast;
+pub type CastSessionData = (String, ScreencastThread);
+pub static CAST_SESSIONS: Lazy<Arc<Mutex<Vec<CastSessionData>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
+
+pub async fn append_cast_session(session: CastSessionData) {
+    let mut sessions = CAST_SESSIONS.lock().await;
+    sessions.push(session)
+}
+
+pub async fn remove_cast_session(path: &str) {
+    let mut sessions = CAST_SESSIONS.lock().await;
+    let Some(index) = sessions
+        .iter()
+        .position(|the_session| the_session.0 == path) else {
+        return;
+    };
+    sessions[index].1.stop();
+    tracing::info!("session {} is stopped", sessions[index].0);
+    sessions.remove(index);
+}
+
+pub struct ScreenCastBackend;
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.ScreenCast")]
-impl ScreenCast {
+impl ScreenCastBackend {
     #[dbus_interface(property, name = "version")]
     fn version(&self) -> u32 {
         4
@@ -82,7 +109,7 @@ impl ScreenCast {
         app_id: String,
         _options: HashMap<String, Value<'_>>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
-    ) -> zbus::fdo::Result<(u32, SessionCreateResult)> {
+    ) -> zbus::fdo::Result<PortalResponse<SessionCreateResult>> {
         tracing::info!(
             "Start shot: path :{}, appid: {}",
             request_handle.as_str(),
@@ -99,12 +126,9 @@ impl ScreenCast {
         let current_session = Session::new(session_handle.clone());
         append_session(current_session.clone()).await;
         server.at(session_handle.clone(), current_session).await?;
-        Ok((
-            0,
-            SessionCreateResult {
-                handle_token: session_handle.to_string(),
-            },
-        ))
+        Ok(PortalResponse::Success(SessionCreateResult {
+            handle_token: session_handle.to_string(),
+        }))
     }
 
     async fn select_sources(
@@ -113,14 +137,14 @@ impl ScreenCast {
         session_handle: ObjectPath<'_>,
         _app_id: String,
         options: SelectSourcesOptions,
-    ) -> zbus::fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+    ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
         let mut locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
             tracing::warn!("No session is created or it is removed");
-            return Ok((2, HashMap::new()));
+            return Ok(PortalResponse::Other);
         };
         locked_sessions[index].set_options(options);
-        Ok((0, HashMap::new()))
+        Ok(PortalResponse::Success(HashMap::new()))
     }
 
     async fn start(
@@ -130,17 +154,62 @@ impl ScreenCast {
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
-    ) -> zbus::fdo::Result<(u32, StartReturnValue)> {
+    ) -> zbus::fdo::Result<PortalResponse<StartReturnValue>> {
         let locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
             tracing::warn!("No session is created or it is removed");
-            return Ok((2, StartReturnValue::default()));
+            return Ok(PortalResponse::Other);
         };
         let current_session = locked_sessions[index].clone();
         drop(locked_sessions);
+
+        // TODO: use slurp now
         let show_cursor = current_session.cursor_mode.show_cursor();
-        println!("{:?}", current_session);
-        println!("{show_cursor}");
-        Ok((0, StartReturnValue::default()))
+        let connection = libwayshot::WayshotConnection::new().unwrap();
+        let outputs = connection.get_all_outputs();
+        let slurp = std::process::Command::new("slurp")
+            .arg("-o")
+            .output()
+            .map_err(|_| zbus::Error::Failure("Cannot find slurp".to_string()))?
+            .stdout;
+        let output = String::from_utf8_lossy(&slurp);
+        let output = output
+            .split(' ')
+            .next()
+            .ok_or(zbus::Error::Failure("Not get slurp area".to_string()))?;
+
+        let point: Vec<&str> = output.split(',').collect();
+        let x: i32 = point[0]
+            .parse()
+            .map_err(|_| zbus::Error::Failure("X is not correct".to_string()))?;
+        let y: i32 = point[1]
+            .parse()
+            .map_err(|_| zbus::Error::Failure("Y is not correct".to_string()))?;
+
+        let Some(output) = outputs
+            .iter()
+            .find(|output| output.dimensions.x == x && output.dimensions.y == y)
+            else {
+            return Ok(PortalResponse::Other);
+        };
+
+        let cast_thread = ScreencastThread::start_cast(
+            show_cursor,
+            output.mode.width as u32,
+            output.mode.height as u32,
+            None,
+            output.wl_output.clone(),
+        )
+        .await
+        .map_err(|e| zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}")))?;
+
+        let node_id = cast_thread.node_id();
+
+        append_cast_session((session_handle.to_string(), cast_thread)).await;
+
+        Ok(PortalResponse::Success(StartReturnValue {
+            streams: vec![Stream(node_id, StreamProperties::default())],
+            ..Default::default()
+        }))
     }
 }

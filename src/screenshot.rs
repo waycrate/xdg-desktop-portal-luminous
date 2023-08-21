@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
 use zbus::{dbus_interface, fdo, zvariant::ObjectPath};
 
+use crate::PortalResponse;
+
 #[derive(DeserializeDict, SerializeDict, Type)]
 #[zvariant(signature = "dict")]
 struct Screenshot {
@@ -26,20 +28,10 @@ pub struct ScreenshotOption {
 }
 
 #[derive(Debug)]
-pub struct ShanaShot {
-    wayshot_connection: WayshotConnection,
-}
-
-impl ShanaShot {
-    pub fn new() -> Self {
-        Self {
-            wayshot_connection: WayshotConnection::new().unwrap(),
-        }
-    }
-}
+pub struct ScreenShotBackend;
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.Screenshot")]
-impl ShanaShot {
+impl ScreenShotBackend {
     #[dbus_interface(property, name = "version")]
     fn version(&self) -> u32 {
         1
@@ -50,23 +42,21 @@ impl ShanaShot {
         app_id: String,
         _parent_window: String,
         options: ScreenshotOption,
-    ) -> fdo::Result<(u32, Screenshot)> {
+    ) -> fdo::Result<PortalResponse<Screenshot>> {
         tracing::info!("Start shot: path :{}, appid: {}", handle.as_str(), app_id);
+        let wayshot_connection = WayshotConnection::new()
+            .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
+
         let image_buffer = if options.interactive {
             let wayinfos = WayshotConnection::new()
                 .map_err(|_| {
                     zbus::Error::Failure("Cannot create a new wayshot_connection".to_string())
                 })?
-                .get_all_outputs();
+                .get_all_outputs()
+                .clone();
+
             match slintbackend::selectgui(wayinfos.clone()) {
-                SlintSelection::Canceled => {
-                    return Ok((
-                        1,
-                        Screenshot {
-                            uri: url::Url::from_file_path("/tmp/wayshot.png").unwrap(),
-                        },
-                    ))
-                }
+                SlintSelection::Canceled => return Ok(PortalResponse::Cancelled),
                 SlintSelection::Slurp => {
                     let slurp = std::process::Command::new("slurp")
                         .arg("-d")
@@ -92,7 +82,7 @@ impl ShanaShot {
                             zbus::Error::Failure("Illegal region pos input".to_string()).into()
                         );
                     }
-                    self.wayshot_connection
+                    wayshot_connection
                         .screenshot(
                             libwayshot::CaptureRegion {
                                 x_coordinate: pos[0].parse().map_err(|_| {
@@ -114,17 +104,15 @@ impl ShanaShot {
                             zbus::Error::Failure(format!("Wayland screencopy failed, {e}"))
                         })?
                 }
-                SlintSelection::GlobalScreen { showcursor } => self
-                    .wayshot_connection
+                SlintSelection::GlobalScreen { showcursor } => wayshot_connection
                     .screenshot_all(showcursor)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
-                SlintSelection::Selection { index, showcursor } => self
-                    .wayshot_connection
-                    .screenshot_outputs(vec![wayinfos[index as usize].clone()], showcursor)
+                SlintSelection::Selection { index, showcursor } => wayshot_connection
+                    .screenshot_single_output(&wayinfos[index as usize], showcursor)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
             }
         } else {
-            self.wayshot_connection
+            wayshot_connection
                 .screenshot_all(false)
                 .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?
         };
@@ -132,12 +120,9 @@ impl ShanaShot {
             zbus::Error::Failure(format!("Cannot save to /tmp/wayshot.png, e: {e}"))
         })?;
         tracing::info!("Shot Finished");
-        Ok((
-            0,
-            Screenshot {
-                uri: url::Url::from_file_path("/tmp/wayshot.png").unwrap(),
-            },
-        ))
+        Ok(PortalResponse::Success(Screenshot {
+            uri: url::Url::from_file_path("/tmp/wayshot.png").unwrap(),
+        }))
     }
 
     fn pick_color(
@@ -146,7 +131,9 @@ impl ShanaShot {
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
-    ) -> fdo::Result<(u32, Color)> {
+    ) -> fdo::Result<PortalResponse<Color>> {
+        let wayshot_connection = WayshotConnection::new()
+            .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
         let slurp = std::process::Command::new("slurp")
             .arg("-p")
             .output()
@@ -159,8 +146,7 @@ impl ShanaShot {
             .ok_or(zbus::Error::Failure("Not get slurp area".to_string()))?;
         let point: Vec<&str> = output.split(',').collect();
 
-        let image = self
-            .wayshot_connection
+        let image = wayshot_connection
             .screenshot(
                 libwayshot::CaptureRegion {
                     x_coordinate: point[0]
@@ -177,15 +163,12 @@ impl ShanaShot {
             .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?;
 
         let pixel = image.get_pixel(0, 0);
-        Ok((
-            0,
-            Color {
-                color: [
-                    pixel.0[0] as f64 / 256.0,
-                    pixel.0[1] as f64 / 256.0,
-                    pixel.0[2] as f64 / 256.0,
-                ],
-            },
-        ))
+        Ok(PortalResponse::Success(Color {
+            color: [
+                pixel.0[0] as f64 / 256.0,
+                pixel.0[1] as f64 / 256.0,
+                pixel.0[2] as f64 / 256.0,
+            ],
+        }))
     }
 }
