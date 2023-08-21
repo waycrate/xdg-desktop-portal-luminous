@@ -83,10 +83,10 @@ pub async fn remove_cast_session(path: &str) {
     sessions.remove(index);
 }
 
-pub struct ScreenCast;
+pub struct ScreenCastBackend;
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.ScreenCast")]
-impl ScreenCast {
+impl ScreenCastBackend {
     #[dbus_interface(property, name = "version")]
     fn version(&self) -> u32 {
         4

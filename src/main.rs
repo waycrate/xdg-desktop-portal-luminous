@@ -4,8 +4,8 @@ mod screenshot;
 mod session;
 mod slintbackend;
 
-use screencast::ScreenCast;
-use screenshot::ShanaShot;
+use screencast::ScreenCastBackend;
+use screenshot::ScreenShotBackend;
 
 use std::collections::HashMap;
 use std::future::pending;
@@ -51,8 +51,8 @@ async fn main() -> anyhow::Result<()> {
 
     let _conn = ConnectionBuilder::session()?
         .name("org.freedesktop.impl.portal.desktop.wlrrust")?
-        .serve_at("/org/freedesktop/portal/desktop", ShanaShot)?
-        .serve_at("/org/freedesktop/portal/desktop", ScreenCast)?
+        .serve_at("/org/freedesktop/portal/desktop", ScreenShotBackend)?
+        .serve_at("/org/freedesktop/portal/desktop", ScreenCastBackend)?
         .build()
         .await?;
 

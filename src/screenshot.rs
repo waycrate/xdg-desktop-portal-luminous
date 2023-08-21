@@ -28,10 +28,10 @@ pub struct ScreenshotOption {
 }
 
 #[derive(Debug)]
-pub struct ShanaShot;
+pub struct ScreenShotBackend;
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.Screenshot")]
-impl ShanaShot {
+impl ScreenShotBackend {
     #[dbus_interface(property, name = "version")]
     fn version(&self) -> u32 {
         1
