@@ -523,9 +523,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.82"
+version = "1.0.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "305fe645edc1442a0fa8b6726ba61d422798d37a52e12eaecf4b022ebbb88f01"
+checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
 dependencies = [
  "jobserver",
  "libc",
@@ -1940,8 +1940,8 @@ checksum = "f7012b1bbb0719e1097c47611d3898568c546d597c2e74d66f6087edd5233ff4"
 
 [[package]]
 name = "libspa"
-version = "0.7.0"
-source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#21d32c4b1b54bdc6d4cc3df64eee1459e7e755f7"
+version = "0.7.1"
+source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#6f3b9c4fd3a72f6d52e447be1dd5527de3550e72"
 dependencies = [
  "bitflags 2.4.0",
  "cc",
@@ -1956,8 +1956,8 @@ dependencies = [
 
 [[package]]
 name = "libspa-sys"
-version = "0.7.0"
-source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#21d32c4b1b54bdc6d4cc3df64eee1459e7e755f7"
+version = "0.7.1"
+source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#6f3b9c4fd3a72f6d52e447be1dd5527de3550e72"
 dependencies = [
  "bindgen 0.66.1",
  "cc",
@@ -1967,7 +1967,7 @@ dependencies = [
 [[package]]
 name = "libwayshot"
 version = "0.2.0"
-source = "git+https://github.com/Decodetalkers/wayshot.git?branch=addcapturefd#fc1904b940c78825244f4426591819cc6d927810"
+source = "git+https://github.com/waycrate/wayshot.git#1dfa348526a9466a842b0d0871c0e6326ffc1d3a"
 dependencies = [
  "image",
  "log",
@@ -2579,8 +2579,8 @@ checksum = "b330c9d1b92dfe68442ca20b009c717d5f0b1e3cf4965e62f704c3c6e95a1305"
 
 [[package]]
 name = "pipewire"
-version = "0.7.0"
-source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#21d32c4b1b54bdc6d4cc3df64eee1459e7e755f7"
+version = "0.7.1"
+source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#6f3b9c4fd3a72f6d52e447be1dd5527de3550e72"
 dependencies = [
  "anyhow",
  "bitflags 2.4.0",
@@ -2595,8 +2595,8 @@ dependencies = [
 
 [[package]]
 name = "pipewire-sys"
-version = "0.7.0"
-source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#21d32c4b1b54bdc6d4cc3df64eee1459e7e755f7"
+version = "0.7.1"
+source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#6f3b9c4fd3a72f6d52e447be1dd5527de3550e72"
 dependencies = [
  "bindgen 0.66.1",
  "libspa-sys",
@@ -3036,18 +3036,18 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
-version = "1.0.183"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32ac8da02677876d532745a130fc9d8e6edfa81a269b107c5b00829b91d8eb3c"
+checksum = "be9b6f69f1dfd54c3b568ffa45c310d6973a5e5148fd40cf515acaf38cf5bc31"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.183"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aafe972d60b0b9bee71a91b92fee2d4fb3c9d7e8f6b179aa99f27203d99a4816"
+checksum = "dc59dfdcbad1437773485e0367fea4b090a2e0a16d9ffc46af47764536a298ec"
 dependencies = [
  "proc-macro2",
  "quote",

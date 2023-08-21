@@ -40,7 +40,7 @@ pub fn selectgui(screen: Vec<OutputInfo>) -> SlintSelection {
                 .iter()
                 .map(|screen| ScreenInfo {
                     name: screen.name.clone().into(),
-                    description: screen.name.clone().into(),
+                    description: screen.description.clone().into(),
                 })
                 .collect::<Vec<ScreenInfo>>(),
         ))
