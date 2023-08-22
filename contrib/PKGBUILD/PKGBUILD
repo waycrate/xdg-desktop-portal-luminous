@@ -9,7 +9,7 @@ license=('BSD-2-Clause')
 depends=('xdg-desktop-portal' 'slurp')
 provides=("xdg-desktop-portal-impl")
 makedepends=('git' 'ninja' 'meson' 'rust')
-source=("${_pkgname}::git+${url}.git"
+source=("${_pkgname}::git+${url}.git")
 sha256sums=('SKIP')
 
 build() {
@@ -21,9 +21,4 @@ build() {
 }
 package() {
   DESTDIR="$pkgdir" ninja -C build install
-}
-
-pkgver() {
-	cd $_pkgname
-    git describe --long --tags --match'=[0-9]*' | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
 }
