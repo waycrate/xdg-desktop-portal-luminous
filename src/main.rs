@@ -45,12 +45,12 @@ impl<T: zvariant::Type + serde::Serialize> serde::Serialize for PortalResponse<T
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    std::env::set_var("RUST_LOG", "xdg-desktop-protal-wlrrust=info");
+    std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info");
     tracing_subscriber::fmt().init();
-    tracing::info!("wlrrust Start");
+    tracing::info!("luminous Start");
 
     let _conn = ConnectionBuilder::session()?
-        .name("org.freedesktop.impl.portal.desktop.wlrrust")?
+        .name("org.freedesktop.impl.portal.desktop.luminous")?
         .serve_at("/org/freedesktop/portal/desktop", ScreenShotBackend)?
         .serve_at("/org/freedesktop/portal/desktop", ScreenCastBackend)?
         .build()

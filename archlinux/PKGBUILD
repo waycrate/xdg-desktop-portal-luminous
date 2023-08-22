@@ -1,10 +1,10 @@
-pkgname=xdg-desktop-portal-wlrrust
+pkgname=xdg-desktop-portal-luminous
 pkgver=0.1.0
 pkgrel=1.0
-pkgdesc='xdg-desktop-portal-wlrrust'
+pkgdesc='xdg-desktop-portal-luminous'
 arch=('x86_64' 'aarch64')
 pkgdesc='a rust wlroots xdg-desktop-portal backend'
-url='https://github.com/waycrate/xdg-desktop-portal-wlrrust'
+url='https://github.com/waycrate/xdg-desktop-portal-luminous'
 license=('BSD-2-Clause')
 depends=('xdg-desktop-portal' 'slurp')
 provides=("xdg-desktop-portal-impl")

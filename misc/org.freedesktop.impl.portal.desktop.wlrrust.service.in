@@ -1,4 +1,0 @@
-[D-BUS Service]
-Name=org.freedesktop.impl.portal.desktop.wlrrust
-Exec=@xdg_install_dir@/xdg-desktop-portal-wlrrust
-SystemdService=xdg-desktop-portal-wlrrust.service

@@ -6,6 +6,6 @@ ConditionEnvironment=WAYLAND_DISPLAY
 
 [Service]
 Type=dbus
-BusName=org.freedesktop.impl.portal.desktop.wlrrust
-ExecStart=@xdg_install_dir@/xdg-desktop-portal-wlrrust
+BusName=org.freedesktop.impl.portal.desktop.luminous
+ExecStart=@xdg_install_dir@/xdg-desktop-portal-luminous
 Restart=on-failure
