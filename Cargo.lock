@@ -4505,7 +4505,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "xdg-desktop-portal-wlrrust"
+name = "xdg-desktop-portal-luminous"
 version = "0.3.4"
 dependencies = [
  "anyhow",

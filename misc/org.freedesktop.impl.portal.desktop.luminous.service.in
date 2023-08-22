@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.freedesktop.impl.portal.desktop.luminous
+Exec=@xdg_install_dir@/xdg-desktop-portal-luminous
+SystemdService=xdg-desktop-portal-luminous.service
