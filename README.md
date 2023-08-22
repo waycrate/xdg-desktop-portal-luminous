@@ -24,6 +24,7 @@ ninja -C build install
 Build time requirements are marked with `*`.
 
 1. cargo * 
+1. libclang *
 1. meson * 
 1. ninja *
 1. pipewire *
