@@ -1,5 +1,5 @@
 [Unit]
-Description=Xdg Desktop Portal for wlr written with rust
+Description=Xdg Desktop Portal backend for wlroots-based compositors written with rust
 PartOf=graphical-session.target
 After=graphical-session.target
 ConditionEnvironment=WAYLAND_DISPLAY
