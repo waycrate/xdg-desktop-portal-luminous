@@ -1,7 +1,7 @@
 _pkgname=xdg-desktop-portal-luminous
 pkgname="${_pkgname}-git"
-pkgver=0.1.0
-pkgrel=1.0
+pkgver=r27.b3a3e8a
+pkgrel=1
 url='https://github.com/waycrate/xdg-desktop-portal-luminous'
 pkgdesc='xdg-desktop-portal backend for wlroots based compositors, providing screenshot and screencast'
 arch=('x86_64' 'aarch64')
@@ -13,12 +13,20 @@ source=("${_pkgname}::git+${url}.git")
 sha256sums=('SKIP')
 
 build() {
+  cd "${_pkgname}"
   meson setup build \
     -Dprefix=/usr \
     -Dlibexecdir=lib \
     -Dbuildtype=release
   ninja -C build
 }
+
 package() {
-  DESTDIR="$pkgdir" ninja -C build install
+  cd "${_pkgname}"
+  DESTDIR="${pkgdir}" ninja -C build install
+}
+
+pkgver() {
+  cd "${_pkgname}"
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
 }
