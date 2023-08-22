@@ -58,7 +58,7 @@ xdg_target = custom_target('xdg-deskop-portal-luminous',
   command: command
 )
 
-install_data('misc/waycratewlr.portal',
+install_data('misc/luminous.portal',
   install_dir: portal_dir
 )
 
