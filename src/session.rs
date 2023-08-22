@@ -2,6 +2,7 @@ use enumflags2::{bitflags, BitFlags};
 use zbus::{dbus_interface, zvariant::OwnedObjectPath, SignalContext};
 
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use zbus::zvariant::Type;
 
 use once_cell::sync::Lazy;
@@ -45,18 +46,18 @@ pub enum SourceType {
 }
 
 #[bitflags]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Copy, Clone, Type, Default)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug, Copy, Clone, Type, Default)]
 #[repr(u32)]
 /// A bit flag for the possible cursor modes.
 pub enum CursorMode {
     #[default]
     /// The cursor is not part of the screen cast stream.
-    Hidden,
+    Hidden = 1,
     /// The cursor is embedded as part of the stream buffers.
-    Embedded,
+    Embedded = 2,
     /// The cursor is not part of the screen cast stream, but sent as PipeWire
     /// stream metadata.
-    Metadata,
+    Metadata = 4,
 }
 
 impl CursorMode {
