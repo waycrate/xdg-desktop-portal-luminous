@@ -89,9 +89,9 @@ dependencies = [
 
 [[package]]
 name = "addr2line"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4fa78e18c64fce05e902adecd7a5eed15a5e0a3439f7b0e169f0252214865e3"
+checksum = "8a30b2e23b9e17a9f90641c7ab1549cd9b44f296d3ccbf309d2863cfe398a0cb"
 dependencies = [
  "gimli",
 ]
@@ -348,9 +348,9 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "backtrace"
-version = "0.3.68"
+version = "0.3.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4319208da049c43661739c5fade2ba182f09d1dc2299b32298d3a31692b17e12"
+checksum = "2089b7e3f35b9dd2d0ed921ead4f6d318c27680d4a5bd167b3ee120edb105837"
 dependencies = [
  "addr2line",
  "cc",
@@ -1361,9 +1361,9 @@ dependencies = [
 
 [[package]]
 name = "gimli"
-version = "0.27.3"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6c80984affa11d98d1b88b66ac8853f143217b399d3c74116778ff8fdb4ed2e"
+checksum = "6fb8d784f27acf97159b40fc4db5ecd8aa23b9ad5ef69cdd136d3bc80665f0c0"
 
 [[package]]
 name = "gl_generator"
@@ -1941,7 +1941,7 @@ checksum = "f7012b1bbb0719e1097c47611d3898568c546d597c2e74d66f6087edd5233ff4"
 [[package]]
 name = "libspa"
 version = "0.7.1"
-source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#6f3b9c4fd3a72f6d52e447be1dd5527de3550e72"
+source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#d2d7b54d6dbe61f6860ffc9bb7b5913ac09a7888"
 dependencies = [
  "bitflags 2.4.0",
  "cc",
@@ -1957,7 +1957,7 @@ dependencies = [
 [[package]]
 name = "libspa-sys"
 version = "0.7.1"
-source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#6f3b9c4fd3a72f6d52e447be1dd5527de3550e72"
+source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#d2d7b54d6dbe61f6860ffc9bb7b5913ac09a7888"
 dependencies = [
  "bindgen 0.66.1",
  "cc",
@@ -1967,7 +1967,7 @@ dependencies = [
 [[package]]
 name = "libwayshot"
 version = "0.2.0"
-source = "git+https://github.com/waycrate/wayshot.git#1dfa348526a9466a842b0d0871c0e6326ffc1d3a"
+source = "git+https://github.com/waycrate/wayshot.git#0151346adce86812dfb46fcd0434f5e55ddc1203"
 dependencies = [
  "image",
  "log",
@@ -2435,9 +2435,9 @@ dependencies = [
 
 [[package]]
 name = "object"
-version = "0.31.1"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bda667d9f2b5051b8833f59f3bf748b28ef54f850f4fcb389a252aa383866d1"
+checksum = "77ac5bbd07aea88c60a577a1ce218075ffd59208b2d7ca97adf9bfc5aeb21ebe"
 dependencies = [
  "memchr",
 ]
@@ -2580,7 +2580,7 @@ checksum = "b330c9d1b92dfe68442ca20b009c717d5f0b1e3cf4965e62f704c3c6e95a1305"
 [[package]]
 name = "pipewire"
 version = "0.7.1"
-source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#6f3b9c4fd3a72f6d52e447be1dd5527de3550e72"
+source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#d2d7b54d6dbe61f6860ffc9bb7b5913ac09a7888"
 dependencies = [
  "anyhow",
  "bitflags 2.4.0",
@@ -2596,7 +2596,7 @@ dependencies = [
 [[package]]
 name = "pipewire-sys"
 version = "0.7.1"
-source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#6f3b9c4fd3a72f6d52e447be1dd5527de3550e72"
+source = "git+https://gitlab.freedesktop.org/pipewire/pipewire-rs#d2d7b54d6dbe61f6860ffc9bb7b5913ac09a7888"
 dependencies = [
  "bindgen 0.66.1",
  "libspa-sys",
@@ -2929,15 +2929,15 @@ checksum = "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb"
 dependencies = [
  "log",
  "ring",
- "rustls-webpki 0.101.3",
+ "rustls-webpki 0.101.4",
  "sct",
 ]
 
 [[package]]
 name = "rustls-webpki"
-version = "0.100.1"
+version = "0.100.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6207cd5ed3d8dca7816f8f3725513a34609c0c765bf652b8c3cb4cfd87db46b"
+checksum = "e98ff011474fa39949b7e5c0428f9b4937eda7da7848bbb947786b7be0b27dab"
 dependencies = [
  "ring",
  "untrusted",
@@ -2945,9 +2945,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.101.3"
+version = "0.101.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261e9e0888cba427c3316e6322805653c9425240b6fd96cee7cb671ab70ab8d0"
+checksum = "7d93931baf2d282fff8d3a532bbfd7653f734643161b87e3e01e59a04439bf0d"
 dependencies = [
  "ring",
  "untrusted",
@@ -3184,9 +3184,9 @@ dependencies = [
 
 [[package]]
 name = "slab"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6528351c9bc8ab22353f9d776db39a20288e8d6c37ef8cfe3317cf875eecfc2d"
+checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
 ]
@@ -3811,7 +3811,7 @@ dependencies = [
  "log",
  "once_cell",
  "rustls",
- "rustls-webpki 0.100.1",
+ "rustls-webpki 0.100.2",
  "url",
  "webpki-roots",
 ]
@@ -4166,7 +4166,7 @@ version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b03058f88386e5ff5310d9111d53f48b17d732b401aeb83a8d5190f2ac459338"
 dependencies = [
- "rustls-webpki 0.100.1",
+ "rustls-webpki 0.100.2",
 ]
 
 [[package]]
