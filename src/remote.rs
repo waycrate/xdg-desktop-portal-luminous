@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
+use enumflags2::BitFlags;
 use zbus::dbus_interface;
 
 use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type, Value};
-
-use enumflags2::BitFlags;
 
 use serde::{Deserialize, Serialize};
 
@@ -14,31 +13,16 @@ use tokio::sync::Mutex;
 
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
-use crate::session::{
-    append_session, CursorMode, PersistMode, Session, SessionType, SourceType, SESSIONS,
-};
+use crate::session::{append_session, DeviceTypes, Session, SessionType, SourceType, SESSIONS};
 use crate::PortalResponse;
+
+use crate::screencast::SelectSourcesOptions;
 
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
 /// Specified options for a [`Screencast::create_session`] request.
 #[zvariant(signature = "dict")]
 struct SessionCreateResult {
     handle_token: String,
-}
-
-#[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
-/// Specified options for a [`Screencast::select_sources`] request.
-#[zvariant(signature = "dict")]
-pub struct SelectSourcesOptions {
-    /// A string that will be used as the last element of the handle.
-    /// What types of content to record.
-    pub types: Option<BitFlags<SourceType>>,
-    /// Whether to allow selecting multiple sources.
-    pub multiple: Option<bool>,
-    /// Determines how the cursor will be drawn in the screen cast stream.
-    pub cursor_mode: Option<CursorMode>,
-    pub restore_token: Option<String>,
-    pub persist_mode: Option<PersistMode>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Type, Default, Debug)]
@@ -58,27 +42,26 @@ struct StreamProperties {
 // TODO: this is copy from ashpd, but the dict is a little different from xdg_desktop_portal
 #[derive(Clone, SerializeDict, DeserializeDict, Default, Debug, Type)]
 #[zvariant(signature = "dict")]
-struct StartReturnValue {
+struct RemoteStartReturnValue {
     streams: Vec<Stream>,
-    persist_mode: u32,
-    restore_token: Option<String>,
+    devices: BitFlags<DeviceTypes>,
+    clipboard_enabled: bool,
 }
 
-pub type CastSessionData = (String, ScreencastThread);
-pub static CAST_SESSIONS: Lazy<Arc<Mutex<Vec<CastSessionData>>>> =
+pub type RemoteSessionData = (String, ScreencastThread);
+pub static CAST_SESSIONS: Lazy<Arc<Mutex<Vec<RemoteSessionData>>>> =
     Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
 
-pub async fn append_cast_session(session: CastSessionData) {
+pub async fn append_remote_session(session: RemoteSessionData) {
     let mut sessions = CAST_SESSIONS.lock().await;
     sessions.push(session)
 }
 
-pub async fn remove_cast_session(path: &str) {
+pub async fn remove_remote_session(path: &str) {
     let mut sessions = CAST_SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
-        .position(|the_session| the_session.0 == path)
-    else {
+        .position(|the_session| the_session.0 == path) else {
         return;
     };
     sessions[index].1.stop();
@@ -86,23 +69,18 @@ pub async fn remove_cast_session(path: &str) {
     sessions.remove(index);
 }
 
-pub struct ScreenCastBackend;
+pub struct RemoteBackend;
 
-#[dbus_interface(name = "org.freedesktop.impl.portal.ScreenCast")]
-impl ScreenCastBackend {
+#[dbus_interface(name = "org.freedesktop.impl.portal.RemoteDesktop")]
+impl RemoteBackend {
     #[dbus_interface(property, name = "version")]
     fn version(&self) -> u32 {
-        4
+        2
     }
 
     #[dbus_interface(property)]
-    fn available_cursor_modes(&self) -> u32 {
-        (CursorMode::Hidden | CursorMode::Embedded).bits()
-    }
-
-    #[dbus_interface(property)]
-    fn available_source_types(&self) -> u32 {
-        BitFlags::from_flag(SourceType::Monitor).bits()
+    fn available_device_types(&self) -> u32 {
+        (DeviceTypes::KEYBOARD | DeviceTypes::POINTER).bits()
     }
 
     async fn create_session(
@@ -126,7 +104,7 @@ impl ScreenCastBackend {
                 },
             )
             .await?;
-        let current_session = Session::new(session_handle.clone(), SessionType::ScreenCast);
+        let current_session = Session::new(session_handle.clone(), SessionType::Remote);
         append_session(current_session.clone()).await;
         server.at(session_handle.clone(), current_session).await?;
         Ok(PortalResponse::Success(SessionCreateResult {
@@ -134,7 +112,7 @@ impl ScreenCastBackend {
         }))
     }
 
-    async fn select_sources(
+    async fn select_devices(
         &self,
         _request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
@@ -142,17 +120,15 @@ impl ScreenCastBackend {
         options: SelectSourcesOptions,
     ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
         let mut locked_sessions = SESSIONS.lock().await;
-        let Some(index) = locked_sessions
-            .iter()
-            .position(|this_session| this_session.handle_path == session_handle.clone().into())
-        else {
+        let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
             tracing::warn!("No session is created or it is removed");
             return Ok(PortalResponse::Other);
         };
-        if locked_sessions[index].session_type != SessionType::ScreenCast {
+        if locked_sessions[index].session_type != SessionType::Remote {
             return Ok(PortalResponse::Other);
         }
         locked_sessions[index].set_options(options);
+        locked_sessions[index].set_device_type(DeviceTypes::KEYBOARD | DeviceTypes::POINTER);
         Ok(PortalResponse::Success(HashMap::new()))
     }
 
@@ -163,13 +139,13 @@ impl ScreenCastBackend {
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
-    ) -> zbus::fdo::Result<PortalResponse<StartReturnValue>> {
+    ) -> zbus::fdo::Result<PortalResponse<RemoteStartReturnValue>> {
         let cast_sessions = CAST_SESSIONS.lock().await;
         if let Some(session) = cast_sessions
             .iter()
             .find(|session| session.0 == session_handle.to_string())
         {
-            return Ok(PortalResponse::Success(StartReturnValue {
+            return Ok(PortalResponse::Success(RemoteStartReturnValue {
                 streams: vec![Stream(session.1.node_id(), StreamProperties::default())],
                 ..Default::default()
             }));
@@ -177,16 +153,13 @@ impl ScreenCastBackend {
         drop(cast_sessions);
 
         let locked_sessions = SESSIONS.lock().await;
-        let Some(index) = locked_sessions
-            .iter()
-            .position(|this_session| this_session.handle_path == session_handle.clone().into())
-        else {
+        let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
             tracing::warn!("No session is created or it is removed");
             return Ok(PortalResponse::Other);
         };
 
         let current_session = locked_sessions[index].clone();
-        if current_session.session_type != SessionType::ScreenCast {
+        if current_session.session_type != SessionType::Remote {
             return Ok(PortalResponse::Other);
         }
         drop(locked_sessions);
@@ -217,7 +190,7 @@ impl ScreenCastBackend {
         let Some(output) = outputs
             .iter()
             .find(|output| output.dimensions.x == x && output.dimensions.y == y)
-        else {
+            else {
             return Ok(PortalResponse::Other);
         };
 
@@ -233,9 +206,9 @@ impl ScreenCastBackend {
 
         let node_id = cast_thread.node_id();
 
-        append_cast_session((session_handle.to_string(), cast_thread)).await;
+        append_remote_session((session_handle.to_string(), cast_thread)).await;
 
-        Ok(PortalResponse::Success(StartReturnValue {
+        Ok(PortalResponse::Success(RemoteStartReturnValue {
             streams: vec![Stream(node_id, StreamProperties::default())],
             ..Default::default()
         }))

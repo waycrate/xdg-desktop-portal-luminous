@@ -1,9 +1,11 @@
+mod remote;
 mod request;
 mod screencast;
 mod screenshot;
 mod session;
 mod slintbackend;
 
+use remote::RemoteBackend;
 use screencast::ScreenCastBackend;
 use screenshot::ScreenShotBackend;
 
@@ -53,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
         .name("org.freedesktop.impl.portal.desktop.luminous")?
         .serve_at("/org/freedesktop/portal/desktop", ScreenShotBackend)?
         .serve_at("/org/freedesktop/portal/desktop", ScreenCastBackend)?
+        .serve_at("/org/freedesktop/portal/desktop", RemoteBackend)?
         .build()
         .await?;
 
