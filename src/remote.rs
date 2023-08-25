@@ -61,7 +61,8 @@ pub async fn remove_remote_session(path: &str) {
     let mut sessions = CAST_SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
-        .position(|the_session| the_session.0 == path) else {
+        .position(|the_session| the_session.0 == path)
+    else {
         return;
     };
     sessions[index].1.stop();
@@ -120,7 +121,10 @@ impl RemoteBackend {
         options: SelectSourcesOptions,
     ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
         let mut locked_sessions = SESSIONS.lock().await;
-        let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
+        let Some(index) = locked_sessions
+            .iter()
+            .position(|this_session| this_session.handle_path == session_handle.clone().into())
+        else {
             tracing::warn!("No session is created or it is removed");
             return Ok(PortalResponse::Other);
         };
@@ -153,7 +157,10 @@ impl RemoteBackend {
         drop(cast_sessions);
 
         let locked_sessions = SESSIONS.lock().await;
-        let Some(index) = locked_sessions.iter().position(|this_session| this_session.handle_path == session_handle.clone().into()) else {
+        let Some(index) = locked_sessions
+            .iter()
+            .position(|this_session| this_session.handle_path == session_handle.clone().into())
+        else {
             tracing::warn!("No session is created or it is removed");
             return Ok(PortalResponse::Other);
         };
@@ -190,7 +197,7 @@ impl RemoteBackend {
         let Some(output) = outputs
             .iter()
             .find(|output| output.dimensions.x == x && output.dimensions.y == y)
-            else {
+        else {
             return Ok(PortalResponse::Other);
         };
 
