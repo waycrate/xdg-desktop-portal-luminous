@@ -24,7 +24,8 @@ pub async fn remove_session(session: &Session) {
     let mut sessions = SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
-        .position(|the_session| the_session.handle_path == session.handle_path) else {
+        .position(|the_session| the_session.handle_path == session.handle_path)
+    else {
         return;
     };
     remove_cast_session(&session.handle_path.to_string()).await;
