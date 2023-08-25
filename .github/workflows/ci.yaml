@@ -1,0 +1,29 @@
+name: Build xdg-desktop-portal-luminous (nix)
+
+on: [push, pull_request]
+jobs:
+    nix:
+        name: "Build xdg-desktop-portal-luminous"
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout xdg-desktop-portal-luminous
+              uses: actions/checkout@v3
+              with:
+                  submodules: recursive
+
+            - name: install nix
+              uses: cachix/install-nix-action@v20
+              with:
+                  install_url: https://nixos.org/nix/install
+                  extra_nix_config: |
+                      auto-optimise-store = true
+                      access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+                      experimental-features = nix-command flakes
+
+            - name: Setup meson
+              run: |
+                  nix develop --command meson build
+
+            - name: Exec ninja
+              run: |
+                  nix develop --command ninja -C build

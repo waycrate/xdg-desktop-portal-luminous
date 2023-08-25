@@ -3,6 +3,8 @@
 An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project is a stand alone binary and does not depend on grim.
 `libwayshot` is used as the screencopy backend to enable screenshots.
 
+![https://github.com/waycrate/xdg-desktop-portal-luminous/actions](https://github.com/waycrate/xdg-desktop-portal-luminous/actions/workflows/ci.yaml/badge.svg)
+
 # Exposed interfaces:
 
 1. org.freedesktop.impl.portal.ScreenCast
