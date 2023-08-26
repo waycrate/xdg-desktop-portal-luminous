@@ -73,12 +73,12 @@ pub enum CursorMode {
 pub enum DeviceTypes {
     #[default]
     /// The cursor is not part of the screen cast stream.
-    KEYBOARD = 1,
+    Keyboard = 1,
     /// The cursor is embedded as part of the stream buffers.
-    POINTER = 2,
+    Pointer = 2,
     /// The cursor is not part of the screen cast stream, but sent as PipeWire
     /// stream metadata.
-    TOUCHSCREEN = 4,
+    TouchScreen = 4,
 }
 
 impl CursorMode {
@@ -128,7 +128,7 @@ impl Session {
             multiple: false,
             cursor_mode: CursorMode::Hidden,
             persist_mode: PersistMode::DoNot,
-            device_type: DeviceTypes::KEYBOARD.into(),
+            device_type: DeviceTypes::Keyboard.into(),
         }
     }
     pub fn set_options(&mut self, options: SelectSourcesOptions) {

@@ -1,3 +1,9 @@
+mod dispatch;
+mod remote_thread;
+mod state;
+
+use remote_thread::RemoteControl;
+
 use std::collections::HashMap;
 
 use enumflags2::BitFlags;
@@ -17,6 +23,8 @@ use crate::session::{append_session, DeviceTypes, Session, SessionType, SourceTy
 use crate::PortalResponse;
 
 use crate::screencast::SelectSourcesOptions;
+
+use self::remote_thread::KeyOrPointerRequest;
 
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -48,17 +56,17 @@ struct RemoteStartReturnValue {
     clipboard_enabled: bool,
 }
 
-pub type RemoteSessionData = (String, ScreencastThread);
-pub static CAST_SESSIONS: Lazy<Arc<Mutex<Vec<RemoteSessionData>>>> =
+pub type RemoteSessionData = (String, ScreencastThread, RemoteControl);
+pub static REMOTE_SESSIONS: Lazy<Arc<Mutex<Vec<RemoteSessionData>>>> =
     Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
 
 pub async fn append_remote_session(session: RemoteSessionData) {
-    let mut sessions = CAST_SESSIONS.lock().await;
+    let mut sessions = REMOTE_SESSIONS.lock().await;
     sessions.push(session)
 }
 
 pub async fn remove_remote_session(path: &str) {
-    let mut sessions = CAST_SESSIONS.lock().await;
+    let mut sessions = REMOTE_SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
         .position(|the_session| the_session.0 == path)
@@ -66,6 +74,7 @@ pub async fn remove_remote_session(path: &str) {
         return;
     };
     sessions[index].1.stop();
+    sessions[index].2.stop();
     tracing::info!("session {} is stopped", sessions[index].0);
     sessions.remove(index);
 }
@@ -81,7 +90,7 @@ impl RemoteBackend {
 
     #[dbus_interface(property)]
     fn available_device_types(&self) -> u32 {
-        (DeviceTypes::KEYBOARD | DeviceTypes::POINTER).bits()
+        (DeviceTypes::Keyboard | DeviceTypes::Pointer).bits()
     }
 
     async fn create_session(
@@ -132,7 +141,7 @@ impl RemoteBackend {
             return Ok(PortalResponse::Other);
         }
         locked_sessions[index].set_options(options);
-        locked_sessions[index].set_device_type(DeviceTypes::KEYBOARD | DeviceTypes::POINTER);
+        locked_sessions[index].set_device_type(DeviceTypes::Keyboard | DeviceTypes::Pointer);
         Ok(PortalResponse::Success(HashMap::new()))
     }
 
@@ -144,8 +153,8 @@ impl RemoteBackend {
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
     ) -> zbus::fdo::Result<PortalResponse<RemoteStartReturnValue>> {
-        let cast_sessions = CAST_SESSIONS.lock().await;
-        if let Some(session) = cast_sessions
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        if let Some(session) = remote_sessions
             .iter()
             .find(|session| session.0 == session_handle.to_string())
         {
@@ -154,7 +163,7 @@ impl RemoteBackend {
                 ..Default::default()
             }));
         }
-        drop(cast_sessions);
+        drop(remote_sessions);
 
         let locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
@@ -211,13 +220,176 @@ impl RemoteBackend {
         .await
         .map_err(|e| zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}")))?;
 
+        let remote_control = RemoteControl::init();
         let node_id = cast_thread.node_id();
 
-        append_remote_session((session_handle.to_string(), cast_thread)).await;
+        append_remote_session((session_handle.to_string(), cast_thread, remote_control)).await;
 
         Ok(PortalResponse::Success(RemoteStartReturnValue {
             streams: vec![Stream(node_id, StreamProperties::default())],
             ..Default::default()
         }))
+    }
+
+    // keyboard and else
+
+    async fn notify_pointer_motion(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        dx: f64,
+        dy: f64,
+    ) -> zbus::fdo::Result<()> {
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        let Some(session) = remote_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        else {
+            return Ok(());
+        };
+        let remote_control = &session.2;
+        remote_control
+            .sender
+            .send(KeyOrPointerRequest::PointerMotion { dx, dy })
+            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+        Ok(())
+    }
+
+    async fn notify_pointer_motion_absolute(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        _steam: u32,
+        x: f64,
+        y: f64,
+    ) -> zbus::fdo::Result<()> {
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        let Some(session) = remote_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        else {
+            return Ok(());
+        };
+        let remote_control = &session.2;
+        remote_control
+            .sender
+            .send(KeyOrPointerRequest::PointerMotionAbsolute {
+                x,
+                y,
+                x_extent: 2000,
+                y_extent: 2000,
+            })
+            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+        Ok(())
+    }
+
+    async fn notify_pointer_button(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        button: i32,
+        state: u32,
+    ) -> zbus::fdo::Result<()> {
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        let Some(session) = remote_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        else {
+            return Ok(());
+        };
+        let remote_control = &session.2;
+        remote_control
+            .sender
+            .send(KeyOrPointerRequest::PointerButton { button, state })
+            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+        Ok(())
+    }
+
+    async fn notify_pointer_axis(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        dx: f64,
+        dy: f64,
+    ) -> zbus::fdo::Result<()> {
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        let Some(session) = remote_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        else {
+            return Ok(());
+        };
+        let remote_control = &session.2;
+        remote_control
+            .sender
+            .send(KeyOrPointerRequest::PointerAxis { dx, dy })
+            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+        Ok(())
+    }
+
+    async fn notify_pointer_axix_discrate(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        axis: u32,
+        steps: i32,
+    ) -> zbus::fdo::Result<()> {
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        let Some(session) = remote_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        else {
+            return Ok(());
+        };
+        let remote_control = &session.2;
+        remote_control
+            .sender
+            .send(KeyOrPointerRequest::PointerAxisDiscrate { axis, steps })
+            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+        Ok(())
+    }
+
+    async fn notify_keyboard_keycode(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        keycode: i32,
+        state: u32,
+    ) -> zbus::fdo::Result<()> {
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        let Some(session) = remote_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        else {
+            return Ok(());
+        };
+        let remote_control = &session.2;
+        remote_control
+            .sender
+            .send(KeyOrPointerRequest::KeyboardKeycode { keycode, state })
+            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+        Ok(())
+    }
+
+    async fn notify_keyboard_keysym(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        keysym: i32,
+        state: u32,
+    ) -> zbus::fdo::Result<()> {
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        let Some(session) = remote_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        else {
+            return Ok(());
+        };
+        let remote_control = &session.2;
+        remote_control
+            .sender
+            .send(KeyOrPointerRequest::KeyboardKeysym { keysym, state })
+            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+        Ok(())
     }
 }
