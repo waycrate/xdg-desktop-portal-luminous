@@ -19,10 +19,11 @@ use tokio::sync::Mutex;
 
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
-use crate::session::{append_session, DeviceTypes, Session, SessionType, SourceType, SESSIONS};
-use crate::PortalResponse;
+use crate::session::{
+    append_session, DeviceType, PersistMode, Session, SessionType, SourceType, SESSIONS,
+};
 
-use crate::screencast::SelectSourcesOptions;
+use crate::PortalResponse;
 
 use self::remote_thread::KeyOrPointerRequest;
 
@@ -52,8 +53,19 @@ struct StreamProperties {
 #[zvariant(signature = "dict")]
 struct RemoteStartReturnValue {
     streams: Vec<Stream>,
-    devices: BitFlags<DeviceTypes>,
+    devices: BitFlags<DeviceType>,
     clipboard_enabled: bool,
+}
+
+#[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
+/// Specified options for a [`RemoteDesktop::select_devices`] request.
+#[zvariant(signature = "dict")]
+pub struct SelectDevicesOptions {
+    /// A string that will be used as the last element of the handle.
+    /// The device types to request remote controlling of. Default is all.
+    pub types: Option<BitFlags<DeviceType>>,
+    pub restore_token: Option<String>,
+    pub persist_mode: Option<PersistMode>,
 }
 
 pub type RemoteSessionData = (String, ScreencastThread, RemoteControl);
@@ -90,7 +102,7 @@ impl RemoteBackend {
 
     #[dbus_interface(property)]
     fn available_device_types(&self) -> u32 {
-        (DeviceTypes::Keyboard | DeviceTypes::Pointer).bits()
+        (DeviceType::Keyboard | DeviceType::Pointer).bits()
     }
 
     async fn create_session(
@@ -127,7 +139,7 @@ impl RemoteBackend {
         _request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         _app_id: String,
-        options: SelectSourcesOptions,
+        options: SelectDevicesOptions,
     ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
         let mut locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
@@ -140,8 +152,7 @@ impl RemoteBackend {
         if locked_sessions[index].session_type != SessionType::Remote {
             return Ok(PortalResponse::Other);
         }
-        locked_sessions[index].set_options(options);
-        locked_sessions[index].set_device_type(DeviceTypes::Keyboard | DeviceTypes::Pointer);
+        locked_sessions[index].set_remote_options(options);
         Ok(PortalResponse::Success(HashMap::new()))
     }
 
@@ -178,6 +189,7 @@ impl RemoteBackend {
         if current_session.session_type != SessionType::Remote {
             return Ok(PortalResponse::Other);
         }
+        let device_type = current_session.device_type;
         drop(locked_sessions);
 
         // TODO: use slurp now
@@ -227,6 +239,7 @@ impl RemoteBackend {
 
         Ok(PortalResponse::Success(RemoteStartReturnValue {
             streams: vec![Stream(node_id, StreamProperties::default())],
+            devices: device_type,
             ..Default::default()
         }))
     }

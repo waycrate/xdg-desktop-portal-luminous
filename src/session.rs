@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    remote::remove_remote_session,
+    remote::{remove_remote_session, SelectDevicesOptions},
     screencast::{remove_cast_session, SelectSourcesOptions},
 };
 
@@ -70,7 +70,7 @@ pub enum CursorMode {
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug, Copy, Clone, Type, Default)]
 #[repr(u32)]
 /// A bit flag for the possible cursor modes.
-pub enum DeviceTypes {
+pub enum DeviceType {
     #[default]
     /// The cursor is not part of the screen cast stream.
     Keyboard = 1,
@@ -116,7 +116,7 @@ pub struct Session {
     pub cursor_mode: CursorMode,
     pub persist_mode: PersistMode,
 
-    pub device_type: BitFlags<DeviceTypes>,
+    pub device_type: BitFlags<DeviceType>,
 }
 
 impl Session {
@@ -128,10 +128,10 @@ impl Session {
             multiple: false,
             cursor_mode: CursorMode::Hidden,
             persist_mode: PersistMode::DoNot,
-            device_type: DeviceTypes::Keyboard.into(),
+            device_type: DeviceType::Keyboard.into(),
         }
     }
-    pub fn set_options(&mut self, options: SelectSourcesOptions) {
+    pub fn set_screencast_options(&mut self, options: SelectSourcesOptions) {
         if let Some(types) = options.types {
             self.source_type = types;
         }
@@ -144,8 +144,13 @@ impl Session {
         }
     }
 
-    pub fn set_device_type(&mut self, device_type: BitFlags<DeviceTypes>) {
-        self.device_type = device_type;
+    pub fn set_remote_options(&mut self, options: SelectDevicesOptions) {
+        if let Some(types) = options.types {
+            self.device_type = types;
+        }
+        if let Some(persist_mode) = options.persist_mode {
+            self.persist_mode = persist_mode;
+        }
     }
 }
 

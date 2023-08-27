@@ -149,10 +149,7 @@ impl ScreenCastBackend {
             tracing::warn!("No session is created or it is removed");
             return Ok(PortalResponse::Other);
         };
-        if locked_sessions[index].session_type != SessionType::ScreenCast {
-            return Ok(PortalResponse::Other);
-        }
-        locked_sessions[index].set_options(options);
+        locked_sessions[index].set_screencast_options(options);
         Ok(PortalResponse::Success(HashMap::new()))
     }
 
