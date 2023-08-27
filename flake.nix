@@ -28,6 +28,7 @@
               # Libs
               pipewire
               wayland
+              libxkbcommon
               stdenv
 
               # Tools
