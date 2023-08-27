@@ -14,7 +14,9 @@ use tokio::sync::Mutex;
 
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
-use crate::session::{append_session, CursorMode, PersistMode, Session, SourceType, SESSIONS};
+use crate::session::{
+    append_session, CursorMode, PersistMode, Session, SessionType, SourceType, SESSIONS,
+};
 use crate::PortalResponse;
 
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
@@ -124,7 +126,7 @@ impl ScreenCastBackend {
                 },
             )
             .await?;
-        let current_session = Session::new(session_handle.clone());
+        let current_session = Session::new(session_handle.clone(), SessionType::ScreenCast);
         append_session(current_session.clone()).await;
         server.at(session_handle.clone(), current_session).await?;
         Ok(PortalResponse::Success(SessionCreateResult {
@@ -147,7 +149,7 @@ impl ScreenCastBackend {
             tracing::warn!("No session is created or it is removed");
             return Ok(PortalResponse::Other);
         };
-        locked_sessions[index].set_options(options);
+        locked_sessions[index].set_screencast_options(options);
         Ok(PortalResponse::Success(HashMap::new()))
     }
 
@@ -159,6 +161,18 @@ impl ScreenCastBackend {
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
     ) -> zbus::fdo::Result<PortalResponse<StartReturnValue>> {
+        let cast_sessions = CAST_SESSIONS.lock().await;
+        if let Some(session) = cast_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        {
+            return Ok(PortalResponse::Success(StartReturnValue {
+                streams: vec![Stream(session.1.node_id(), StreamProperties::default())],
+                ..Default::default()
+            }));
+        }
+        drop(cast_sessions);
+
         let locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
             .iter()
@@ -167,7 +181,11 @@ impl ScreenCastBackend {
             tracing::warn!("No session is created or it is removed");
             return Ok(PortalResponse::Other);
         };
+
         let current_session = locked_sessions[index].clone();
+        if current_session.session_type != SessionType::ScreenCast {
+            return Ok(PortalResponse::Other);
+        }
         drop(locked_sessions);
 
         // TODO: use slurp now
