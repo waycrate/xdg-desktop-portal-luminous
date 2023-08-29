@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    remote::{remove_remote_session, SelectDevicesOptions},
+    remotedesktop::{remove_remote_session, SelectDevicesOptions},
     screencast::{remove_cast_session, SelectSourcesOptions},
 };
 

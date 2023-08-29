@@ -91,10 +91,10 @@ pub async fn remove_remote_session(path: &str) {
     sessions.remove(index);
 }
 
-pub struct RemoteBackend;
+pub struct RemoteDesktopBackend;
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.RemoteDesktop")]
-impl RemoteBackend {
+impl RemoteDesktopBackend {
     #[dbus_interface(property, name = "version")]
     fn version(&self) -> u32 {
         2
