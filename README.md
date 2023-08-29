@@ -9,6 +9,7 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 
 1. org.freedesktop.impl.portal.ScreenCast
 1. org.freedesktop.impl.portal.ScreenShot
+1. org.freedesktop.impl.portal.RemoteDesktop
 
 # Future goals:
 
@@ -25,13 +26,14 @@ ninja -C build install
 
 Build time requirements are marked with `*`.
 
-1. cargo * 
+1. cargo *
 1. libclang *
-1. meson * 
+1. meson *
 1. ninja *
 1. pipewire *
 1. pkg-config *
 1. rustc *
+1. xkbcommon *
 1. slurp
 1. wayland
 1. wayland-protocols *
