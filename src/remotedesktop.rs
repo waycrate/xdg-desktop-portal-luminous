@@ -164,18 +164,6 @@ impl RemoteDesktopBackend {
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
     ) -> zbus::fdo::Result<PortalResponse<RemoteStartReturnValue>> {
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
-        if let Some(session) = remote_sessions
-            .iter()
-            .find(|session| session.0 == session_handle.to_string())
-        {
-            return Ok(PortalResponse::Success(RemoteStartReturnValue {
-                streams: vec![Stream(session.1.node_id(), StreamProperties::default())],
-                ..Default::default()
-            }));
-        }
-        drop(remote_sessions);
-
         let locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
             .iter()
@@ -191,6 +179,19 @@ impl RemoteDesktopBackend {
         }
         let device_type = current_session.device_type;
         drop(locked_sessions);
+
+        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        if let Some(session) = remote_sessions
+            .iter()
+            .find(|session| session.0 == session_handle.to_string())
+        {
+            return Ok(PortalResponse::Success(RemoteStartReturnValue {
+                streams: vec![Stream(session.1.node_id(), StreamProperties::default())],
+                devices: device_type,
+                ..Default::default()
+            }));
+        }
+        drop(remote_sessions);
 
         // TODO: use slurp now
         let show_cursor = current_session.cursor_mode.show_cursor();
