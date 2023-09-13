@@ -4,10 +4,12 @@ mod screencast;
 mod screenshot;
 mod session;
 mod slintbackend;
+mod settings;
 
 use remotedesktop::RemoteDesktopBackend;
 use screencast::ScreenCastBackend;
 use screenshot::ScreenShotBackend;
+use settings::SettingsBackend;
 
 use std::collections::HashMap;
 use std::future::pending;
@@ -56,6 +58,7 @@ async fn main() -> anyhow::Result<()> {
         .serve_at("/org/freedesktop/portal/desktop", ScreenShotBackend)?
         .serve_at("/org/freedesktop/portal/desktop", ScreenCastBackend)?
         .serve_at("/org/freedesktop/portal/desktop", RemoteDesktopBackend)?
+        .serve_at("/org/freedesktop/portal/desktop", SettingsBackend::init())?
         .build()
         .await?;
 
