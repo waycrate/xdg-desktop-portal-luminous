@@ -1,5 +1,5 @@
 use super::state::AppData;
-use std::os::unix::prelude::AsRawFd;
+use rustix::fd::AsFd;
 use wayland_client::{
     protocol::{wl_keyboard, wl_registry, wl_seat::WlSeat, wl_shm::WlShm},
     Connection, Dispatch, Proxy, QueueHandle,
@@ -103,7 +103,7 @@ impl Dispatch<WlSeat, ()> for AppData {
             let (file, size) = get_keymap_as_file();
             virtual_keyboard.keymap(
                 wl_keyboard::KeymapFormat::XkbV1.into(),
-                file.as_raw_fd(),
+                file.as_fd(),
                 size,
             );
             state.virtual_keyboard = Some(virtual_keyboard);
