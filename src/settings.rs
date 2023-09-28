@@ -27,11 +27,11 @@ pub struct AccentColor {
     pub color: [f64; 3],
 }
 
-impl Into<OwnedValue> for AccentColor {
-    fn into(self) -> OwnedValue {
+impl From<AccentColor> for OwnedValue {
+    fn from(val: AccentColor) -> Self {
         let arraysignature = Signature::try_from("d").unwrap();
         let mut array = Array::new(arraysignature);
-        for col in self.color {
+        for col in val.color {
             array.append(col.into()).unwrap();
         }
         OwnedValue::from(array)
