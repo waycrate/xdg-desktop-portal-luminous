@@ -13,6 +13,7 @@ const COLOR_SCHEME: &str = "color-scheme";
 const ACCENT_COLOR: &str = "accent-color";
 
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub use self::config::SettingsConfig;
@@ -62,6 +63,23 @@ impl SettingsBackend {
             .into());
         }
         Err(zbus::fdo::Error::Failed("No such namespace".to_string()))
+    }
+
+    async fn read_all(&self, namespace: String) -> fdo::Result<OwnedValue> {
+        if namespace != APPEARANCE {
+            return Err(zbus::fdo::Error::Failed("No such namespace".to_string()));
+        }
+        let mut output = HashMap::<String, OwnedValue>::new();
+        let config = SETTING_CONFIG.lock().await;
+        output.insert(COLOR_SCHEME.to_string(), config.get_color_scheme().into());
+        output.insert(
+            ACCENT_COLOR.to_string(),
+            AccentColor {
+                color: config.get_accent_color(),
+            }
+            .into(),
+        );
+        Ok(output.into())
     }
 
     #[dbus_interface(signal)]
