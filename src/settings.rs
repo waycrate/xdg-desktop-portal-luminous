@@ -15,18 +15,18 @@ const ACCENT_COLOR: &str = "accent-color";
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 
-use self::config::SettingsConfig;
+pub use self::config::SettingsConfig;
 
 pub static SETTING_CONFIG: Lazy<Arc<Mutex<SettingsConfig>>> =
     Lazy::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));
 
 #[derive(DeserializeDict, SerializeDict, Clone, Copy, PartialEq, Type)]
 #[zvariant(signature = "dict")]
-struct Color {
-    color: [f64; 3],
+pub struct AccentColor {
+    pub color: [f64; 3],
 }
 
-impl Into<OwnedValue> for Color {
+impl Into<OwnedValue> for AccentColor {
     fn into(self) -> OwnedValue {
         let arraysignature = Signature::try_from("d").unwrap();
         let mut array = Array::new(arraysignature);
@@ -56,7 +56,7 @@ impl SettingsBackend {
             return Ok(OwnedValue::from(config.get_color_scheme()));
         }
         if key == ACCENT_COLOR {
-            return Ok(Color {
+            return Ok(AccentColor {
                 color: config.get_accent_color(),
             }
             .into());
@@ -65,11 +65,11 @@ impl SettingsBackend {
     }
 
     #[dbus_interface(signal)]
-    async fn setting_changed(
+    pub async fn setting_changed(
         ctxt: &SignalContext<'_>,
         namespace: String,
         key: String,
-        value: u32,
+        value: OwnedValue,
     ) -> zbus::Result<()>;
     // add code here
 }

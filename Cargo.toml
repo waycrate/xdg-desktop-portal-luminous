@@ -50,6 +50,8 @@ tempfile = "3.8.0"
 thiserror = "1.0.48"
 toml = "0.8.0"
 csscolorparser = "0.6.2"
+notify = "6.1.1"
+futures = "0.3.28"
 
 
 [build-dependencies]
