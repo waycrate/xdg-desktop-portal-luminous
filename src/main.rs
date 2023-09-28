@@ -3,8 +3,8 @@ mod request;
 mod screencast;
 mod screenshot;
 mod session;
-mod slintbackend;
 mod settings;
+mod slintbackend;
 
 use remotedesktop::RemoteDesktopBackend;
 use screencast::ScreenCastBackend;
@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
         .serve_at("/org/freedesktop/portal/desktop", ScreenShotBackend)?
         .serve_at("/org/freedesktop/portal/desktop", ScreenCastBackend)?
         .serve_at("/org/freedesktop/portal/desktop", RemoteDesktopBackend)?
-        .serve_at("/org/freedesktop/portal/desktop", SettingsBackend::init())?
+        .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
         .build()
         .await?;
 
