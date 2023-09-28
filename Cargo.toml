@@ -48,6 +48,10 @@ wayland-protocols-misc = { version = "0.2.0", features = ["client"] }
 xkbcommon = "0.6.0"
 tempfile = "3.8.0"
 thiserror = "1.0.48"
+toml = "0.8.0"
+csscolorparser = "0.6.2"
+notify = "6.1.1"
+futures = "0.3.28"
 
 
 [build-dependencies]
