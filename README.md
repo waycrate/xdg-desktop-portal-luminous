@@ -10,6 +10,19 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 1. org.freedesktop.impl.portal.ScreenCast
 1. org.freedesktop.impl.portal.ScreenShot
 1. org.freedesktop.impl.portal.RemoteDesktop
+1. org.freedesktop.impl.portal.Settings
+
+# About settings
+
+You need to create `~/.config/xdg-desktop-portal-luminous/config.toml`
+
+write config like
+
+```toml
+color_scheme = "dark"
+accent_color = "#880022"
+```
+`color_scheme` can be `dark` or `light`. When the file changed, the settings will be applied immediately. You will see the changes in chromium and firefox.
 
 # Future goals:
 
