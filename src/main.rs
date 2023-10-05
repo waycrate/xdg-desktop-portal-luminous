@@ -1,3 +1,4 @@
+mod access;
 mod remotedesktop;
 mod request;
 mod screencast;
@@ -6,6 +7,7 @@ mod session;
 mod settings;
 mod slintbackend;
 
+use access::AccessBackend;
 use remotedesktop::RemoteDesktopBackend;
 use screencast::ScreenCastBackend;
 use screenshot::ScreenShotBackend;
@@ -118,6 +120,7 @@ async fn main() -> anyhow::Result<()> {
 
     let conn = ConnectionBuilder::session()?
         .name("org.freedesktop.impl.portal.desktop.luminous")?
+        .serve_at("/org/freedesktop/portal/desktop", AccessBackend)?
         .serve_at("/org/freedesktop/portal/desktop", ScreenShotBackend)?
         .serve_at("/org/freedesktop/portal/desktop", ScreenCastBackend)?
         .serve_at("/org/freedesktop/portal/desktop", RemoteDesktopBackend)?
