@@ -12,6 +12,20 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 1. org.freedesktop.impl.portal.RemoteDesktop
 1. org.freedesktop.impl.portal.Settings
 
+# NOTE :How to set in in the newest xdg-desktop-portal
+
+to use Settings, you need to create `~/.config/xdg-desktop-portal/CURRENT_DESKTOP_NAME-portals.conf`, for example, if you name is setted as `sway`, you need to create `sway.conf`
+
+And write into it like
+
+`gtk` is preferred to use when use Settings backend
+
+```
+[preferred]
+default=luminous
+org.freedesktop.impl.portal.Settings=luminous;gtk
+```
+
 # About settings
 
 You need to create `~/.config/xdg-desktop-portal-luminous/config.toml`
