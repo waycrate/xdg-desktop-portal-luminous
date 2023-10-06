@@ -1,0 +1,34 @@
+import { Button, VerticalBox, HorizontalBox} from "std-widgets.slint";
+
+export global ConfirmSlots {
+    callback Confirm();
+    callback Reject();
+}
+
+export component AppWindow inherits Window {
+    in-out property <string> information : "No information";
+    in-out property <string> init_title : "AccessWindow";
+    title: init_title;
+    width: 400px;
+    height: 100px;
+    VerticalBox {
+        Text {
+            horizontal-alignment: center;
+            text: information;
+            font-size: 25px;
+        }
+        HorizontalBox {
+            alignment: center;
+            Button {
+                height: 30px;
+                text: "Reject";
+                clicked => { ConfirmSlots.Reject() }
+            }
+            Button {
+                height: 30px;
+                text: "Accept";
+                clicked => { ConfirmSlots.Confirm() }
+            }
+        }
+    }
+}

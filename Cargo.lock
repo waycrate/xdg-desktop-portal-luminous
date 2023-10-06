@@ -19,6 +19,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c71b1793ee61086797f5c80b6efa2b8ffa6d5dd703f118545808a7f2e27f7046"
 
 [[package]]
+name = "accessdialog"
+version = "0.1.0"
+dependencies = [
+ "slint",
+ "slint-build",
+]
+
+[[package]]
 name = "accesskit"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5198,6 +5206,7 @@ dependencies = [
 name = "xdg-desktop-portal-luminous"
 version = "0.3.4"
 dependencies = [
+ "accessdialog",
  "anyhow",
  "bitflags 2.4.0",
  "csscolorparser",

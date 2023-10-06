@@ -38,12 +38,16 @@ impl AccessBackend {
         _request_handle: ObjectPath<'_>,
         _app_id: String,
         _parrent_window: String,
-        _title: String,
-        _sub_title: String,
+        title: String,
+        sub_title: String,
         _body: String,
         _options: AccessOption,
     ) -> fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
-        Ok(PortalResponse::Success(HashMap::new()))
+        if accessdialog::confirmgui(title, sub_title) {
+            Ok(PortalResponse::Success(HashMap::new()))
+        } else {
+            Ok(PortalResponse::Cancelled)
+        }
     }
     // add code here
 }
