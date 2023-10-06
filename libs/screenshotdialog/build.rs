@@ -1,3 +1,3 @@
 fn main() {
-    slint_build::compile("../../ui/selectwindow.slint").unwrap();
+    slint_build::compile("ui/selectwindow.slint").unwrap();
 }
