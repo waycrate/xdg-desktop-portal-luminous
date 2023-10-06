@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use zbus::{
     dbus_interface, fdo,
-    zvariant::{OwnedValue, Value},
+    zvariant::{ObjectPath, OwnedValue, Value},
 };
 
 use crate::PortalResponse;
@@ -12,8 +12,10 @@ pub struct AccessBackend;
 
 #[dbus_interface(name = "org.freedesktop.impl.portal.Access")]
 impl AccessBackend {
+    #[allow(clippy::too_many_arguments)]
     async fn access_dialog(
         &self,
+        _request_handle: ObjectPath<'_>,
         _app_id: String,
         _parrent_window: String,
         _title: String,
