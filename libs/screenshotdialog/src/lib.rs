@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-use libwayshot::output::OutputInfo;
 use slint::VecModel;
 slint::include_modules!();
 
@@ -32,20 +31,9 @@ fn init_slots(ui: &AppWindow, sender: mpsc::Sender<SlintSelection>) {
     });
 }
 
-pub fn selectgui(screen: Vec<OutputInfo>) -> SlintSelection {
+pub fn selectgui(screen: Vec<ScreenInfo>) -> SlintSelection {
     let ui = AppWindow::new().unwrap();
-    ui.set_infos(
-        Rc::new(VecModel::from(
-            screen
-                .iter()
-                .map(|screen| ScreenInfo {
-                    name: screen.name.clone().into(),
-                    description: screen.description.clone().into(),
-                })
-                .collect::<Vec<ScreenInfo>>(),
-        ))
-        .into(),
-    );
+    ui.set_infos(Rc::new(VecModel::from(screen)).into());
     let (sender, receiver) = mpsc::channel();
     init_slots(&ui, sender);
     ui.run().unwrap();

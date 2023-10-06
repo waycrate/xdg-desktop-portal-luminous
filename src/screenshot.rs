@@ -1,4 +1,5 @@
 use libwayshot::WayshotConnection;
+use screenshotdialog::ScreenInfo;
 use screenshotdialog::SlintSelection;
 use std::collections::HashMap;
 use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
@@ -53,8 +54,14 @@ impl ScreenShotBackend {
                 })?
                 .get_all_outputs()
                 .clone();
-
-            match screenshotdialog::selectgui(wayinfos.clone()) {
+            let screen_infos = wayinfos
+                .iter()
+                .map(|screen| ScreenInfo {
+                    name: screen.name.clone().into(),
+                    description: screen.description.clone().into(),
+                })
+                .collect();
+            match screenshotdialog::selectgui(screen_infos) {
                 SlintSelection::Canceled => return Ok(PortalResponse::Cancelled),
                 SlintSelection::Slurp => {
                     let slurp = std::process::Command::new("slurp")

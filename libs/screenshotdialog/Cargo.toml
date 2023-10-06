@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 slint = "1.2.1"
-libwayshot = { git = "https://github.com/waycrate/wayshot.git" }
 
 [build-dependencies]
 slint-build = "1.2.1"
