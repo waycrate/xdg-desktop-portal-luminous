@@ -5,7 +5,6 @@ mod screencast;
 mod screenshot;
 mod session;
 mod settings;
-mod slintbackend;
 
 use access::AccessBackend;
 use remotedesktop::RemoteDesktopBackend;

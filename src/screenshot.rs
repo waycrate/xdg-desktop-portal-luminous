@@ -1,6 +1,5 @@
-use crate::slintbackend;
 use libwayshot::WayshotConnection;
-use slintbackend::SlintSelection;
+use screenshotdialog::SlintSelection;
 use std::collections::HashMap;
 use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
 use zbus::{dbus_interface, fdo, zvariant::ObjectPath};
@@ -55,7 +54,7 @@ impl ScreenShotBackend {
                 .get_all_outputs()
                 .clone();
 
-            match slintbackend::selectgui(wayinfos.clone()) {
+            match screenshotdialog::selectgui(wayinfos.clone()) {
                 SlintSelection::Canceled => return Ok(PortalResponse::Cancelled),
                 SlintSelection::Slurp => {
                     let slurp = std::process::Command::new("slurp")

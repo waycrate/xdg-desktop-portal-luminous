@@ -3478,6 +3478,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "screenshotdialog"
+version = "0.1.0"
+dependencies = [
+ "libwayshot",
+ "slint",
+ "slint-build",
+]
+
+[[package]]
 name = "sct"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5202,10 +5211,9 @@ dependencies = [
  "once_cell",
  "pipewire",
  "rustix 0.38.13",
+ "screenshotdialog",
  "serde",
  "serde_repr",
- "slint",
- "slint-build",
  "tempfile",
  "thiserror",
  "tokio",
