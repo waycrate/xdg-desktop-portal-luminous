@@ -7,6 +7,7 @@ use pipewire::{
     },
     stream::StreamState,
 };
+use rustix::fd::BorrowedFd;
 
 use std::{cell::RefCell, io, os::fd::IntoRawFd, rc::Rc, slice};
 
@@ -155,7 +156,7 @@ fn start_stream(
         .process(move |stream, ()| {
             if let Some(mut buffer) = stream.dequeue_buffer() {
                 let datas = buffer.datas_mut();
-                let fd = datas[0].as_raw().fd as i32;
+                let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
                 // TODO error
                 connection
                     .capture_output_frame_shm_fd(overlay_cursor as i32, &output, fd, capture_region)
