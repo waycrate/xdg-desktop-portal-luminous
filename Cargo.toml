@@ -1,6 +1,6 @@
 [package]
 name = "xdg-desktop-portal-luminous"
-version = "0.3.4"
+version = "0.1.1"
 edition = "2021"
 
 [workspace]
@@ -18,10 +18,10 @@ tracing-subscriber = "0.3.17"
 url = { version = "2.4", features = ["serde"] }
 serde_repr = "0.1"
 image = { version = "0.24", default-features = false, features = [
-  "jpeg",
-  "png",
-  "pnm",
-  "qoi",
+	"jpeg",
+	"png",
+	"pnm",
+	"qoi",
 ] }
 
 bitflags = "2.4.0"
@@ -33,19 +33,19 @@ anyhow = "1.0.75"
 pipewire = "0.7.2"
 libspa-sys = "0.7.2"
 
-libwayshot = { git = "https://github.com/waycrate/wayshot.git" }
+libwayshot = { version = "0.3.0" }
 rustix = { version = "0.38.13", features = ["fs", "use-libc"] }
 
 # REMOTE
 wayland-protocols = { version = "0.31.0", default-features = false, features = [
-  "unstable",
-  "client",
+	"unstable",
+	"client",
 ] }
 #wayland-protocols = { version = "=0.30.0-beta.13", features = ["client", "unstable"] }
 
 
 wayland-protocols-wlr = { version = "0.2.0", default-features = false, features = [
-  "client",
+	"client",
 ] }
 wayland-client = { version = "0.31.1" }
 
