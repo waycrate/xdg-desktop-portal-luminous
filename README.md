@@ -1,4 +1,4 @@
-# xdg-desktop-portal-luminous
+# The Luminous portal:
 
 An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project is a stand alone binary and does not depend on grim.
 `libwayshot` is used as the screencopy backend to enable screenshots.
@@ -7,36 +7,31 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 
 # Exposed interfaces:
 
+1. org.freedesktop.impl.portal.RemoteDesktop
 1. org.freedesktop.impl.portal.ScreenCast
 1. org.freedesktop.impl.portal.ScreenShot
-1. org.freedesktop.impl.portal.RemoteDesktop
 1. org.freedesktop.impl.portal.Settings
 
-# NOTE :How to set in in the newest xdg-desktop-portal
+# Settings:
 
-to use Settings, you need to create `~/.config/xdg-desktop-portal/CURRENT_DESKTOP_NAME-portals.conf`, for example, if you name is setted as `sway`, you need to create `sway.conf`
+Luminous is configured through the following auto hot-reloaded file: `~/.config/xdg-desktop-portal-luminous/config.toml`.
 
-And write into it like
+```toml
+color_scheme = "dark" # can also be "light"
+accent_color = "#880022"
+```
 
-`gtk` is preferred to use when use Settings backend
+# How to set priority of portal backend:
 
+The following file needs to be created `~/.config/xdg-desktop-portal/CURRENT_DESKTOP_NAME-portals.conf`.
+(eg: For the `sway` desktop, `sway-portals.conf` must exist.)
+
+Eg:
 ```
 [preferred]
 default=luminous
 org.freedesktop.impl.portal.Settings=luminous;gtk
 ```
-
-# About settings
-
-You need to create `~/.config/xdg-desktop-portal-luminous/config.toml`
-
-write config like
-
-```toml
-color_scheme = "dark"
-accent_color = "#880022"
-```
-`color_scheme` can be `dark` or `light`. When the file changed, the settings will be applied immediately. You will see the changes in chromium and firefox.
 
 # Future goals:
 
