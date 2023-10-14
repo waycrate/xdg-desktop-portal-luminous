@@ -134,7 +134,9 @@ async fn main() -> anyhow::Result<()> {
         let config_path = std::path::Path::new(home.as_str())
             .join(".config")
             .join("xdg-desktop-portal-luminous");
-        async_watch(config_path, conn).await.unwrap()
+        if let Err(e) = async_watch(config_path, conn).await {
+            tracing::info!("Maybe file is not exist, error: {e}");
+        }
     });
 
     pending::<()>().await;
