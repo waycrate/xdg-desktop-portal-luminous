@@ -5194,7 +5194,7 @@ dependencies = [
 
 [[package]]
 name = "xdg-desktop-portal-luminous"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "accessdialog",
  "anyhow",
