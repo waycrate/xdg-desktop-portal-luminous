@@ -127,18 +127,26 @@ async fn main() -> anyhow::Result<()> {
         .build()
         .await?;
 
-    tokio::spawn(async move {
-        let Ok(home) = std::env::var("HOME") else {
-            return;
-        };
+    if let Ok(home) = std::env::var("HOME") {
         let config_path = std::path::Path::new(home.as_str())
             .join(".config")
             .join("xdg-desktop-portal-luminous");
-        if let Err(e) = async_watch(config_path, conn).await {
-            tracing::info!("Maybe file is not exist, error: {e}");
+        if config_path.exists() && config_path.is_dir() {
+            tokio::spawn(async move {
+                let Ok(home) = std::env::var("HOME") else {
+                    return;
+                };
+                let config_path = std::path::Path::new(home.as_str())
+                    .join(".config")
+                    .join("xdg-desktop-portal-luminous");
+                if let Err(e) = async_watch(config_path, conn).await {
+                    tracing::info!("Maybe file is not exist, error: {e}");
+                }
+            });
         }
-    });
+    };
 
     pending::<()>().await;
+
     Ok(())
 }
