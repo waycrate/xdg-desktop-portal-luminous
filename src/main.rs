@@ -24,10 +24,25 @@ use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
 
 mod pipewirethread;
+use std::sync::OnceLock;
 
 const PORTAL_RESPONSE_SUCCESS: u32 = 0;
 const PORTAL_RESPONSE_CANCELLED: u32 = 1;
 const PORTAL_RESPONSE_OTHER: u32 = 2;
+
+static SESSION: OnceLock<zbus::Connection> = OnceLock::new();
+
+async fn get_connection() -> zbus::Connection {
+    if let Some(cnx) = SESSION.get() {
+        cnx.clone()
+    } else {
+        panic!("Cannot get cnx");
+    }
+}
+
+async fn set_connection(connection: Connection) {
+    SESSION.set(connection).expect("Cannot set a OnceLock");
+}
 
 #[derive(zvariant::Type)]
 #[zvariant(signature = "(ua{sv})")]
@@ -72,7 +87,8 @@ fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Resul
     Ok((watcher, rx))
 }
 
-async fn async_watch<P: AsRef<Path>>(path: P, connection: Connection) -> notify::Result<()> {
+async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
+    let connection = get_connection().await;
     let (mut watcher, mut rx) = async_watcher()?;
 
     let signal_context =
@@ -127,24 +143,18 @@ async fn main() -> anyhow::Result<()> {
         .build()
         .await?;
 
-    if let Ok(home) = std::env::var("HOME") {
+    set_connection(conn).await;
+    tokio::spawn(async {
+        let Ok(home) = std::env::var("HOME") else {
+            return;
+        };
         let config_path = std::path::Path::new(home.as_str())
             .join(".config")
             .join("xdg-desktop-portal-luminous");
-        if config_path.exists() && config_path.is_dir() {
-            tokio::spawn(async move {
-                let Ok(home) = std::env::var("HOME") else {
-                    return;
-                };
-                let config_path = std::path::Path::new(home.as_str())
-                    .join(".config")
-                    .join("xdg-desktop-portal-luminous");
-                if let Err(e) = async_watch(config_path, conn).await {
-                    tracing::info!("Maybe file is not exist, error: {e}");
-                }
-            });
+        if let Err(e) = async_watch(config_path).await {
+            tracing::info!("Maybe file is not exist, error: {e}");
         }
-    };
+    });
 
     pending::<()>().await;
 

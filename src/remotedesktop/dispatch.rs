@@ -101,11 +101,7 @@ impl Dispatch<WlSeat, ()> for AppData {
         if let Some(virtual_keyboard_manager) = state.virtual_keyboard_manager.as_ref() {
             let virtual_keyboard = virtual_keyboard_manager.create_virtual_keyboard(seat, qh, ());
             let (file, size) = get_keymap_as_file();
-            virtual_keyboard.keymap(
-                wl_keyboard::KeymapFormat::XkbV1.into(),
-                file.as_fd(),
-                size,
-            );
+            virtual_keyboard.keymap(wl_keyboard::KeymapFormat::XkbV1.into(), file.as_fd(), size);
             state.virtual_keyboard = Some(virtual_keyboard);
         }
         if let Some(virtual_pointer_manager) = state.virtual_pointer_manager.as_ref() {
