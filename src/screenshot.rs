@@ -65,45 +65,29 @@ impl ScreenShotBackend {
             match screenshotdialog::selectgui(screen_infos) {
                 SlintSelection::Canceled => return Ok(PortalResponse::Cancelled),
                 SlintSelection::Slurp => {
-                    let slurp = std::process::Command::new("slurp")
-                        .arg("-d")
-                        .output()
-                        .map_err(|_| zbus::Error::Failure("Cannot find slurp".to_string()))?
-                        .stdout;
+                    let info = match libwaysip::get_area() {
+                        Ok(Some(info)) => info,
+                        Ok(None) => {
+                            return Err(zbus::Error::Failure("You cancel it".to_string()).into())
+                        }
+                        Err(e) => {
+                            return Err(zbus::Error::Failure(format!("wayland error, {e}")).into())
+                        }
+                    };
 
-                    let output = String::from_utf8_lossy(&slurp).to_string();
-                    let output = output.trim();
-                    let output: Vec<&str> = output.split(' ').collect();
-                    if output.len() < 2 {
-                        return Err(zbus::Error::Failure("Illegal slurp input".to_string()).into());
-                    }
-                    let pos: Vec<&str> = output[0].split(',').collect();
-                    if pos.len() < 2 {
-                        return Err(
-                            zbus::Error::Failure("Illegal slurp pos input".to_string()).into()
-                        );
-                    }
-                    let region: Vec<&str> = output[1].split('x').collect();
-                    if region.len() < 2 {
-                        return Err(
-                            zbus::Error::Failure("Illegal region pos input".to_string()).into()
-                        );
-                    }
+                    let (x_coordinate_f, y_coordinate_f) = info.left_top_point();
+                    let (x_coordinate, y_coordinate) =
+                        (x_coordinate_f as i32, y_coordinate_f as i32);
+                    let width = info.width() as i32;
+                    let height = info.height() as i32;
+
                     wayshot_connection
                         .screenshot(
                             libwayshot::CaptureRegion {
-                                x_coordinate: pos[0].parse().map_err(|_| {
-                                    zbus::Error::Failure("X is not correct".to_string())
-                                })?,
-                                y_coordinate: pos[1].parse().map_err(|_| {
-                                    zbus::Error::Failure("Y is not correct".to_string())
-                                })?,
-                                width: region[0].parse().map_err(|_| {
-                                    zbus::Error::Failure("Width is not legel".to_string())
-                                })?,
-                                height: region[1].parse().map_err(|_| {
-                                    zbus::Error::Failure("Height is not legel".to_string())
-                                })?,
+                                x_coordinate,
+                                y_coordinate,
+                                width,
+                                height,
                             },
                             false,
                         )
@@ -142,27 +126,19 @@ impl ScreenShotBackend {
     ) -> fdo::Result<PortalResponse<Color>> {
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
-        let slurp = std::process::Command::new("slurp")
-            .arg("-p")
-            .output()
-            .map_err(|_| zbus::Error::Failure("Cannot find slurp".to_string()))?
-            .stdout;
-        let output = String::from_utf8_lossy(&slurp);
-        let output = output
-            .split(' ')
-            .next()
-            .ok_or(zbus::Error::Failure("Not get slurp area".to_string()))?;
-        let point: Vec<&str> = output.split(',').collect();
+        let info = match libwaysip::get_area() {
+            Ok(Some(info)) => info,
+            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
+            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
+        };
+        let (x_coordinate_f, y_coordinate_f) = info.left_top_point();
+        let (x_coordinate, y_coordinate) = (x_coordinate_f as i32, y_coordinate_f as i32);
 
         let image = wayshot_connection
             .screenshot(
                 libwayshot::CaptureRegion {
-                    x_coordinate: point[0]
-                        .parse()
-                        .map_err(|_| zbus::Error::Failure("X is not correct".to_string()))?,
-                    y_coordinate: point[1]
-                        .parse()
-                        .map_err(|_| zbus::Error::Failure("Y is not correct".to_string()))?,
+                    x_coordinate,
+                    y_coordinate,
                     width: 1,
                     height: 1,
                 },
