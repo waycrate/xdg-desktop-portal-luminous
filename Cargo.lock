@@ -2573,7 +2573,7 @@ checksum = "a2efa01ecfd021b1e7db27f21f4e79b35b048081c9cae9d2f898eddc98444d69"
 dependencies = [
  "image",
  "log",
- "memmap2 0.9.2",
+ "memmap2 0.9.0",
  "nix 0.27.1",
  "thiserror",
  "wayland-client",
@@ -2583,12 +2583,12 @@ dependencies = [
 
 [[package]]
 name = "libwaysip"
-version = "0.1.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2eaf11ae22eca2516290fe0cf240f2d6c81778b7c54fa03f3499f34417c42a7"
+checksum = "af6744b1173d3b31f38fa3bdd7e718b8b13f21b5a3fd313c7b7952a722a462d1"
 dependencies = [
  "cairo-rs",
- "memmap2 0.9.2",
+ "memmap2 0.9.0",
  "pango",
  "pangocairo",
  "tempfile",
@@ -2714,9 +2714,9 @@ dependencies = [
 
 [[package]]
 name = "memmap2"
-version = "0.9.2"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39a69c7c189ae418f83003da62820aca28d15a07725ce51fb924999335d622ff"
+checksum = "deaba38d7abf1d4cca21cc89e932e542ba2b9258664d2a9ef0e61512039c9375"
 dependencies = [
  "libc",
 ]
@@ -3806,7 +3806,7 @@ checksum = "1729a30a469de249c6effc17ec8d039b0aa29b3af79b819b7f51cb6ab8046a90"
 dependencies = [
  "ab_glyph",
  "log",
- "memmap2 0.9.2",
+ "memmap2 0.9.0",
  "smithay-client-toolkit",
  "tiny-skia",
 ]
@@ -4038,7 +4038,7 @@ dependencies = [
  "cursor-icon",
  "libc",
  "log",
- "memmap2 0.9.2",
+ "memmap2 0.9.0",
  "rustix 0.38.28",
  "thiserror",
  "wayland-backend",
@@ -4106,7 +4106,7 @@ dependencies = [
  "foreign-types",
  "js-sys",
  "log",
- "memmap2 0.9.2",
+ "memmap2 0.9.0",
  "objc",
  "raw-window-handle 0.5.2",
  "redox_syscall 0.4.1",
@@ -5300,7 +5300,7 @@ dependencies = [
  "js-sys",
  "libc",
  "log",
- "memmap2 0.9.2",
+ "memmap2 0.9.0",
  "ndk",
  "ndk-sys",
  "objc2 0.4.1",

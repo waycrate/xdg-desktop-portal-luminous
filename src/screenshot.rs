@@ -8,6 +8,8 @@ use zbus::{dbus_interface, fdo, zvariant::ObjectPath};
 use crate::utils::USER_RUNNING_DIR;
 use crate::PortalResponse;
 
+use libwaysip::WaySipKind;
+
 #[derive(DeserializeDict, SerializeDict, Type)]
 #[zvariant(signature = "dict")]
 struct Screenshot {
@@ -65,7 +67,7 @@ impl ScreenShotBackend {
             match screenshotdialog::selectgui(screen_infos) {
                 SlintSelection::Canceled => return Ok(PortalResponse::Cancelled),
                 SlintSelection::Slurp => {
-                    let info = match libwaysip::get_area() {
+                    let info = match libwaysip::get_area(WaySipKind::Area) {
                         Ok(Some(info)) => info,
                         Ok(None) => {
                             return Err(zbus::Error::Failure("You cancel it".to_string()).into())
@@ -75,11 +77,9 @@ impl ScreenShotBackend {
                         }
                     };
 
-                    let (x_coordinate_f, y_coordinate_f) = info.left_top_point();
-                    let (x_coordinate, y_coordinate) =
-                        (x_coordinate_f as i32, y_coordinate_f as i32);
-                    let width = info.width() as i32;
-                    let height = info.height() as i32;
+                    let (x_coordinate, y_coordinate) = info.left_top_point();
+                    let width = info.width();
+                    let height = info.height();
 
                     wayshot_connection
                         .screenshot(
@@ -126,13 +126,12 @@ impl ScreenShotBackend {
     ) -> fdo::Result<PortalResponse<Color>> {
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
-        let info = match libwaysip::get_area() {
+        let info = match libwaysip::get_area(WaySipKind::Point) {
             Ok(Some(info)) => info,
             Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
         };
-        let (x_coordinate_f, y_coordinate_f) = info.left_top_point();
-        let (x_coordinate, y_coordinate) = (x_coordinate_f as i32, y_coordinate_f as i32);
+        let (x_coordinate, y_coordinate) = info.left_top_point();
 
         let image = wayshot_connection
             .screenshot(

@@ -19,6 +19,8 @@ use crate::session::{
 };
 use crate::PortalResponse;
 
+use libwaysip::WaySipKind;
+
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
 /// Specified options for a [`Screencast::create_session`] request.
 #[zvariant(signature = "dict")]
@@ -188,28 +190,17 @@ impl ScreenCastBackend {
         }
         drop(locked_sessions);
 
-        // TODO: use slurp now
         let show_cursor = current_session.cursor_mode.show_cursor();
         let connection = libwayshot::WayshotConnection::new().unwrap();
         let outputs = connection.get_all_outputs();
-        let slurp = std::process::Command::new("slurp")
-            .arg("-o")
-            .output()
-            .map_err(|_| zbus::Error::Failure("Cannot find slurp".to_string()))?
-            .stdout;
-        let output = String::from_utf8_lossy(&slurp);
-        let output = output
-            .split(' ')
-            .next()
-            .ok_or(zbus::Error::Failure("Not get slurp area".to_string()))?;
 
-        let point: Vec<&str> = output.split(',').collect();
-        let x: i32 = point[0]
-            .parse()
-            .map_err(|_| zbus::Error::Failure("X is not correct".to_string()))?;
-        let y: i32 = point[1]
-            .parse()
-            .map_err(|_| zbus::Error::Failure("Y is not correct".to_string()))?;
+        let info = match libwaysip::get_area(WaySipKind::Screen) {
+            Ok(Some(info)) => info,
+            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
+            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
+        };
+
+        let (x, y) = info.selected_screen_info().get_position();
 
         let Some(output) = outputs
             .iter()
