@@ -6,6 +6,7 @@ use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
 use zbus::{dbus_interface, fdo, zvariant::ObjectPath};
 
 use crate::PortalResponse;
+use crate::utils::USER_RUNNING_DIR;
 
 #[derive(DeserializeDict, SerializeDict, Type)]
 #[zvariant(signature = "dict")]
@@ -122,12 +123,13 @@ impl ScreenShotBackend {
                 .screenshot_all(false)
                 .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?
         };
-        image_buffer.save("/tmp/wayshot.png").map_err(|e| {
+        let savepath = USER_RUNNING_DIR.join("wayshot.png");
+        image_buffer.save(&savepath).map_err(|e| {
             zbus::Error::Failure(format!("Cannot save to /tmp/wayshot.png, e: {e}"))
         })?;
         tracing::info!("Shot Finished");
         Ok(PortalResponse::Success(Screenshot {
-            uri: url::Url::from_file_path("/tmp/wayshot.png").unwrap(),
+            uri: url::Url::from_file_path(savepath).unwrap(),
         }))
     }
 
