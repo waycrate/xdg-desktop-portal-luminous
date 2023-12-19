@@ -30,6 +30,9 @@
               wayland
               libxkbcommon
               stdenv
+              glib
+              pango
+              cairo
 
               # Tools
               meson
