@@ -1,4 +1,3 @@
-mod utils;
 mod access;
 mod remotedesktop;
 mod request;
@@ -6,6 +5,7 @@ mod screencast;
 mod screenshot;
 mod session;
 mod settings;
+mod utils;
 
 use access::AccessBackend;
 use remotedesktop::RemoteDesktopBackend;

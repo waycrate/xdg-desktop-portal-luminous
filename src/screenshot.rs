@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
 use zbus::{dbus_interface, fdo, zvariant::ObjectPath};
 
-use crate::PortalResponse;
 use crate::utils::USER_RUNNING_DIR;
+use crate::PortalResponse;
 
 #[derive(DeserializeDict, SerializeDict, Type)]
 #[zvariant(signature = "dict")]
