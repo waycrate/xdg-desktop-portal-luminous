@@ -125,7 +125,7 @@ impl ScreenShotBackend {
         };
         let savepath = USER_RUNNING_DIR.join("wayshot.png");
         image_buffer.save(&savepath).map_err(|e| {
-            zbus::Error::Failure(format!("Cannot save to /tmp/wayshot.png, e: {e}"))
+            zbus::Error::Failure(format!("Cannot save to {}, e: {e}", savepath.display()))
         })?;
         tracing::info!("Shot Finished");
         Ok(PortalResponse::Success(Screenshot {
