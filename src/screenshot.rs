@@ -51,7 +51,7 @@ impl ScreenShotBackend {
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
 
         let image_buffer = if options.interactive {
-            let wayinfos = wayshot_connection.get_all_outputs().clone();
+            let wayinfos = wayshot_connection.get_all_outputs();
             let screen_infos = wayinfos
                 .iter()
                 .map(|screen| ScreenInfo {
