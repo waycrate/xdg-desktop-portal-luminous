@@ -51,12 +51,7 @@ impl ScreenShotBackend {
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
 
         let image_buffer = if options.interactive {
-            let wayinfos = WayshotConnection::new()
-                .map_err(|_| {
-                    zbus::Error::Failure("Cannot create a new wayshot_connection".to_string())
-                })?
-                .get_all_outputs()
-                .clone();
+            let wayinfos = wayshot_connection.get_all_outputs().clone();
             let screen_infos = wayinfos
                 .iter()
                 .map(|screen| ScreenInfo {

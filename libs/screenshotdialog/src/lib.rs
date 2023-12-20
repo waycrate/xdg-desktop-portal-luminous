@@ -5,6 +5,7 @@ slint::include_modules!();
 
 use std::sync::mpsc;
 
+#[derive(Debug)]
 pub enum SlintSelection {
     GlobalScreen { showcursor: bool },
     Slurp,
