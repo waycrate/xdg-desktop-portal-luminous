@@ -30,16 +30,13 @@ impl ScreencastThread {
         let (thread_stop_tx, thread_stop_rx) = pipewire::channel::channel::<()>();
         std::thread::spawn(move || {
             match start_stream(overlay_cursor, width, height, capture_region, output) {
-                Ok((loop_, listener, context, node_id_rx)) => {
+                Ok((loop_, _listener, _context, node_id_rx)) => {
                     tx.send(Ok(node_id_rx)).unwrap();
                     let weak_loop = loop_.downgrade();
                     let _receiver = thread_stop_rx.attach(&loop_, move |()| {
                         weak_loop.upgrade().unwrap().quit();
                     });
                     loop_.run();
-                    // XXX fix segfault with opposite drop order
-                    drop(listener);
-                    drop(context);
                 }
                 Err(err) => tx.send(Err(err)).unwrap(),
             };
@@ -62,7 +59,7 @@ impl ScreencastThread {
 type PipewireStreamResult = (
     pipewire::MainLoop,
     pipewire::stream::StreamListener<()>,
-    pipewire::Context<pipewire::MainLoop>,
+    pipewire::Context,
     oneshot::Receiver<anyhow::Result<u32>>,
 );
 
