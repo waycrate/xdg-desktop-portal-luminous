@@ -5,9 +5,9 @@ project(
   meson_version : '>= 1.1.0'
 )
 
-cargo = find_program('cargo', version: '>= 1.70')
+cargo = find_program('cargo', version: '>= 1.75')
 
-rustc = find_program('rustc', version: '>= 1.70')
+rustc = find_program('rustc', version: '>= 1.75')
 
 if get_option('debug')
   command = [
