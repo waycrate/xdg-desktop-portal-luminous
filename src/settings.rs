@@ -1,6 +1,6 @@
 mod config;
 use tokio::sync::Mutex;
-use zbus::{dbus_interface, fdo, SignalContext};
+use zbus::{fdo, interface, SignalContext};
 
 use zbus::zvariant::{Array, DeserializeDict, OwnedValue, SerializeDict, Signature, Type};
 
@@ -34,16 +34,16 @@ impl From<AccentColor> for OwnedValue {
         for col in val.color {
             array.append(col.into()).unwrap();
         }
-        OwnedValue::from(array)
+        OwnedValue::try_from(array).unwrap()
     }
 }
 
 #[derive(Debug)]
 pub struct SettingsBackend;
 
-#[dbus_interface(name = "org.freedesktop.impl.portal.Settings")]
+#[interface(name = "org.freedesktop.impl.portal.Settings")]
 impl SettingsBackend {
-    #[dbus_interface(property, name = "version")]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         1
     }
@@ -82,7 +82,7 @@ impl SettingsBackend {
         Ok(output.into())
     }
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     pub async fn setting_changed(
         ctxt: &SignalContext<'_>,
         namespace: String,

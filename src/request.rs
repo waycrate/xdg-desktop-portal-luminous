@@ -1,10 +1,10 @@
-use zbus::{dbus_interface, zvariant::OwnedObjectPath};
+use zbus::{interface, zvariant::OwnedObjectPath};
 
 pub struct RequestInterface {
     pub handle_path: OwnedObjectPath,
 }
 
-#[dbus_interface(name = "org.freedesktop.impl.portal.Request")]
+#[interface(name = "org.freedesktop.impl.portal.Request")]
 impl RequestInterface {
     async fn close(
         &self,

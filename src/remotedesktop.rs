@@ -7,7 +7,7 @@ use remote_thread::RemoteControl;
 use std::collections::HashMap;
 
 use enumflags2::BitFlags;
-use zbus::dbus_interface;
+use zbus::interface;
 
 use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type, Value};
 
@@ -93,14 +93,14 @@ pub async fn remove_remote_session(path: &str) {
 
 pub struct RemoteDesktopBackend;
 
-#[dbus_interface(name = "org.freedesktop.impl.portal.RemoteDesktop")]
+#[interface(name = "org.freedesktop.impl.portal.RemoteDesktop")]
 impl RemoteDesktopBackend {
-    #[dbus_interface(property, name = "version")]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         2
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn available_device_types(&self) -> u32 {
         (DeviceType::Keyboard | DeviceType::Pointer).bits()
     }

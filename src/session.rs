@@ -1,5 +1,5 @@
 use enumflags2::{bitflags, BitFlags};
-use zbus::{dbus_interface, zvariant::OwnedObjectPath, SignalContext};
+use zbus::{interface, zvariant::OwnedObjectPath, SignalContext};
 
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -154,7 +154,7 @@ impl Session {
     }
 }
 
-#[dbus_interface(name = "org.freedesktop.impl.portal.Session")]
+#[interface(name = "org.freedesktop.impl.portal.Session")]
 impl Session {
     async fn close(
         &self,
@@ -169,11 +169,11 @@ impl Session {
         Ok(())
     }
 
-    #[dbus_interface(property, name = "version")]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         2
     }
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn closed(signal_ctxt: &SignalContext<'_>, message: &str) -> zbus::Result<()>;
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use zbus::{
-    dbus_interface, fdo,
+    interface, fdo,
     zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type},
 };
 
@@ -30,7 +30,7 @@ pub struct Choice(String, String, Vec<(String, String)>, String);
 #[derive(Debug)]
 pub struct AccessBackend;
 
-#[dbus_interface(name = "org.freedesktop.impl.portal.Access")]
+#[interface(name = "org.freedesktop.impl.portal.Access")]
 impl AccessBackend {
     #[allow(clippy::too_many_arguments)]
     async fn access_dialog(

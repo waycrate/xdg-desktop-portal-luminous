@@ -3,7 +3,7 @@ use screenshotdialog::ScreenInfo;
 use screenshotdialog::SlintSelection;
 use std::collections::HashMap;
 use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
-use zbus::{dbus_interface, fdo, zvariant::ObjectPath};
+use zbus::{interface, fdo, zvariant::ObjectPath};
 
 use crate::utils::USER_RUNNING_DIR;
 use crate::PortalResponse;
@@ -33,9 +33,9 @@ pub struct ScreenshotOption {
 #[derive(Debug)]
 pub struct ScreenShotBackend;
 
-#[dbus_interface(name = "org.freedesktop.impl.portal.Screenshot")]
+#[interface(name = "org.freedesktop.impl.portal.Screenshot")]
 impl ScreenShotBackend {
-    #[dbus_interface(property, name = "version")]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         1
     }

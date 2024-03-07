@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use zbus::dbus_interface;
+use zbus::interface;
 
 use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type, Value};
 
@@ -90,19 +90,19 @@ pub async fn remove_cast_session(path: &str) {
 
 pub struct ScreenCastBackend;
 
-#[dbus_interface(name = "org.freedesktop.impl.portal.ScreenCast")]
+#[interface(name = "org.freedesktop.impl.portal.ScreenCast")]
 impl ScreenCastBackend {
-    #[dbus_interface(property, name = "version")]
+    #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
         4
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn available_cursor_modes(&self) -> u32 {
         (CursorMode::Hidden | CursorMode::Embedded).bits()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn available_source_types(&self) -> u32 {
         BitFlags::from_flag(SourceType::Monitor).bits()
     }
