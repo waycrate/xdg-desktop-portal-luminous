@@ -33,7 +33,7 @@ impl ScreencastThread {
                 Ok((loop_, listener, context, node_id_rx)) => {
                     tx.send(Ok(node_id_rx)).unwrap();
                     let weak_loop = loop_.downgrade();
-                    let _receiver = thread_stop_rx.attach(&loop_, move |()| {
+                    let _receiver = thread_stop_rx.attach(loop_.loop_(), move |()| {
                         weak_loop.upgrade().unwrap().quit();
                     });
                     loop_.run();
@@ -60,9 +60,9 @@ impl ScreencastThread {
 }
 
 type PipewireStreamResult = (
-    pipewire::MainLoop,
+    pipewire::main_loop::MainLoop,
     pipewire::stream::StreamListener<()>,
-    pipewire::Context<pipewire::MainLoop>,
+    pipewire::context::Context,
     oneshot::Receiver<anyhow::Result<u32>>,
 );
 
@@ -74,9 +74,8 @@ fn start_stream(
     output: WlOutput,
 ) -> Result<PipewireStreamResult, pipewire::Error> {
     let connection = libwayshot::WayshotConnection::new().unwrap();
-
-    let loop_ = pipewire::MainLoop::new()?;
-    let context = pipewire::Context::new(&loop_).unwrap();
+    let loop_ = pipewire::main_loop::MainLoop::new(None).unwrap();
+    let context = pipewire::context::Context::new(&loop_).unwrap();
     let core = context.connect(None).unwrap();
 
     let name = "wayshot-screenshot"; // XXX randomize?
@@ -84,7 +83,7 @@ fn start_stream(
     let stream = pipewire::stream::Stream::new(
         &core,
         name,
-        pipewire::properties! {
+        pipewire::properties::properties! {
             "media.class" => "Video/Source",
             "node.name" => "wayshot-screenshot", // XXX
         },
@@ -97,7 +96,7 @@ fn start_stream(
 
     let listener = stream
         .add_local_listener_with_user_data(())
-        .state_changed(move |old, new| {
+        .state_changed(move |_, _, old, new| {
             tracing::info!("state-changed '{:?}' -> '{:?}'", old, new);
             match new {
                 StreamState::Paused => {
@@ -113,7 +112,7 @@ fn start_stream(
                 _ => {}
             }
         })
-        .param_changed(|_, id, (), pod| {
+        .param_changed(|_, _, id, pod| {
             if id != libspa_sys::SPA_PARAM_Format {
                 return;
             }
@@ -122,7 +121,7 @@ fn start_stream(
                 tracing::info!("param-changed: {} {:?}", id, value);
             }
         })
-        .add_buffer(move |buffer| {
+        .add_buffer(move |_, _, buffer| {
             let buf = unsafe { &mut *(*buffer).buffer };
             let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
             for data in datas {
@@ -144,7 +143,7 @@ fn start_stream(
                 chunk.stride = 4 * width as i32;
             }
         })
-        .remove_buffer(|buffer| {
+        .remove_buffer(|_, _, buffer| {
             let buf = unsafe { &mut *(*buffer).buffer };
             let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
 
@@ -174,7 +173,7 @@ fn start_stream(
     ];
 
     let flags = pipewire::stream::StreamFlags::ALLOC_BUFFERS;
-    stream.connect(spa::Direction::Output, None, flags, params)?;
+    stream.connect(pipewire::spa::utils::Direction::Output, None, flags, params)?;
 
     *stream_cell.borrow_mut() = Some(stream);
 
@@ -255,17 +254,17 @@ fn format(width: u32, height: u32) -> Vec<u8> {
         spa::utils::SpaTypes::ObjectParamFormat,
         spa::param::ParamType::EnumFormat,
         spa::pod::property!(
-            spa::format::FormatProperties::MediaType,
+            spa::param::format::FormatProperties::MediaType,
             Id,
-            spa::format::MediaType::Video
+            spa::param::format::MediaType::Video
         ),
         spa::pod::property!(
-            spa::format::FormatProperties::MediaSubtype,
+            spa::param::format::FormatProperties::MediaSubtype,
             Id,
-            spa::format::MediaSubtype::Raw
+            spa::param::format::MediaSubtype::Raw
         ),
         spa::pod::property!(
-            spa::format::FormatProperties::VideoFormat,
+            spa::param::format::FormatProperties::VideoFormat,
             Choice,
             Enum,
             Id,
@@ -274,7 +273,7 @@ fn format(width: u32, height: u32) -> Vec<u8> {
         ),
         // XXX modifiers
         spa::pod::property!(
-            spa::format::FormatProperties::VideoSize,
+            spa::param::format::FormatProperties::VideoSize,
             Choice,
             Range,
             Rectangle,
@@ -283,7 +282,7 @@ fn format(width: u32, height: u32) -> Vec<u8> {
             spa::utils::Rectangle { width, height }
         ),
         spa::pod::property!(
-            spa::format::FormatProperties::VideoFramerate,
+            spa::param::format::FormatProperties::VideoFramerate,
             Choice,
             Range,
             Fraction,
