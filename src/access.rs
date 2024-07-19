@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use zbus::{
-    interface, fdo,
+    fdo, interface,
     zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type},
 };
 

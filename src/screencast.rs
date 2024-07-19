@@ -19,7 +19,7 @@ use crate::session::{
 };
 use crate::PortalResponse;
 
-use libwaysip::WaySipKind;
+use libwaysip::SelectionType;
 
 #[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -194,7 +194,7 @@ impl ScreenCastBackend {
         let connection = libwayshot::WayshotConnection::new().unwrap();
         let outputs = connection.get_all_outputs();
 
-        let info = match libwaysip::get_area(WaySipKind::Screen) {
+        let info = match libwaysip::get_area(None, SelectionType::Screen) {
             Ok(Some(info)) => info,
             Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
