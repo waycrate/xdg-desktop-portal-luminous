@@ -50,7 +50,7 @@ wayland-protocols-wlr = { version = "0.3.3", default-features = false, features 
 wayland-client = { version = "0.31.5" }
 
 wayland-protocols-misc = { version = "0.3.3", features = ["client"] }
-xkbcommon = "0.7.0"
+xkbcommon = "0.8.0"
 tempfile = "3.10.1"
 thiserror = "1.0.63"
 toml = "0.8.15"
