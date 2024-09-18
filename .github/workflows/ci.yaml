@@ -12,7 +12,7 @@ jobs:
                   submodules: recursive
 
             - name: install nix
-              uses: cachix/install-nix-action@V27
+              uses: cachix/install-nix-action@V28
               with:
                   install_url: https://nixos.org/nix/install
                   extra_nix_config: |
