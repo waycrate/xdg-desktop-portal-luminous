@@ -8,8 +8,8 @@ use enumflags2::BitFlags;
 
 use serde::{Deserialize, Serialize};
 
-use once_cell::sync::Lazy;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
 use crate::pipewirethread::ScreencastThread;
@@ -67,8 +67,8 @@ struct StartReturnValue {
 }
 
 pub type CastSessionData = (String, ScreencastThread);
-pub static CAST_SESSIONS: Lazy<Arc<Mutex<Vec<CastSessionData>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
+pub static CAST_SESSIONS: LazyLock<Arc<Mutex<Vec<CastSessionData>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(Vec::new())));
 
 pub async fn append_cast_session(session: CastSessionData) {
     let mut sessions = CAST_SESSIONS.lock().await;

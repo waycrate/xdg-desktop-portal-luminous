@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use zbus::zvariant::Type;
 
-use once_cell::sync::Lazy;
-
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -15,8 +13,8 @@ use crate::{
     screencast::{remove_cast_session, SelectSourcesOptions},
 };
 
-pub static SESSIONS: Lazy<Arc<Mutex<Vec<Session>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
+pub static SESSIONS: LazyLock<Arc<Mutex<Vec<Session>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(Vec::new())));
 
 pub async fn append_session(session: Session) {
     let mut sessions = SESSIONS.lock().await;

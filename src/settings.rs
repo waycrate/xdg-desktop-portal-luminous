@@ -12,14 +12,14 @@ const APPEARANCE: &str = "org.freedesktop.appearance";
 const COLOR_SCHEME: &str = "color-scheme";
 const ACCENT_COLOR: &str = "accent-color";
 
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 pub use self::config::SettingsConfig;
 
-pub static SETTING_CONFIG: Lazy<Arc<Mutex<SettingsConfig>>> =
-    Lazy::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));
+pub static SETTING_CONFIG: LazyLock<Arc<Mutex<SettingsConfig>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));
 
 #[derive(DeserializeDict, SerializeDict, Clone, Copy, PartialEq, Type, OwnedValue, Value)]
 pub struct AccentColor {

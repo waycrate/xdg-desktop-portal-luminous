@@ -13,8 +13,7 @@ use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Typ
 
 use serde::{Deserialize, Serialize};
 
-use once_cell::sync::Lazy;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
 
 use crate::pipewirethread::ScreencastThread;
@@ -69,8 +68,8 @@ pub struct SelectDevicesOptions {
 }
 
 pub type RemoteSessionData = (String, ScreencastThread, RemoteControl);
-pub static REMOTE_SESSIONS: Lazy<Arc<Mutex<Vec<RemoteSessionData>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
+pub static REMOTE_SESSIONS: LazyLock<Arc<Mutex<Vec<RemoteSessionData>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(Vec::new())));
 
 pub async fn append_remote_session(session: RemoteSessionData) {
     let mut sessions = REMOTE_SESSIONS.lock().await;
