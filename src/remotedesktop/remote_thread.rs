@@ -83,7 +83,7 @@ pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPoi
 
     // At this point everything is ready, and we just need to wait to receive the events
     // from the wl_registry, our callback will print the advertized globals.
-    let data = AppData::init(&mut event_queue)?;
+    let mut data = AppData::init(&mut event_queue)?;
 
     while let Ok(message) = receiver.recv() {
         match message {
@@ -109,6 +109,7 @@ pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPoi
             }
             KeyOrPointerRequest::Exit => break,
         }
+        event_queue.roundtrip(&mut data).ok();
     }
 
     Ok(())
