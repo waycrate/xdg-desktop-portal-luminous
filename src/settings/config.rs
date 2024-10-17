@@ -21,7 +21,7 @@ impl SettingsConfig {
             _ => unreachable!(),
         }
     }
-    pub fn get_accent_color(&self) -> (f64, f64, f64) {
+    pub fn get_accent_color(&self) -> [f64; 3] {
         let color = csscolorparser::parse(&self.accent_color)
             .map(|color| color.to_rgba8())
             .unwrap_or(
@@ -29,11 +29,11 @@ impl SettingsConfig {
                     .unwrap()
                     .to_rgba8(),
             );
-        (
+        [
             color[0] as f64 / 256.0,
             color[1] as f64 / 256.0,
             color[2] as f64 / 256.0,
-        )
+        ]
     }
 }
 

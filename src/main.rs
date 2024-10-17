@@ -114,11 +114,9 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                     &signal_context,
                     "org.freedesktop.appearance".to_string(),
                     "accent-color".to_string(),
-                    AccentColor {
-                        color: config.get_accent_color(),
-                    }
-                    .try_into()
-                    .unwrap(),
+                    AccentColor::new(config.get_accent_color())
+                        .try_into()
+                        .unwrap(),
                 )
                 .await;
             }

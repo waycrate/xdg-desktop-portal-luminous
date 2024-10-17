@@ -22,9 +22,20 @@ pub static SETTING_CONFIG: Lazy<Arc<Mutex<SettingsConfig>>> =
     Lazy::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));
 
 #[derive(DeserializeDict, SerializeDict, Clone, Copy, PartialEq, Type, OwnedValue, Value)]
-#[zvariant(signature = "dict")]
 pub struct AccentColor {
-    pub color: (f64, f64, f64),
+    red: f64,
+    green: f64,
+    blue: f64,
+}
+
+impl AccentColor {
+    pub fn new(rgb: [f64; 3]) -> Self {
+        Self {
+            red: rgb[0],
+            green: rgb[1],
+            blue: rgb[2],
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -46,10 +57,9 @@ impl SettingsBackend {
             return Ok(OwnedValue::from(config.get_color_scheme()));
         }
         if key == ACCENT_COLOR {
-            return Ok(OwnedValue::try_from(AccentColor {
-                color: config.get_accent_color(),
-            })
-            .unwrap());
+            return Ok(AccentColor::new(config.get_accent_color())
+                .try_into()
+                .unwrap());
         }
         Err(zbus::fdo::Error::Failed("No such namespace".to_string()))
     }
@@ -63,10 +73,7 @@ impl SettingsBackend {
         output.insert(COLOR_SCHEME.to_string(), config.get_color_scheme().into());
         output.insert(
             ACCENT_COLOR.to_string(),
-            OwnedValue::try_from(AccentColor {
-                color: config.get_accent_color(),
-            })
-            .unwrap(),
+            OwnedValue::try_from(AccentColor::new(config.get_accent_color())).unwrap(),
         );
         Ok(output.into())
     }
