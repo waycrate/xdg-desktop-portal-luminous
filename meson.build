@@ -1,26 +1,31 @@
 project(
   'xdg-desktop-portal-luminous',
   'rust',
-  version: '0.1.2',
-  meson_version : '>= 1.1.0'
+  version: '0.1.6',
+  meson_version: '>= 1.1.0',
 )
 
-cargo = find_program('cargo', version: '>= 1.75')
+cargo = find_program('cargo', version: '>= 1.80')
 
-rustc = find_program('rustc', version: '>= 1.75')
+find_program('rustc', version: '>= 1.80')
 
 if get_option('debug')
   command = [
-    cargo, 'build',
+    cargo,
+    'build',
     '&&',
-    'cp', meson.global_source_root() / 'target' / 'debug' / meson.project_name(), '@OUTPUT@'
+    'cp',
+    meson.global_source_root() / 'target' / 'debug' / meson.project_name(),
+    '@OUTPUT@',
   ]
 else
   command = [
-    cargo, 'build',
-    '--release',
-    '&&',
-    'cp', meson.global_source_root() / 'target' / 'release' / meson.project_name(), '@OUTPUT@'
+    cargo,
+    'build',
+    '--release', '&&',
+    'cp',
+    meson.global_source_root() / 'target' / 'release' / meson.project_name(),
+    '@OUTPUT@',
   ]
 endif
 
@@ -37,35 +42,36 @@ global_conf = configuration_data()
 
 global_conf.set('xdg_install_dir', xdg_install_dir)
 
-systemd_service_file = configure_file(
+configure_file(
   input: 'misc/xdg-desktop-portal-luminous.service.in',
   output: 'xdg-desktop-portal-luminous.service',
-  configuration: global_conf
+  configuration: global_conf,
 )
 
-dbus_service_file = configure_file(
+configure_file(
   input: 'misc/org.freedesktop.impl.portal.desktop.luminous.service.in',
   output: 'org.freedesktop.impl.portal.desktop.luminous.service',
-  configuration: global_conf
+  configuration: global_conf,
 )
 
-xdg_target = custom_target('xdg-deskop-portal-luminous',
+custom_target(
+  'xdg-deskop-portal-luminous',
   output: 'xdg-desktop-portal-luminous',
   build_by_default: true,
   install: true,
   install_dir: xdg_install_dir,
   console: true,
-  command: command
+  command: command,
 )
 
-install_data('misc/luminous.portal',
-  install_dir: portal_dir
+install_data('misc/luminous.portal', install_dir: portal_dir)
+
+install_data(
+  meson.project_build_root() / 'org.freedesktop.impl.portal.desktop.luminous.service',
+  install_dir: dbus1_dir,
 )
 
-install_data(meson.project_build_root() / 'org.freedesktop.impl.portal.desktop.luminous.service',
-  install_dir: dbus1_dir
-)
-
-install_data(meson.project_build_root() / 'xdg-desktop-portal-luminous.service',
-  install_dir: system_dir
+install_data(
+  meson.project_build_root() / 'xdg-desktop-portal-luminous.service',
+  install_dir: system_dir,
 )
