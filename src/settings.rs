@@ -2,7 +2,7 @@ mod config;
 use tokio::sync::Mutex;
 use zbus::{fdo, interface, SignalContext};
 
-use zbus::zvariant::{Array, DeserializeDict, OwnedValue, SerializeDict, Signature, Type};
+use zbus::zvariant::{DeserializeDict, OwnedValue, SerializeDict, Type, Value};
 
 const DEFAULT_COLOR: u32 = 0;
 const DARK_COLOR: u32 = 1;
@@ -21,21 +21,10 @@ pub use self::config::SettingsConfig;
 pub static SETTING_CONFIG: Lazy<Arc<Mutex<SettingsConfig>>> =
     Lazy::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));
 
-#[derive(DeserializeDict, SerializeDict, Clone, Copy, PartialEq, Type)]
+#[derive(DeserializeDict, SerializeDict, Clone, Copy, PartialEq, Type, OwnedValue, Value)]
 #[zvariant(signature = "dict")]
 pub struct AccentColor {
-    pub color: [f64; 3],
-}
-
-impl From<AccentColor> for OwnedValue {
-    fn from(val: AccentColor) -> Self {
-        let arraysignature = Signature::try_from("d").unwrap();
-        let mut array = Array::new(arraysignature);
-        for col in val.color {
-            array.append(col.into()).unwrap();
-        }
-        OwnedValue::try_from(array).unwrap()
-    }
+    pub color: (f64, f64, f64),
 }
 
 #[derive(Debug)]
@@ -57,10 +46,10 @@ impl SettingsBackend {
             return Ok(OwnedValue::from(config.get_color_scheme()));
         }
         if key == ACCENT_COLOR {
-            return Ok(AccentColor {
+            return Ok(OwnedValue::try_from(AccentColor {
                 color: config.get_accent_color(),
-            }
-            .into());
+            })
+            .unwrap());
         }
         Err(zbus::fdo::Error::Failed("No such namespace".to_string()))
     }
@@ -74,10 +63,10 @@ impl SettingsBackend {
         output.insert(COLOR_SCHEME.to_string(), config.get_color_scheme().into());
         output.insert(
             ACCENT_COLOR.to_string(),
-            AccentColor {
+            OwnedValue::try_from(AccentColor {
                 color: config.get_accent_color(),
-            }
-            .into(),
+            })
+            .unwrap(),
         );
         Ok(output.into())
     }

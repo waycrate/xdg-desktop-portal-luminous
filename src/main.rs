@@ -117,7 +117,8 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                     AccentColor {
                         color: config.get_accent_color(),
                     }
-                    .into(),
+                    .try_into()
+                    .unwrap(),
                 )
                 .await;
             }
