@@ -1,6 +1,6 @@
 mod config;
 use tokio::sync::Mutex;
-use zbus::{fdo, interface, SignalContext};
+use zbus::{fdo, interface, object_server::SignalEmitter};
 
 use zbus::zvariant::{DeserializeDict, OwnedValue, SerializeDict, Type, Value};
 
@@ -80,7 +80,7 @@ impl SettingsBackend {
 
     #[zbus(signal)]
     pub async fn setting_changed(
-        ctxt: &SignalContext<'_>,
+        ctxt: &SignalEmitter<'_>,
         namespace: String,
         key: String,
         value: OwnedValue,

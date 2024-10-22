@@ -15,7 +15,7 @@ use settings::{AccentColor, SettingsBackend, SettingsConfig, SETTING_CONFIG};
 
 use std::collections::HashMap;
 use std::future::pending;
-use zbus::{zvariant, Connection, ConnectionBuilder, SignalContext};
+use zbus::{connection, object_server::SignalEmitter, zvariant, Connection};
 
 use futures::{
     channel::mpsc::{channel, Receiver},
@@ -93,7 +93,7 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
     let (mut watcher, mut rx) = async_watcher()?;
 
     let signal_context =
-        SignalContext::new(&connection, "/org/freedesktop/portal/desktop").unwrap();
+        SignalEmitter::new(&connection, "/org/freedesktop/portal/desktop").unwrap();
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
     watcher.watch(path.as_ref(), RecursiveMode::Recursive)?;
@@ -133,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().init();
     tracing::info!("luminous Start");
 
-    let conn = ConnectionBuilder::session()?
+    let conn = connection::Builder::session()?
         .name("org.freedesktop.impl.portal.desktop.luminous")?
         .serve_at("/org/freedesktop/portal/desktop", AccessBackend)?
         .serve_at("/org/freedesktop/portal/desktop", ScreenShotBackend)?

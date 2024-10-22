@@ -10,7 +10,7 @@ members = ["libs/screenshotdialog", "libs/accessdialog", "."]
 screenshotdialog = { path = "libs/screenshotdialog" }
 accessdialog = { path = "libs/accessdialog" }
 
-zbus = { version = "4", default-features = false, features = ["tokio", "url"] }
+zbus = { version = "5", default-features = false, features = ["tokio", "url"] }
 tokio = { version = "1.40.0", features = ["full"] }
 serde = { version = "1.0.210", features = ["derive"] }
 tracing = "0.1.40"
@@ -26,7 +26,7 @@ image = { version = "0.25", default-features = false, features = [
 
 bitflags = "2.6.0"
 enumflags2 = "0.7.10"
-anyhow = "1.0.89"
+anyhow = "1.0.90"
 
 # pipewire
 pipewire = "0.8.0"

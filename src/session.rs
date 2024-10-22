@@ -1,5 +1,5 @@
 use enumflags2::{bitflags, BitFlags};
-use zbus::{interface, zvariant::OwnedObjectPath, SignalContext};
+use zbus::{interface, object_server::SignalEmitter, zvariant::OwnedObjectPath};
 
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -156,7 +156,7 @@ impl Session {
 impl Session {
     async fn close(
         &self,
-        #[zbus(signal_context)] cxts: SignalContext<'_>,
+        #[zbus(signal_emitter)] cxts: SignalEmitter<'_>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<()> {
         server
@@ -173,5 +173,5 @@ impl Session {
     }
 
     #[zbus(signal)]
-    async fn closed(signal_ctxt: &SignalContext<'_>, message: &str) -> zbus::Result<()>;
+    async fn closed(signal_ctxt: &SignalEmitter<'_>, message: &str) -> zbus::Result<()>;
 }
