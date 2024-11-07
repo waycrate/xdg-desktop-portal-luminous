@@ -49,7 +49,7 @@ wayland-client = { version = "0.31.6" }
 wayland-protocols-misc = { version = "0.3.4", features = ["client"] }
 xkbcommon = "0.8.0"
 tempfile = "3.13.0"
-thiserror = "1.0.64"
+thiserror = "2.0.0"
 toml = "0.8.19"
 csscolorparser = "0.7.0"
 notify = "7.0.0"
