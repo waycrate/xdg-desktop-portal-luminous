@@ -12,7 +12,7 @@ accessdialog = { path = "libs/accessdialog" }
 
 zbus = { version = "5", default-features = false, features = ["tokio", "url"] }
 tokio = { version = "1.43.0", features = ["full"] }
-serde = { version = "1.0.216", features = ["derive"] }
+serde = { version = "1.0.217", features = ["derive"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 url = { version = "2.5", features = ["serde"] }
@@ -24,7 +24,7 @@ image = { version = "0.25", default-features = false, features = [
 	"qoi",
 ] }
 
-bitflags = "2.6.0"
+bitflags = "2.7.0"
 enumflags2 = "0.7.10"
 anyhow = "1.0.95"
 
@@ -33,7 +33,7 @@ pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
 libwayshot = { version = "0.3.0" }
-rustix = { version = "0.38.42", features = ["fs", "use-libc"] }
+rustix = { version = "0.38.43", features = ["fs", "use-libc"] }
 
 # REMOTE
 wayland-protocols = { version = "0.32.5", default-features = false, features = [
@@ -49,9 +49,9 @@ wayland-client = { version = "0.31.7" }
 wayland-protocols-misc = { version = "0.3.5", features = ["client"] }
 xkbcommon = "0.8.0"
 tempfile = "3.15.0"
-thiserror = "2.0.9"
+thiserror = "2.0.11"
 toml = "0.8.19"
 csscolorparser = "0.7.0"
-notify = "7.0.0"
+notify = "8.0.0"
 futures = "0.3.31"
 libwaysip = "0.2.3"
