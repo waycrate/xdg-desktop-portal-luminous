@@ -2,6 +2,8 @@ mod dispatch;
 mod remote_thread;
 mod state;
 
+use libwaysip::state::WlOutputInfo;
+use libwaysip::SelectionType;
 use remote_thread::RemoteControl;
 
 use std::collections::HashMap;
@@ -195,39 +197,31 @@ impl RemoteDesktopBackend {
         // TODO: use slurp now
         let show_cursor = current_session.cursor_mode.show_cursor();
         let connection = libwayshot::WayshotConnection::new().unwrap();
-        let outputs = connection.get_all_outputs();
-        let slurp = std::process::Command::new("slurp")
-            .arg("-o")
-            .output()
-            .map_err(|_| zbus::Error::Failure("Cannot find slurp".to_string()))?
-            .stdout;
-        let output = String::from_utf8_lossy(&slurp);
-        let output = output
-            .split(' ')
-            .next()
-            .ok_or(zbus::Error::Failure("Not get slurp area".to_string()))?;
-
-        let point: Vec<&str> = output.split(',').collect();
-        let x: i32 = point[0]
-            .parse()
-            .map_err(|_| zbus::Error::Failure("X is not correct".to_string()))?;
-        let y: i32 = point[1]
-            .parse()
-            .map_err(|_| zbus::Error::Failure("Y is not correct".to_string()))?;
-
-        let Some(output) = outputs
-            .iter()
-            .find(|output| output.dimensions.x == x && output.dimensions.y == y)
-        else {
-            return Ok(PortalResponse::Other);
+        let info = match libwaysip::get_area(
+            Some(libwaysip::WaysipConnection {
+                connection: &connection.conn,
+                globals: &connection.globals,
+            }),
+            SelectionType::Screen,
+        ) {
+            Ok(Some(info)) => info,
+            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
+            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
         };
+
+        let WlOutputInfo {
+            output,
+            size: (width, height),
+            ..
+        } = info.screen_info.output_info;
 
         let cast_thread = ScreencastThread::start_cast(
             show_cursor,
-            output.mode.width as u32,
-            output.mode.height as u32,
+            width as u32,
+            height as u32,
             None,
-            output.wl_output.clone(),
+            output,
+            connection,
         )
         .await
         .map_err(|e| zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}")))?;

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use libwaysip::state::WlOutputInfo;
 use zbus::interface;
 
 use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type, Value};
@@ -192,29 +193,32 @@ impl ScreenCastBackend {
 
         let show_cursor = current_session.cursor_mode.show_cursor();
         let connection = libwayshot::WayshotConnection::new().unwrap();
-        let outputs = connection.get_all_outputs();
 
-        let info = match libwaysip::get_area(None, SelectionType::Screen) {
+        let info = match libwaysip::get_area(
+            Some(libwaysip::WaysipConnection {
+                connection: &connection.conn,
+                globals: &connection.globals,
+            }),
+            SelectionType::Screen,
+        ) {
             Ok(Some(info)) => info,
             Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
         };
 
-        let (x, y) = info.selected_screen_info().get_position();
-
-        let Some(output) = outputs
-            .iter()
-            .find(|output| output.dimensions.x == x && output.dimensions.y == y)
-        else {
-            return Ok(PortalResponse::Other);
-        };
+        let WlOutputInfo {
+            output,
+            size: (width, height),
+            ..
+        } = info.screen_info.output_info;
 
         let cast_thread = ScreencastThread::start_cast(
             show_cursor,
-            output.mode.width as u32,
-            output.mode.height as u32,
+            width as u32,
+            height as u32,
             None,
-            output.wl_output.clone(),
+            output,
+            connection,
         )
         .await
         .map_err(|e| zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}")))?;

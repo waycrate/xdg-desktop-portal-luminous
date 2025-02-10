@@ -1,5 +1,5 @@
-use libwayshot::reexport::WlOutput;
 use libwayshot::CaptureRegion;
+use libwayshot::{reexport::WlOutput, WayshotConnection};
 use pipewire::{
     spa::{
         self,
@@ -25,11 +25,19 @@ impl ScreencastThread {
         height: u32,
         capture_region: Option<CaptureRegion>,
         output: WlOutput,
+        connection: WayshotConnection,
     ) -> anyhow::Result<Self> {
         let (tx, rx) = oneshot::channel();
         let (thread_stop_tx, thread_stop_rx) = pipewire::channel::channel::<()>();
         std::thread::spawn(move || {
-            match start_stream(overlay_cursor, width, height, capture_region, output) {
+            match start_stream(
+                connection,
+                overlay_cursor,
+                width,
+                height,
+                capture_region,
+                output,
+            ) {
                 Ok((loop_, listener, context, node_id_rx)) => {
                     tx.send(Ok(node_id_rx)).unwrap();
                     let weak_loop = loop_.downgrade();
@@ -67,13 +75,13 @@ type PipewireStreamResult = (
 );
 
 fn start_stream(
+    connection: WayshotConnection,
     overlay_cursor: bool,
     width: u32,
     height: u32,
     capture_region: Option<CaptureRegion>,
     output: WlOutput,
 ) -> Result<PipewireStreamResult, pipewire::Error> {
-    let connection = libwayshot::WayshotConnection::new().unwrap();
     let loop_ = pipewire::main_loop::MainLoop::new(None).unwrap();
     let context = pipewire::context::Context::new(&loop_).unwrap();
     let core = context.connect(None).unwrap();
