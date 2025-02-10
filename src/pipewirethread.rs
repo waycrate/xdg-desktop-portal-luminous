@@ -133,8 +133,7 @@ fn start_stream(
             let buf = unsafe { &mut *(*buffer).buffer };
             let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
             for data in datas {
-                use std::ffi::CStr;
-                let name = unsafe { CStr::from_bytes_with_nul_unchecked(b"pipewire-screencopy\0") };
+                let name = c"pipewire-screencopy";
                 let fd = rustix::fs::memfd_create(name, rustix::fs::MemfdFlags::CLOEXEC).unwrap();
                 rustix::fs::ftruncate(&fd, (width * height * 4) as _).unwrap();
 
