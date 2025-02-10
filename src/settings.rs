@@ -61,7 +61,7 @@ impl SettingsBackend {
                 .try_into()
                 .unwrap());
         }
-        Err(zbus::fdo::Error::Failed("No such namespace".to_string()))
+        Err(zbus::fdo::Error::Failed("No such key".to_string()))
     }
 
     async fn read_all(

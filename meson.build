@@ -55,7 +55,7 @@ configure_file(
 )
 
 custom_target(
-  'xdg-deskop-portal-luminous',
+  'xdg-desktop-portal-luminous',
   output: 'xdg-desktop-portal-luminous',
   build_by_default: true,
   install: true,

@@ -334,7 +334,7 @@ impl RemoteDesktopBackend {
         Ok(())
     }
 
-    async fn notify_pointer_axix_discrate(
+    async fn notify_pointer_axis_discrate(
         &self,
         session_handle: ObjectPath<'_>,
         _options: HashMap<String, Value<'_>>,

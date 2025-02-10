@@ -115,7 +115,7 @@ fn start_stream(
                     }
                 }
                 StreamState::Error(e) => {
-                    tracing::error!("Errror! : {e}");
+                    tracing::error!("Error! : {e}");
                 }
                 _ => {}
             }

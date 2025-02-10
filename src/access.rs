@@ -37,7 +37,7 @@ impl AccessBackend {
         &self,
         _request_handle: ObjectPath<'_>,
         _app_id: String,
-        _parrent_window: String,
+        _parent_window: String,
         title: String,
         sub_title: String,
         _body: String,
