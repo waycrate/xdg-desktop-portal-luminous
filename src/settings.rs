@@ -64,18 +64,25 @@ impl SettingsBackend {
         Err(zbus::fdo::Error::Failed("No such namespace".to_string()))
     }
 
-    async fn read_all(&self, namespace: String) -> fdo::Result<OwnedValue> {
-        if namespace != APPEARANCE {
+    async fn read_all(
+        &self,
+        namespaces: Vec<&str>,
+    ) -> fdo::Result<HashMap<String, HashMap<String, OwnedValue>>> {
+        if !namespaces.contains(&APPEARANCE) {
             return Err(zbus::fdo::Error::Failed("No such namespace".to_string()));
         }
-        let mut output = HashMap::<String, OwnedValue>::new();
+        let mut output_setting = HashMap::<String, OwnedValue>::new();
         let config = SETTING_CONFIG.lock().await;
-        output.insert(COLOR_SCHEME.to_string(), config.get_color_scheme().into());
-        output.insert(
+        output_setting.insert(COLOR_SCHEME.to_string(), config.get_color_scheme().into());
+        output_setting.insert(
             ACCENT_COLOR.to_string(),
             OwnedValue::try_from(AccentColor::new(config.get_accent_color())).unwrap(),
         );
-        Ok(output.into())
+        let output = HashMap::<String, HashMap<String, OwnedValue>>::from_iter([(
+            APPEARANCE.to_string(),
+            output_setting,
+        )]);
+        Ok(output)
     }
 
     #[zbus(signal)]
