@@ -5735,7 +5735,7 @@ checksum = "0ef33da6b1660b4ddbfb3aef0ade110c8b8a781a3b6382fa5f2b5b040fd55f61"
 
 [[package]]
 name = "xdg-desktop-portal-luminous"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "accessdialog",
  "anyhow",
