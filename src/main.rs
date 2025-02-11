@@ -21,7 +21,7 @@ use futures::{
     channel::mpsc::{channel, Receiver},
     SinkExt, StreamExt,
 };
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
 
 mod pipewirethread;
@@ -100,7 +100,14 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
 
     while let Some(res) = rx.next().await {
         match res {
-            Ok(_) => {
+            Ok(Event {
+                kind: EventKind::Modify(_),
+                ..
+            })
+            | Ok(Event {
+                kind: EventKind::Create(_),
+                ..
+            }) => {
                 let mut config = SETTING_CONFIG.lock().await;
                 *config = SettingsConfig::config_from_file();
                 let _ = SettingsBackend::setting_changed(
@@ -121,6 +128,7 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                 .await;
             }
             Err(e) => println!("watch error: {:?}", e),
+            _ => {}
         }
     }
 
