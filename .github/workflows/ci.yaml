@@ -2,28 +2,27 @@ name: Build xdg-desktop-portal-luminous (nix)
 
 on: [push, pull_request]
 jobs:
-    nix:
+    build:
         name: "Build xdg-desktop-portal-luminous"
         runs-on: ubuntu-latest
+        container:
+          image: archlinux:latest
         steps:
             - name: Checkout xdg-desktop-portal-luminous
               uses: actions/checkout@v4
               with:
                   submodules: recursive
-
-            - name: install nix
-              uses: cachix/install-nix-action@v30
+            - name: "install deps"
+              run: |
+                pacman -Syu --noconfirm base-devel clang meson ninja pipewire xkbcommon wayland
+            - uses: dtolnay/rust-toolchain@stable
               with:
-                  install_url: https://nixos.org/nix/install
-                  extra_nix_config: |
-                      auto-optimise-store = true
-                      access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-                      experimental-features = nix-command flakes
-
-            - name: Setup meson
+                components: clippy rustfmt
+            - name: Run fmt check
+              run: cargo fmt --all -- --check
+            - name: Run clippy
+              run: cargo clippy -- -D warning
+            - name: build target
               run: |
-                  nix develop --command meson build
-
-            - name: Exec ninja
-              run: |
-                  nix develop --command ninja -C build
+                  meson setup build
+                  meson compile -C build
