@@ -1,4 +1,4 @@
-name: Build xdg-desktop-portal-luminous (nix)
+name: Build xdg-desktop-portal-luminous (archlinux)
 
 on: [push, pull_request]
 jobs:
@@ -8,10 +8,7 @@ jobs:
         container:
           image: archlinux:latest
         steps:
-            - name: Checkout xdg-desktop-portal-luminous
-              uses: actions/checkout@v4
-              with:
-                  submodules: recursive
+            - uses: actions/checkout@v4
             - name: "install deps"
               run: |
                 pacman -Syu --noconfirm base-devel clang meson ninja pipewire xkbcommon wayland
