@@ -11,7 +11,7 @@ jobs:
             - uses: actions/checkout@v4
             - name: "install deps"
               run: |
-                pacman -Syu --noconfirm base-devel clang meson ninja pipewire xkbcommon wayland
+                pacman -Syu --noconfirm base-devel clang meson ninja pipewire libxkbcommon wayland
             - uses: dtolnay/rust-toolchain@stable
               with:
                 components: clippy rustfmt
