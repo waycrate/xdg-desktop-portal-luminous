@@ -11,15 +11,15 @@ use access::AccessBackend;
 use remotedesktop::RemoteDesktopBackend;
 use screencast::ScreenCastBackend;
 use screenshot::ScreenShotBackend;
-use settings::{AccentColor, SettingsBackend, SettingsConfig, SETTING_CONFIG};
+use settings::{AccentColor, SETTING_CONFIG, SettingsBackend, SettingsConfig};
 
 use std::collections::HashMap;
 use std::future::pending;
-use zbus::{connection, object_server::SignalEmitter, zvariant, Connection};
+use zbus::{Connection, connection, object_server::SignalEmitter, zvariant};
 
 use futures::{
-    channel::mpsc::{channel, Receiver},
     SinkExt, StreamExt,
+    channel::mpsc::{Receiver, channel},
 };
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
@@ -137,7 +137,7 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info");
+    unsafe { std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info") }
     tracing_subscriber::fmt().init();
     tracing::info!("luminous Start");
 

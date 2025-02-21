@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
 use zbus::{fdo, interface, zvariant::ObjectPath};
 
-use crate::utils::USER_RUNNING_DIR;
 use crate::PortalResponse;
+use crate::utils::USER_RUNNING_DIR;
 
 use libwaysip::SelectionType;
 
@@ -65,10 +65,10 @@ impl ScreenShotBackend {
                     let info = match libwaysip::get_area(None, SelectionType::Area) {
                         Ok(Some(info)) => info,
                         Ok(None) => {
-                            return Err(zbus::Error::Failure("You cancel it".to_string()).into())
+                            return Err(zbus::Error::Failure("You cancel it".to_string()).into());
                         }
                         Err(e) => {
-                            return Err(zbus::Error::Failure(format!("wayland error, {e}")).into())
+                            return Err(zbus::Error::Failure(format!("wayland error, {e}")).into());
                         }
                     };
 

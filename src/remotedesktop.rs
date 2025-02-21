@@ -2,8 +2,8 @@ mod dispatch;
 mod remote_thread;
 mod state;
 
-use libwaysip::state::WlOutputInfo;
 use libwaysip::SelectionType;
+use libwaysip::state::WlOutputInfo;
 use remote_thread::RemoteControl;
 
 use std::collections::HashMap;
@@ -21,7 +21,7 @@ use tokio::sync::Mutex;
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
 use crate::session::{
-    append_session, DeviceType, PersistMode, Session, SessionType, SourceType, SESSIONS,
+    DeviceType, PersistMode, SESSIONS, Session, SessionType, SourceType, append_session,
 };
 
 use crate::PortalResponse;

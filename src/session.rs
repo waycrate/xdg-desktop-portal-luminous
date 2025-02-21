@@ -1,4 +1,4 @@
-use enumflags2::{bitflags, BitFlags};
+use enumflags2::{BitFlags, bitflags};
 use zbus::{interface, object_server::SignalEmitter, zvariant::OwnedObjectPath};
 
 use serde::{Deserialize, Serialize};
@@ -9,8 +9,8 @@ use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
 
 use crate::{
-    remotedesktop::{remove_remote_session, SelectDevicesOptions},
-    screencast::{remove_cast_session, SelectSourcesOptions},
+    remotedesktop::{SelectDevicesOptions, remove_remote_session},
+    screencast::{SelectSourcesOptions, remove_cast_session},
 };
 
 pub static SESSIONS: LazyLock<Arc<Mutex<Vec<Session>>>> =

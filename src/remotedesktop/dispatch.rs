@@ -1,8 +1,8 @@
 use super::state::AppData;
 use rustix::fd::AsFd;
 use wayland_client::{
-    protocol::{wl_keyboard, wl_registry, wl_seat::WlSeat, wl_shm::WlShm},
     Connection, Dispatch, Proxy, QueueHandle,
+    protocol::{wl_keyboard, wl_registry, wl_seat::WlSeat, wl_shm::WlShm},
 };
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,

@@ -13,12 +13,12 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
+use crate::PortalResponse;
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
 use crate::session::{
-    append_session, CursorMode, PersistMode, Session, SessionType, SourceType, SESSIONS,
+    CursorMode, PersistMode, SESSIONS, Session, SessionType, SourceType, append_session,
 };
-use crate::PortalResponse;
 
 use libwaysip::SelectionType;
 

@@ -1,5 +1,5 @@
 use libwayshot::CaptureRegion;
-use libwayshot::{reexport::WlOutput, WayshotConnection};
+use libwayshot::{WayshotConnection, reexport::WlOutput};
 use pipewire::{
     spa::{
         self,
