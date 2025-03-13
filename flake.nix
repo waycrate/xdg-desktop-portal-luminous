@@ -1,5 +1,7 @@
 {
-  description = "Development environment for wayshot";
+  description = "xdg-desktop-portal-luminous devel";
+
+  # Use nix develop --impure for this to work
 
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
