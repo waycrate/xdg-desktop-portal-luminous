@@ -1,51 +1,19 @@
 {
   description = "xdg-desktop-portal-luminous devel";
 
-  inputs = { nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable"; };
+  # Use nix develop --impure for this to work
 
-  outputs = { self, nixpkgs, ... }:
-    let
-      pkgsFor = system:
-        import nixpkgs {
-          inherit system;
-          overlays = [ ];
-        };
+  inputs = {
+    flake-utils.url = "github:numtide/flake-utils";
+  };
 
-      targetSystems = [ "aarch64-linux" "x86_64-linux" ];
-    in {
-      devShells = nixpkgs.lib.genAttrs targetSystems (system:
-        let pkgs = pkgsFor system;
-        in {
-          default = pkgs.mkShell {
-            name = "xdg-desktop-portal-luminous-devel";
-            LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-            nativeBuildInputs = with pkgs; [
-              # Compilers
-              clang
-              cargo
-              rustc
-
-              # Libs
-              pipewire
-              wayland
-              libxkbcommon
-              stdenv
-              glib
-              pango
-              cairo
-
-              # Tools
-              meson
-              ninja
-              gdb
-              pkg-config
-              rust-analyzer
-              rustfmt
-              strace
-              valgrind
-              wayland-scanner
-            ];
-          };
-        });
-    };
+  outputs =
+    {
+      flake-utils,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (system:
+    {
+      devShells.default = import ./shell.nix;
+    });
 }
