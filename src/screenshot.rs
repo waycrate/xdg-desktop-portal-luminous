@@ -1,4 +1,5 @@
 use libwayshot::WayshotConnection;
+use libwaysip::Point;
 use screenshotdialog::ScreenInfo;
 use screenshotdialog::SlintSelection;
 use std::collections::HashMap;
@@ -72,7 +73,10 @@ impl ScreenShotBackend {
                         }
                     };
 
-                    let (x_coordinate, y_coordinate) = info.left_top_point();
+                    let Point {
+                        x: x_coordinate,
+                        y: y_coordinate,
+                    } = info.left_top_point();
                     let width = info.width();
                     let height = info.height();
 
@@ -126,7 +130,10 @@ impl ScreenShotBackend {
             Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
         };
-        let (x_coordinate, y_coordinate) = info.left_top_point();
+        let Point {
+            x: x_coordinate,
+            y: y_coordinate,
+        } = info.left_top_point();
 
         let image = wayshot_connection
             .screenshot(
