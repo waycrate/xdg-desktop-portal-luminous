@@ -14,8 +14,8 @@ zbus = { version = "5", default-features = false, features = [
 	"tokio",
 	"url",
 ] }
-tokio = { version = "1.44.0", features = ["full"] }
-serde = { version = "1.0.217", features = ["derive"] }
+tokio = { version = "1.44.1", features = ["full"] }
+serde = { version = "1.0.219", features = ["derive"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 url = { version = "2.5", features = ["serde"] }
@@ -29,14 +29,14 @@ image = { version = "0.25", default-features = false, features = [
 
 bitflags = "2.9.0"
 enumflags2 = "0.7.11"
-anyhow = "1.0.95"
+anyhow = "1.0.97"
 
 # pipewire
 pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
 libwayshot = { version = "0.3.0" }
-rustix = { version = "1.0.2", features = ["fs", "use-libc"] }
+rustix = { version = "1.0.3", features = ["fs", "use-libc"] }
 
 # REMOTE
 wayland-protocols = { version = "0.32.6", default-features = false, features = [
@@ -52,9 +52,9 @@ wayland-client = { version = "0.31.8" }
 wayland-protocols-misc = { version = "0.3.6", features = ["client"] }
 xkbcommon = "0.8.0"
 tempfile = "3.19.1"
-thiserror = "2.0.11"
+thiserror = "2.0.12"
 toml = "0.8.20"
 csscolorparser = "0.7.0"
 notify = "8.0.0"
 futures = "0.3.31"
-libwaysip = "0.2.7"
+libwaysip = "0.3.0"
