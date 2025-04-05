@@ -79,7 +79,7 @@
               wayland-scanner
             ];
 
-            inherit (self.packages.${system}) buildInputs;
+            inherit (self.packages.${system}.default) buildInputs;
           };
         }
       );
