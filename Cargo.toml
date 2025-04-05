@@ -36,7 +36,7 @@ pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
 libwayshot = { version = "0.3.0" }
-rustix = { version = "1.0.3", features = ["fs", "use-libc"] }
+rustix = { version = "1.0.5", features = ["fs", "use-libc"] }
 
 # REMOTE
 wayland-protocols = { version = "0.32.6", default-features = false, features = [
