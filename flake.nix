@@ -4,6 +4,9 @@
   # Unstable required until Rust 1.85 (2024 edition) is on stable
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+  # shell.nix compatibility
+  inputs.flake-compat.url = "https://flakehub.com/f/edolstra/flake-compat/1.tar.gz";
+
   outputs = { self, nixpkgs, ... }:
     let
       # System types to support.
@@ -20,7 +23,7 @@
           # rustPlatform.buildRustPackage is not used because we build with Meson+Ninja
           default = pkgs.stdenv.mkDerivation rec {
             pname = "xdg-desktop-portal-luminous";
-            version = "0.1.8";
+            version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
 
             src = ./.;
 
@@ -34,9 +37,8 @@
               pkg-config
             ];
 
-            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-              inherit src;
-              hash = "sha256-g0OxK7H6BwGQwQ940TlNR6s7axpX4e6KtzPUMgTJ1nU=";
+            cargoDeps = pkgs.rustPlatform.importCargoLock {
+              lockFile = ./Cargo.lock;
             };
 
             buildInputs = with pkgs; [
@@ -59,7 +61,7 @@
         in
         {
           default = pkgs.mkShell {
-            name = "xdg-desktop-portal-luminous-devel";
+            strictDeps = true;
             RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
             nativeBuildInputs = with pkgs; [
               cargo
@@ -72,14 +74,9 @@
               rustfmt
               clippy
               rust-analyzer
-
-              gdb
-              strace
-              valgrind
-              wayland-scanner
             ];
 
-            inherit (self.packages.${system}) buildInputs;
+            inherit (self.packages.${system}.default) buildInputs;
           };
         }
       );
