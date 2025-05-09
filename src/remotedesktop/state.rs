@@ -34,8 +34,12 @@ impl AppData {
 
 impl Drop for AppData {
     fn drop(&mut self) {
-        self.virtual_pointer.take().map(|object| object.destroy());
-        self.virtual_keyboard.take().map(|object| object.destroy());
+        if let Some(object) = self.virtual_pointer.take() {
+            object.destroy()
+        }
+        if let Some(object) = self.virtual_keyboard.take() {
+            object.destroy()
+        }
     }
 }
 
