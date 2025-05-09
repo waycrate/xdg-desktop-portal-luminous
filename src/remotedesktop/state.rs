@@ -32,6 +32,13 @@ impl AppData {
     }
 }
 
+impl Drop for AppData {
+    fn drop(&mut self) {
+        self.virtual_pointer.take().map(|object| object.destroy());
+        self.virtual_keyboard.take().map(|object| object.destroy());
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum KeyPointerError {
     #[error("Connection create Error")]

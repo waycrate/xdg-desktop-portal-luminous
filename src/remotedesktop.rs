@@ -263,7 +263,6 @@ impl RemoteDesktopBackend {
     }
 
     // keyboard and else
-
     async fn notify_pointer_motion(
         &self,
         session_handle: ObjectPath<'_>,
