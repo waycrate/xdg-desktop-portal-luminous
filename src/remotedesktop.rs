@@ -11,7 +11,10 @@ use std::collections::HashMap;
 use enumflags2::BitFlags;
 use zbus::interface;
 
-use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type, Value};
+use zbus::zvariant::{
+    ObjectPath, OwnedValue, Type, Value,
+    as_value::{self, optional},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -28,10 +31,11 @@ use crate::PortalResponse;
 
 use self::remote_thread::KeyOrPointerRequest;
 
-#[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
+#[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::create_session`] request.
 #[zvariant(signature = "dict")]
 struct SessionCreateResult {
+    #[serde(with = "as_value")]
     handle_token: String,
 }
 
@@ -39,33 +43,43 @@ struct SessionCreateResult {
 /// A PipeWire stream.
 pub struct Stream(u32, StreamProperties);
 
-#[derive(Clone, SerializeDict, DeserializeDict, Default, Type, Debug)]
+#[derive(Clone, Default, Type, Debug, Serialize, Deserialize)]
 /// The stream properties.
 #[zvariant(signature = "dict")]
 struct StreamProperties {
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     id: Option<String>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     position: Option<(i32, i32)>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     size: Option<(i32, i32)>,
-    source_type: Option<SourceType>,
+    #[serde(with = "as_value")]
+    source_type: SourceType,
 }
 
 // TODO: this is copy from ashpd, but the dict is a little different from xdg_desktop_portal
-#[derive(Clone, SerializeDict, DeserializeDict, Default, Debug, Type)]
+#[derive(Clone, Default, Debug, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct RemoteStartReturnValue {
+    #[serde(with = "as_value")]
     streams: Vec<Stream>,
+    #[serde(with = "as_value")]
     devices: BitFlags<DeviceType>,
+    #[serde(with = "as_value")]
     clipboard_enabled: bool,
 }
 
-#[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
+#[derive(Type, Debug, Default, Deserialize, Serialize)]
 /// Specified options for a [`RemoteDesktop::select_devices`] request.
 #[zvariant(signature = "dict")]
 pub struct SelectDevicesOptions {
     /// A string that will be used as the last element of the handle.
     /// The device types to request remote controlling of. Default is all.
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub types: Option<BitFlags<DeviceType>>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub restore_token: Option<String>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub persist_mode: Option<PersistMode>,
 }
 

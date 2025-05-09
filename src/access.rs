@@ -2,24 +2,29 @@ use std::collections::HashMap;
 
 use zbus::{
     fdo, interface,
-    zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type},
+    zvariant::{ObjectPath, OwnedValue, Type, as_value::optional},
 };
 
 use serde::{Deserialize, Serialize};
 
 use crate::PortalResponse;
-#[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
+#[derive(Type, Debug, Default, Deserialize, Serialize)]
 /// Specified options for a [`Screencast::select_sources`] request.
 #[zvariant(signature = "dict")]
 pub struct AccessOption {
     /// A string that will be used as the last element of the handle.
     /// What types of content to record.
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub modal: Option<bool>,
     /// Whether to allow selecting multiple sources.
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub deny_label: Option<String>,
     /// Determines how the cursor will be drawn in the screen cast stream.
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub grant_label: Option<String>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub icon: Option<String>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub choices: Option<Vec<Choice>>,
 }
 

@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use libwaysip::state::WlOutputInfo;
 use zbus::interface;
 
-use zbus::zvariant::{DeserializeDict, ObjectPath, OwnedValue, SerializeDict, Type, Value};
+use zbus::zvariant::{
+    ObjectPath, OwnedValue, Type, Value,
+    as_value::{self, optional},
+};
 
 use enumflags2::BitFlags;
 
@@ -22,25 +25,31 @@ use crate::session::{
 
 use libwaysip::SelectionType;
 
-#[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
+#[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::create_session`] request.
 #[zvariant(signature = "dict")]
 struct SessionCreateResult {
+    #[serde(with = "as_value")]
     handle_token: String,
 }
 
-#[derive(SerializeDict, DeserializeDict, Type, Debug, Default)]
+#[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::select_sources`] request.
 #[zvariant(signature = "dict")]
 pub struct SelectSourcesOptions {
     /// A string that will be used as the last element of the handle.
-    /// What types of content to record.
+    /// What types of content to record.    
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub types: Option<BitFlags<SourceType>>,
     /// Whether to allow selecting multiple sources.
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub multiple: Option<bool>,
     /// Determines how the cursor will be drawn in the screen cast stream.
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub cursor_mode: Option<CursorMode>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub restore_token: Option<String>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub persist_mode: Option<PersistMode>,
 }
 
@@ -48,22 +57,29 @@ pub struct SelectSourcesOptions {
 /// A PipeWire stream.
 pub struct Stream(u32, StreamProperties);
 
-#[derive(Clone, SerializeDict, DeserializeDict, Default, Type, Debug)]
+#[derive(Clone, Default, Type, Debug, Serialize, Deserialize)]
 /// The stream properties.
 #[zvariant(signature = "dict")]
 struct StreamProperties {
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     id: Option<String>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     position: Option<(i32, i32)>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     size: Option<(i32, i32)>,
-    source_type: Option<SourceType>,
+    #[serde(with = "as_value")]
+    source_type: SourceType,
 }
 
 // TODO: this is copy from ashpd, but the dict is a little different from xdg_desktop_portal
-#[derive(Clone, SerializeDict, DeserializeDict, Default, Debug, Type)]
+#[derive(Clone, Default, Debug, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct StartReturnValue {
+    #[serde(with = "as_value")]
     streams: Vec<Stream>,
+    #[serde(with = "as_value")]
     persist_mode: u32,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     restore_token: Option<String>,
 }
 

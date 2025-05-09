@@ -2,7 +2,7 @@ mod config;
 use tokio::sync::Mutex;
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
-use zbus::zvariant::{DeserializeDict, OwnedValue, SerializeDict, Type, Value};
+use zbus::zvariant::{OwnedValue, Type, Value};
 
 const DEFAULT_COLOR: u32 = 0;
 const DARK_COLOR: u32 = 1;
@@ -21,7 +21,7 @@ pub use self::config::SettingsConfig;
 pub static SETTING_CONFIG: LazyLock<Arc<Mutex<SettingsConfig>>> =
     LazyLock::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));
 
-#[derive(DeserializeDict, SerializeDict, Clone, Copy, PartialEq, Type, OwnedValue, Value)]
+#[derive(Clone, Copy, PartialEq, Type, OwnedValue, Value)]
 pub struct AccentColor {
     red: f64,
     green: f64,

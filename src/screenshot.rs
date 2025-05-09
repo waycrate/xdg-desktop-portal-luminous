@@ -2,32 +2,45 @@ use libwayshot::WayshotConnection;
 use libwaysip::Point;
 use screenshotdialog::ScreenInfo;
 use screenshotdialog::SlintSelection;
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::HashMap;
-use zbus::zvariant::{DeserializeDict, SerializeDict, Type, Value};
-use zbus::{fdo, interface, zvariant::ObjectPath};
+use zbus::zvariant::{Type, Value};
+use zbus::{
+    fdo, interface,
+    zvariant::{
+        ObjectPath,
+        as_value::{self, optional},
+    },
+};
 
 use crate::PortalResponse;
 use crate::utils::USER_RUNNING_DIR;
 
 use libwaysip::SelectionType;
 
-#[derive(DeserializeDict, SerializeDict, Type)]
+#[derive(Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct Screenshot {
+    #[serde(with = "as_value")]
     uri: url::Url,
 }
 
-#[derive(DeserializeDict, SerializeDict, Clone, Copy, PartialEq, Type)]
+#[derive(Clone, Copy, PartialEq, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct Color {
+    #[serde(with = "as_value")]
     color: [f64; 3],
 }
 
-#[derive(DeserializeDict, SerializeDict, Type, Debug)]
+#[derive(Type, Debug, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 pub struct ScreenshotOption {
+    #[serde(with = "as_value")]
     interactive: bool,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     modal: Option<bool>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     permission_store_checked: Option<bool>,
 }
 
