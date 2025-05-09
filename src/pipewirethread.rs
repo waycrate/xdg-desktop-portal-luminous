@@ -276,7 +276,10 @@ fn format(width: u32, height: u32) -> Vec<u8> {
             Enum,
             Id,
             spa::param::video::VideoFormat::RGBA,
-            spa::param::video::VideoFormat::RGBA,
+            spa::param::video::VideoFormat::RGBx,
+            spa::param::video::VideoFormat::RGB8P,
+            spa::param::video::VideoFormat::BGR,
+            spa::param::video::VideoFormat::YUY2,
         ),
         // XXX modifiers
         spa::pod::property!(
