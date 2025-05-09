@@ -65,8 +65,8 @@ struct StreamProperties {
     id: Option<String>,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     position: Option<(i32, i32)>,
-    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
-    size: Option<(i32, i32)>,
+    #[serde(with = "as_value")]
+    size: (i32, i32),
     #[serde(with = "as_value")]
     source_type: SourceType,
 }
@@ -244,7 +244,14 @@ impl ScreenCastBackend {
         append_cast_session((session_handle.to_string(), cast_thread)).await;
 
         Ok(PortalResponse::Success(StartReturnValue {
-            streams: vec![Stream(node_id, StreamProperties::default())],
+            streams: vec![Stream(
+                node_id,
+                StreamProperties {
+                    size: (width, height),
+                    source_type: SourceType::Monitor,
+                    ..Default::default()
+                },
+            )],
             ..Default::default()
         }))
     }
