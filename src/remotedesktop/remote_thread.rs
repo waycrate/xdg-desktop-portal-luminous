@@ -1,8 +1,15 @@
 use wayland_client::Connection;
+use wayland_client::globals::registry_queue_init;
+use wayland_client::protocol::wl_keyboard;
+use wayland_client::protocol::wl_seat::WlSeat;
+use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1;
+use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1;
 
+use super::dispatch::get_keymap_as_file;
 use super::state::AppData;
 use super::state::KeyPointerError;
 
+use std::os::fd::AsFd;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug)]
@@ -70,10 +77,22 @@ pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPoi
     // be created.
     let display = conn.display();
 
-    // Create an event queue for our event processing
-    let mut event_queue = conn.new_event_queue();
-    // An get its handle to associated new objects to it
+    let (globals, mut event_queue) = registry_queue_init::<AppData>(&conn)?; // We just need the
+
     let qh = event_queue.handle();
+    let seat = globals.bind::<WlSeat, _, _>(&qh, 7..=9, ())?;
+    let virtual_keyboard_manager =
+        globals.bind::<ZwpVirtualKeyboardManagerV1, _, _>(&qh, 1..=1, ())?;
+
+    let virtual_keyboard = virtual_keyboard_manager.create_virtual_keyboard(&seat, &qh, ());
+    let (file, size) = get_keymap_as_file();
+    virtual_keyboard.keymap(wl_keyboard::KeymapFormat::XkbV1.into(), file.as_fd(), size);
+
+    let virtual_pointer_manager =
+        globals.bind::<ZwlrVirtualPointerManagerV1, _, _>(&qh, 1..=2, ())?;
+    let pointer = virtual_pointer_manager.create_virtual_pointer(Some(&seat), &qh, ());
+    // Create an event queue for our event processing
+    // An get its handle to associated new objects to it
 
     // Create a wl_registry object by sending the wl_display.get_registry request
     // This method takes two arguments: a handle to the queue the newly created
@@ -83,7 +102,7 @@ pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPoi
 
     // At this point everything is ready, and we just need to wait to receive the events
     // from the wl_registry, our callback will print the advertized globals.
-    let mut data = AppData::init(&mut event_queue)?;
+    let mut data = AppData::new(virtual_keyboard, pointer);
 
     while let Ok(message) = receiver.recv() {
         match message {
