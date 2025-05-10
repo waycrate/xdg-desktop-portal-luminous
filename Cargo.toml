@@ -1,14 +1,30 @@
+[workspace.package]
+version = "0.1.9"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/waycrate/xdg-desktop-portal-luminous"
+keywords = ["wayland"]
+
 [package]
 name = "xdg-desktop-portal-luminous"
-version = "0.1.8"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["wayland"]
 
 [workspace]
 members = ["libs/screenshotdialog", "libs/accessdialog", "."]
 
-[dependencies]
+[workspace.dependencies]
 screenshotdialog = { path = "libs/screenshotdialog" }
 accessdialog = { path = "libs/accessdialog" }
+slint = "1.11.0"
+slint-build = "1.11.0"
+
+[dependencies]
+screenshotdialog.workspace = true
+accessdialog.workspace = true
 
 zbus = { version = "5.6", default-features = false, features = [
 	"tokio",

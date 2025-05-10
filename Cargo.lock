@@ -20,7 +20,7 @@ checksum = "c71b1793ee61086797f5c80b6efa2b8ffa6d5dd703f118545808a7f2e27f7046"
 
 [[package]]
 name = "accessdialog"
-version = "0.1.0"
+version = "0.1.9"
 dependencies = [
  "slint",
  "slint-build",
@@ -4686,7 +4686,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "screenshotdialog"
-version = "0.1.0"
+version = "0.1.9"
 dependencies = [
  "slint",
  "slint-build",
@@ -6537,7 +6537,7 @@ checksum = "0ef33da6b1660b4ddbfb3aef0ade110c8b8a781a3b6382fa5f2b5b040fd55f61"
 
 [[package]]
 name = "xdg-desktop-portal-luminous"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "accessdialog",
  "anyhow",
