@@ -83,7 +83,10 @@ struct StartReturnValue {
     restore_token: Option<String>,
 }
 
-pub type CastSessionData = (String, ScreencastThread);
+pub struct CastSessionData {
+    session_handle: String,
+    cast_thread: ScreencastThread,
+}
 pub static CAST_SESSIONS: LazyLock<Arc<Mutex<Vec<CastSessionData>>>> =
     LazyLock::new(|| Arc::new(Mutex::new(Vec::new())));
 
@@ -96,12 +99,12 @@ pub async fn remove_cast_session(path: &str) {
     let mut sessions = CAST_SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
-        .position(|the_session| the_session.0 == path)
+        .position(|the_session| the_session.session_handle == path)
     else {
         return;
     };
-    sessions[index].1.stop();
-    tracing::info!("session {} is stopped", sessions[index].0);
+    sessions[index].cast_thread.stop();
+    tracing::info!("session {} is stopped", sessions[index].session_handle);
     sessions.remove(index);
 }
 
@@ -183,10 +186,13 @@ impl ScreenCastBackend {
         let cast_sessions = CAST_SESSIONS.lock().await;
         if let Some(session) = cast_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         {
             return Ok(PortalResponse::Success(StartReturnValue {
-                streams: vec![Stream(session.1.node_id(), StreamProperties::default())],
+                streams: vec![Stream(
+                    session.cast_thread.node_id(),
+                    StreamProperties::default(),
+                )],
                 ..Default::default()
             }));
         }
@@ -241,7 +247,11 @@ impl ScreenCastBackend {
 
         let node_id = cast_thread.node_id();
 
-        append_cast_session((session_handle.to_string(), cast_thread)).await;
+        append_cast_session(CastSessionData {
+            session_handle: session_handle.to_string(),
+            cast_thread,
+        })
+        .await;
 
         Ok(PortalResponse::Success(StartReturnValue {
             streams: vec![Stream(
