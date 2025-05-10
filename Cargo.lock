@@ -3097,9 +3097,9 @@ dependencies = [
 
 [[package]]
 name = "libwaysip"
-version = "0.4.0-rc1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f315f2af63f30d931416a109ecc4e9ae4732a4fabef028f61cd04d1d051bacc"
+checksum = "f5eef61a9d82cfed0d0897c3b629c9085799c5819e0eea1ab3abc3127535400f"
 dependencies = [
  "cairo-rs 0.20.7",
  "memmap2",
