@@ -63,9 +63,9 @@ impl AppData {
             100,
             button as u32,
             if state == 0 {
-                wl_pointer::ButtonState::Pressed
-            } else {
                 wl_pointer::ButtonState::Released
+            } else {
+                wl_pointer::ButtonState::Pressed
             },
         );
     }

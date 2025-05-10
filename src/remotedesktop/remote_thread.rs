@@ -8,9 +8,16 @@ use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_man
 use super::dispatch::get_keymap_as_file;
 use super::state::AppData;
 use super::state::KeyPointerError;
+use std::sync::Mutex;
+use std::sync::atomic::Ordering;
 
 use std::os::fd::AsFd;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, Sender};
+
+use calloop::EventLoop;
+use calloop_wayland_source::WaylandSource;
 
 #[derive(Debug)]
 pub enum KeyOrPointerRequest {
@@ -77,7 +84,7 @@ pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPoi
     // be created.
     let display = conn.display();
 
-    let (globals, mut event_queue) = registry_queue_init::<AppData>(&conn)?; // We just need the
+    let (globals, event_queue) = registry_queue_init::<AppData>(&conn)?; // We just need the
 
     let qh = event_queue.handle();
     let seat = globals.bind::<WlSeat, _, _>(&qh, 7..=9, ())?;
@@ -100,36 +107,92 @@ pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPoi
     // with this registry (here it is () as we don't need user-data).
     let _registry = display.get_registry(&qh, ());
 
+    let mut event_loop: EventLoop<AppData> =
+        EventLoop::try_new().expect("Failed to initialize the event loop");
+
+    WaylandSource::new(conn, event_queue)
+        .insert(event_loop.handle())
+        .expect("Failed to init wayland source");
+
+    let to_exit = Arc::new(AtomicBool::new(false));
+
+    let events: Arc<Mutex<Vec<KeyOrPointerRequest>>> = Arc::new(Mutex::new(Vec::new()));
+
+    let to_exit2 = to_exit.clone();
+    let to_exit3 = to_exit.clone();
+    let events_2 = events.clone();
+    let thread = std::thread::spawn(move || {
+        let to_exit = to_exit2;
+        let events = events_2;
+
+        for message in receiver.iter() {
+            if to_exit.load(Ordering::Relaxed) {
+                break;
+            }
+            let mut events_local = events.lock().unwrap();
+            events_local.push(message);
+        }
+        to_exit.store(true, Ordering::Relaxed);
+    });
+
     // At this point everything is ready, and we just need to wait to receive the events
     // from the wl_registry, our callback will print the advertized globals.
     let mut data = AppData::new(virtual_keyboard, pointer);
 
-    while let Ok(message) = receiver.recv() {
-        match message {
-            KeyOrPointerRequest::PointerMotion { dx, dy } => data.notify_pointer_motion(dx, dy),
-            KeyOrPointerRequest::PointerMotionAbsolute {
-                x,
-                y,
-                x_extent,
-                y_extent,
-            } => data.notify_pointer_motion_absolute(x, y, x_extent, y_extent),
-            KeyOrPointerRequest::PointerButton { button, state } => {
-                data.notify_pointer_button(button, state)
-            }
-            KeyOrPointerRequest::PointerAxis { dx, dy } => data.notify_pointer_axis(dx, dy),
-            KeyOrPointerRequest::PointerAxisDiscrate { axis, steps } => {
-                data.notify_pointer_axis_discrete(axis, steps)
-            }
-            KeyOrPointerRequest::KeyboardKeycode { keycode, state } => {
-                data.notify_keyboard_keycode(keycode, state)
-            }
-            KeyOrPointerRequest::KeyboardKeysym { keysym, state } => {
-                data.notify_keyboard_keysym(keysym, state)
-            }
-            KeyOrPointerRequest::Exit => break,
-        }
-        event_queue.roundtrip(&mut data).ok();
-    }
+    let signal = event_loop.get_signal();
+    event_loop
+        .run(
+            std::time::Duration::from_millis(20),
+            &mut data,
+            move |data| {
+                if to_exit3.load(Ordering::Relaxed) {
+                    signal.stop();
+                    return;
+                }
+                let mut local_events = events.lock().expect(
+                    "This events only used in this callback, so it should always can be unlocked",
+                );
+                let mut swapped_events = vec![];
+                std::mem::swap(&mut *local_events, &mut swapped_events);
+                drop(local_events);
+                for message in swapped_events {
+                    match message {
+                        KeyOrPointerRequest::PointerMotion { dx, dy } => {
+                            data.notify_pointer_motion(dx, dy)
+                        }
+                        KeyOrPointerRequest::PointerMotionAbsolute {
+                            x,
+                            y,
+                            x_extent,
+                            y_extent,
+                        } => data.notify_pointer_motion_absolute(x, y, x_extent, y_extent),
+                        KeyOrPointerRequest::PointerButton { button, state } => {
+                            data.notify_pointer_button(button, state)
+                        }
+                        KeyOrPointerRequest::PointerAxis { dx, dy } => {
+                            data.notify_pointer_axis(dx, dy)
+                        }
+                        KeyOrPointerRequest::PointerAxisDiscrate { axis, steps } => {
+                            data.notify_pointer_axis_discrete(axis, steps)
+                        }
+                        KeyOrPointerRequest::KeyboardKeycode { keycode, state } => {
+                            data.notify_keyboard_keycode(keycode, state)
+                        }
+                        KeyOrPointerRequest::KeyboardKeysym { keysym, state } => {
+                            data.notify_keyboard_keysym(keysym, state)
+                        }
+                        KeyOrPointerRequest::Exit => {
+                            signal.stop();
+                            break;
+                        }
+                    }
+                }
+            },
+        )
+        .expect("Error during event loop");
+
+    to_exit.store(true, Ordering::Relaxed);
+    let _ = thread.join();
 
     Ok(())
 }
