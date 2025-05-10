@@ -39,13 +39,13 @@ impl Drop for AppData {
 #[derive(Error, Debug)]
 pub enum KeyPointerError {
     #[error("Connection create Error")]
-    ConnectionError(String),
+    InitFailedConnection(String),
     #[error("Error during queue")]
-    QueueError(#[from] DispatchError),
+    FailedDuringQueue(#[from] DispatchError),
     #[error("GlobalError")]
     GlobalError(#[from] GlobalError),
     #[error("BindError")]
-    BindError(#[from] BindError),
+    BindFailed(#[from] BindError),
 }
 
 impl AppData {

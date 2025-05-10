@@ -76,8 +76,9 @@ impl RemoteControl {
 pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPointerError> {
     // Create a Wayland connection by connecting to the server through the
     // environment-provided configuration.
-    let conn = Connection::connect_to_env()
-        .map_err(|_| KeyPointerError::ConnectionError("Cannot create connection".to_string()))?;
+    let conn = Connection::connect_to_env().map_err(|_| {
+        KeyPointerError::InitFailedConnection("Cannot create connection".to_string())
+    })?;
 
     // Retrieve the WlDisplay Wayland object from the connection. This object is
     // the starting point of any Wayland program, from which all other objects will
