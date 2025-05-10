@@ -1,5 +1,5 @@
 use libwayshot::WayshotConnection;
-use libwaysip::Point;
+use libwaysip::Position;
 use screenshotdialog::ScreenInfo;
 use screenshotdialog::SlintSelection;
 use serde::Deserialize;
@@ -86,7 +86,7 @@ impl ScreenShotBackend {
                         }
                     };
 
-                    let Point {
+                    let Position {
                         x: x_coordinate,
                         y: y_coordinate,
                     } = info.left_top_point();
@@ -143,7 +143,7 @@ impl ScreenShotBackend {
             Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
         };
-        let Point {
+        let Position {
             x: x_coordinate,
             y: y_coordinate,
         } = info.left_top_point();

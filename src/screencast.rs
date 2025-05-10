@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use libwaysip::state::WlOutputInfo;
 use zbus::interface;
 
 use zbus::zvariant::{
@@ -228,12 +227,11 @@ impl ScreenCastBackend {
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
         };
 
-        let WlOutputInfo {
-            output,
-            size: (width, height),
-            ..
-        } = info.screen_info.output_info;
+        use libwaysip::Size;
+        let screen_info = info.screen_info;
 
+        let Size { width, height } = screen_info.get_wloutput_size();
+        let output = screen_info.wl_output;
         let cast_thread = ScreencastThread::start_cast(
             show_cursor,
             width as u32,

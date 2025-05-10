@@ -3,7 +3,6 @@ mod remote_thread;
 mod state;
 
 use libwaysip::SelectionType;
-use libwaysip::state::WlOutputInfo;
 use remote_thread::RemoteControl;
 
 use std::collections::HashMap;
@@ -232,11 +231,13 @@ impl RemoteDesktopBackend {
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
         };
 
-        let WlOutputInfo {
-            output,
-            size: (width, height),
-            ..
-        } = info.screen_info.output_info;
+        use libwaysip::Size;
+        let screen_info = info.screen_info;
+
+        let Size { width, height } = screen_info.get_wloutput_size();
+
+        tracing::info!("{width}, {height}");
+        let output = screen_info.wl_output;
 
         let cast_thread = ScreencastThread::start_cast(
             show_cursor,
