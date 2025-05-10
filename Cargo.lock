@@ -817,6 +817,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "calloop-wayland-source"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "876a7a1dbbe026a55ef47a500b123af5a9a0914520f061d467914cf21be95daf"
+dependencies = [
+ "calloop 0.14.2",
+ "rustix 0.38.44",
+ "wayland-backend",
+ "wayland-client",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4921,7 +4933,7 @@ checksum = "3457dea1f0eb631b4034d61d4d8c32074caa6cd1ab2d59f2327bd8461e2c0016"
 dependencies = [
  "bitflags 2.9.0",
  "calloop 0.13.0",
- "calloop-wayland-source",
+ "calloop-wayland-source 0.3.0",
  "cursor-icon",
  "libc",
  "log",
@@ -6530,6 +6542,8 @@ dependencies = [
  "accessdialog",
  "anyhow",
  "bitflags 2.9.0",
+ "calloop 0.14.2",
+ "calloop-wayland-source 0.4.0",
  "csscolorparser",
  "enumflags2",
  "futures",

@@ -85,7 +85,12 @@ pub struct SelectDevicesOptions {
     pub persist_mode: Option<PersistMode>,
 }
 
-pub type RemoteSessionData = (String, ScreencastThread, RemoteControl);
+pub struct RemoteSessionData {
+    session_handle: String,
+    cast_thread: ScreencastThread,
+    remote_control: RemoteControl,
+}
+
 pub static REMOTE_SESSIONS: LazyLock<Arc<Mutex<Vec<RemoteSessionData>>>> =
     LazyLock::new(|| Arc::new(Mutex::new(Vec::new())));
 
@@ -98,13 +103,13 @@ pub async fn remove_remote_session(path: &str) {
     let mut sessions = REMOTE_SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
-        .position(|the_session| the_session.0 == path)
+        .position(|the_session| the_session.session_handle == path)
     else {
         return;
     };
-    sessions[index].1.stop();
-    sessions[index].2.stop();
-    tracing::info!("session {} is stopped", sessions[index].0);
+    sessions[index].cast_thread.stop();
+    sessions[index].remote_control.stop();
+    tracing::info!("session {} is stopped", sessions[index].session_handle);
     sessions.remove(index);
 }
 
@@ -200,17 +205,19 @@ impl RemoteDesktopBackend {
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         if let Some(session) = remote_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         {
             return Ok(PortalResponse::Success(RemoteStartReturnValue {
-                streams: vec![Stream(session.1.node_id(), StreamProperties::default())],
+                streams: vec![Stream(
+                    session.cast_thread.node_id(),
+                    StreamProperties::default(),
+                )],
                 devices: device_type,
                 ..Default::default()
             }));
         }
         drop(remote_sessions);
 
-        // TODO: use slurp now
         let show_cursor = current_session.cursor_mode.show_cursor();
         let connection = libwayshot::WayshotConnection::new().unwrap();
         let info = match libwaysip::get_area(
@@ -245,7 +252,12 @@ impl RemoteDesktopBackend {
         let remote_control = RemoteControl::init();
         let node_id = cast_thread.node_id();
 
-        append_remote_session((session_handle.to_string(), cast_thread, remote_control)).await;
+        append_remote_session(RemoteSessionData {
+            session_handle: session_handle.to_string(),
+            cast_thread,
+            remote_control,
+        })
+        .await;
 
         Ok(PortalResponse::Success(RemoteStartReturnValue {
             streams: vec![Stream(
@@ -273,11 +285,11 @@ impl RemoteDesktopBackend {
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         let Some(session) = remote_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         else {
             return Ok(());
         };
-        let remote_control = &session.2;
+        let remote_control = &session.remote_control;
         remote_control
             .sender
             .send(KeyOrPointerRequest::PointerMotion { dx, dy })
@@ -296,11 +308,11 @@ impl RemoteDesktopBackend {
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         let Some(session) = remote_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         else {
             return Ok(());
         };
-        let remote_control = &session.2;
+        let remote_control = &session.remote_control;
         remote_control
             .sender
             .send(KeyOrPointerRequest::PointerMotionAbsolute {
@@ -323,11 +335,11 @@ impl RemoteDesktopBackend {
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         let Some(session) = remote_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         else {
             return Ok(());
         };
-        let remote_control = &session.2;
+        let remote_control = &session.remote_control;
         remote_control
             .sender
             .send(KeyOrPointerRequest::PointerButton { button, state })
@@ -345,11 +357,11 @@ impl RemoteDesktopBackend {
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         let Some(session) = remote_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         else {
             return Ok(());
         };
-        let remote_control = &session.2;
+        let remote_control = &session.remote_control;
         remote_control
             .sender
             .send(KeyOrPointerRequest::PointerAxis { dx, dy })
@@ -367,11 +379,11 @@ impl RemoteDesktopBackend {
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         let Some(session) = remote_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         else {
             return Ok(());
         };
-        let remote_control = &session.2;
+        let remote_control = &session.remote_control;
         remote_control
             .sender
             .send(KeyOrPointerRequest::PointerAxisDiscrate { axis, steps })
@@ -389,11 +401,11 @@ impl RemoteDesktopBackend {
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         let Some(session) = remote_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         else {
             return Ok(());
         };
-        let remote_control = &session.2;
+        let remote_control = &session.remote_control;
         remote_control
             .sender
             .send(KeyOrPointerRequest::KeyboardKeycode { keycode, state })
@@ -411,11 +423,11 @@ impl RemoteDesktopBackend {
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         let Some(session) = remote_sessions
             .iter()
-            .find(|session| session.0 == session_handle.to_string())
+            .find(|session| session.session_handle == session_handle.to_string())
         else {
             return Ok(());
         };
-        let remote_control = &session.2;
+        let remote_control = &session.remote_control;
         remote_control
             .sender
             .send(KeyOrPointerRequest::KeyboardKeysym { keysym, state })
