@@ -2,6 +2,10 @@ slint::include_modules!();
 
 use std::sync::mpsc;
 
+thread_local! {
+    static GLOBAL_SELECT_UI : AppWindow = AppWindow::new().expect("Should can be inited");
+}
+
 fn init_slots(ui: &AppWindow, sender: mpsc::Sender<bool>) {
     let global = ConfirmSlots::get(ui);
     let send_confirm = sender.clone();
@@ -16,12 +20,13 @@ fn init_slots(ui: &AppWindow, sender: mpsc::Sender<bool>) {
 }
 
 pub fn confirmgui(title: String, information: String) -> bool {
-    let ui = AppWindow::new().unwrap();
-    ui.set_init_title(title.into());
-    ui.set_information(information.into());
-    let (sender, receiver) = mpsc::channel();
-    init_slots(&ui, sender);
-    receiver
-        .recv_timeout(std::time::Duration::from_nanos(300))
-        .unwrap_or_default()
+    GLOBAL_SELECT_UI.with(|ui| {
+        ui.set_init_title(title.into());
+        ui.set_information(information.into());
+        let (sender, receiver) = mpsc::channel();
+        init_slots(&ui, sender);
+        receiver
+            .recv_timeout(std::time::Duration::from_nanos(300))
+            .unwrap_or_default()
+    })
 }

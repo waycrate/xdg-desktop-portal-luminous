@@ -5,6 +5,10 @@ slint::include_modules!();
 
 use std::sync::mpsc;
 
+thread_local! {
+    static GLOBAL_SELECT_UI : AppWindow = AppWindow::new().expect("Should can be init");
+}
+
 #[derive(Debug)]
 pub enum SlintSelection {
     GlobalScreen { showcursor: bool },
@@ -33,14 +37,15 @@ fn init_slots(ui: &AppWindow, sender: mpsc::Sender<SlintSelection>) {
 }
 
 pub fn selectgui(screen: Vec<ScreenInfo>) -> SlintSelection {
-    let ui = AppWindow::new().unwrap();
-    ui.set_infos(Rc::new(VecModel::from(screen)).into());
-    let (sender, receiver) = mpsc::channel();
-    init_slots(&ui, sender);
-    ui.run().unwrap();
-    if let Ok(message) = receiver.recv_timeout(std::time::Duration::from_nanos(300)) {
-        message
-    } else {
-        SlintSelection::Canceled
-    }
+    GLOBAL_SELECT_UI.with(|ui| {
+        ui.set_infos(Rc::new(VecModel::from(screen)).into());
+        let (sender, receiver) = mpsc::channel();
+        init_slots(&ui, sender);
+        ui.run().unwrap();
+        if let Ok(message) = receiver.recv_timeout(std::time::Duration::from_nanos(300)) {
+            message
+        } else {
+            SlintSelection::Canceled
+        }
+    })
 }
