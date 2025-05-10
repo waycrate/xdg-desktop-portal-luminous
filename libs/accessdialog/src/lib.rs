@@ -24,7 +24,8 @@ pub fn confirmgui(title: String, information: String) -> bool {
         ui.set_init_title(title.into());
         ui.set_information(information.into());
         let (sender, receiver) = mpsc::channel();
-        init_slots(&ui, sender);
+        init_slots(ui, sender);
+        ui.run().expect("Cannot run the ui");
         receiver
             .recv_timeout(std::time::Duration::from_nanos(300))
             .unwrap_or_default()

@@ -40,8 +40,8 @@ pub fn selectgui(screen: Vec<ScreenInfo>) -> SlintSelection {
     GLOBAL_SELECT_UI.with(|ui| {
         ui.set_infos(Rc::new(VecModel::from(screen)).into());
         let (sender, receiver) = mpsc::channel();
-        init_slots(&ui, sender);
-        ui.run().unwrap();
+        init_slots(ui, sender);
+        ui.run().expect("Cannot run the ui");
         if let Ok(message) = receiver.recv_timeout(std::time::Duration::from_nanos(300)) {
             message
         } else {
