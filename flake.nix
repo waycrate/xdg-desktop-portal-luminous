@@ -23,7 +23,7 @@
           # rustPlatform.buildRustPackage is not used because we build with Meson+Ninja
           default = pkgs.stdenv.mkDerivation rec {
             pname = "xdg-desktop-portal-luminous";
-            version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
+            version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
 
             src = ./.;
 
