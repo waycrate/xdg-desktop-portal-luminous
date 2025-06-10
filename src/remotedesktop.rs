@@ -86,8 +86,24 @@ pub struct SelectDevicesOptions {
 
 pub struct RemoteSessionData {
     session_handle: String,
-    cast_thread: ScreencastThread,
+    cast_thread: Option<ScreencastThread>,
     remote_control: RemoteControl,
+}
+
+impl RemoteSessionData {
+    fn stop(&self) {
+        self.remote_control.stop();
+        if let Some(cast_thread) = &self.cast_thread {
+            cast_thread.stop();
+        }
+    }
+
+    fn streams(&self) -> Vec<Stream> {
+        let Some(cast_thread) = &self.cast_thread else {
+            return vec![];
+        };
+        vec![Stream(cast_thread.node_id(), StreamProperties::default())]
+    }
 }
 
 pub static REMOTE_SESSIONS: LazyLock<Arc<Mutex<Vec<RemoteSessionData>>>> =
@@ -106,8 +122,7 @@ pub async fn remove_remote_session(path: &str) {
     else {
         return;
     };
-    sessions[index].cast_thread.stop();
-    sessions[index].remote_control.stop();
+    sessions[index].stop();
     tracing::info!("session {} is stopped", sessions[index].session_handle);
     sessions.remove(index);
 }
@@ -207,10 +222,7 @@ impl RemoteDesktopBackend {
             .find(|session| session.session_handle == session_handle.to_string())
         {
             return Ok(PortalResponse::Success(RemoteStartReturnValue {
-                streams: vec![Stream(
-                    session.cast_thread.node_id(),
-                    StreamProperties::default(),
-                )],
+                streams: session.streams(),
                 devices: device_type,
                 ..Default::default()
             }));
@@ -218,40 +230,55 @@ impl RemoteDesktopBackend {
         drop(remote_sessions);
 
         let show_cursor = current_session.cursor_mode.show_cursor();
-        let connection = libwayshot::WayshotConnection::new().unwrap();
-        let info = match libwaysip::get_area(
-            Some(libwaysip::WaysipConnection {
-                connection: &connection.conn,
-                globals: &connection.globals,
-            }),
-            SelectionType::Screen,
-        ) {
-            Ok(Some(info)) => info,
-            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
-            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
-        };
+        let screen_share_enabled = current_session.screen_share_enabled;
+        let mut streams = vec![];
+        let mut cast_thread = None;
+        if screen_share_enabled {
+            let connection = libwayshot::WayshotConnection::new().unwrap();
+            let info = match libwaysip::get_area(
+                Some(libwaysip::WaysipConnection {
+                    connection: &connection.conn,
+                    globals: &connection.globals,
+                }),
+                SelectionType::Screen,
+            ) {
+                Ok(Some(info)) => info,
+                Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
+                Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
+            };
 
-        use libwaysip::Size;
-        let screen_info = info.screen_info;
+            use libwaysip::Size;
+            let screen_info = info.screen_info;
 
-        let Size { width, height } = screen_info.get_wloutput_size();
+            let Size { width, height } = screen_info.get_wloutput_size();
 
-        tracing::info!("{width}, {height}");
-        let output = screen_info.wl_output;
+            let output = screen_info.wl_output;
 
-        let cast_thread = ScreencastThread::start_cast(
-            show_cursor,
-            width as u32,
-            height as u32,
-            None,
-            output,
-            connection,
-        )
-        .await
-        .map_err(|e| zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}")))?;
+            let cast_thread_target = ScreencastThread::start_cast(
+                show_cursor,
+                width as u32,
+                height as u32,
+                None,
+                output,
+                connection,
+            )
+            .await
+            .map_err(|e| {
+                zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}"))
+            })?;
 
+            let node_id = cast_thread_target.node_id();
+            streams.push(Stream(
+                node_id,
+                StreamProperties {
+                    size: (width, height),
+                    source_type: SourceType::Monitor,
+                    ..Default::default()
+                },
+            ));
+            cast_thread = Some(cast_thread_target);
+        }
         let remote_control = RemoteControl::init();
-        let node_id = cast_thread.node_id();
 
         append_remote_session(RemoteSessionData {
             session_handle: session_handle.to_string(),
@@ -259,18 +286,10 @@ impl RemoteDesktopBackend {
             remote_control,
         })
         .await;
-
         Ok(PortalResponse::Success(RemoteStartReturnValue {
-            streams: vec![Stream(
-                node_id,
-                StreamProperties {
-                    size: (width, height),
-                    source_type: SourceType::Monitor,
-                    ..Default::default()
-                },
-            )],
+            streams,
             devices: device_type,
-            screen_share_enabled: true,
+            screen_share_enabled,
             ..Default::default()
         }))
     }

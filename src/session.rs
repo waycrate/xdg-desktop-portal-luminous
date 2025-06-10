@@ -115,6 +115,7 @@ pub struct Session {
     pub persist_mode: PersistMode,
 
     pub device_type: BitFlags<DeviceType>,
+    pub screen_share_enabled: bool,
 }
 
 impl Session {
@@ -127,9 +128,11 @@ impl Session {
             cursor_mode: CursorMode::Hidden,
             persist_mode: PersistMode::DoNot,
             device_type: DeviceType::Keyboard.into(),
+            screen_share_enabled: false,
         }
     }
     pub fn set_screencast_options(&mut self, options: SelectSourcesOptions) {
+        self.screen_share_enabled = true;
         if let Some(types) = options.types {
             self.source_type = types;
         }
