@@ -229,11 +229,11 @@ impl RemoteDesktopBackend {
         }
         drop(remote_sessions);
 
-        let show_cursor = current_session.cursor_mode.show_cursor();
         let screen_share_enabled = current_session.screen_share_enabled;
         let mut streams = vec![];
         let mut cast_thread = None;
         if screen_share_enabled {
+            let show_cursor = current_session.cursor_mode.show_cursor();
             let connection = libwayshot::WayshotConnection::new().unwrap();
             let info = match libwaysip::get_area(
                 Some(libwaysip::WaysipConnection {
