@@ -3,9 +3,11 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboar
 use wayland_client::{
     DispatchError,
     globals::{BindError, GlobalError},
-    protocol::wl_pointer,
+    protocol::{wl_keyboard::KeyState, wl_pointer},
 };
 use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1;
+
+use enumflags2::{BitFlag, BitFlags, bitflags};
 
 use thiserror::Error;
 // This struct represents the state of our app. This simple app does not
@@ -13,8 +15,8 @@ use thiserror::Error;
 #[derive(Debug)]
 pub struct AppData {
     pub(crate) virtual_keyboard: ZwpVirtualKeyboardV1,
-
     pub(crate) virtual_pointer: ZwlrVirtualPointerV1,
+    pub(crate) mods: u32,
 }
 
 impl AppData {
@@ -25,6 +27,7 @@ impl AppData {
         Self {
             virtual_keyboard,
             virtual_pointer,
+            mods: Modifiers::empty().bits(),
         }
     }
 }
@@ -48,7 +51,34 @@ pub enum KeyPointerError {
     BindFailed(#[from] BindError),
 }
 
+#[bitflags]
+#[derive(PartialEq, Eq, Copy, Clone)]
+#[repr(u32)]
+// Modifiers passed to the virtual_keyboard protocol. They are based on
+// wayland's wl_keyboard, which doesn't document them.
+enum Modifiers {
+    Shift = 1,
+    CapsLock = 2,
+    Ctrl = 4,
+    Alt = 8,
+    Super = 64,
+    AltGr = 128,
+}
+
 impl AppData {
+    // Keycode mappings as can be found in the file `/usr/include/linux/input-event-codes.h`.
+    fn get_modifier_from_keycode(&self, keycode: i32) -> Option<Modifiers> {
+        match keycode {
+            42 | 54 => Some(Modifiers::Shift), // left and right Shift
+            58 => Some(Modifiers::CapsLock),
+            29 | 97 => Some(Modifiers::Ctrl), // left and right Ctrl
+            56 => Some(Modifiers::Alt),
+            125 | 126 => Some(Modifiers::Super), // left and right Super
+            100 => Some(Modifiers::AltGr),
+            _ => None,
+        }
+    }
+
     pub fn notify_pointer_motion(&self, dx: f64, dy: f64) {
         self.virtual_pointer.motion(10, dx, dy);
     }
@@ -90,8 +120,28 @@ impl AppData {
         );
     }
 
-    pub fn notify_keyboard_keycode(&self, keycode: i32, state: u32) {
-        self.virtual_keyboard.key(100, keycode as u32, state);
+    pub fn notify_keyboard_keycode(&mut self, keycode: i32, state: u32) {
+        match self.get_modifier_from_keycode(keycode) {
+            // Caps lock is managed differently as it's the only
+            // modifier key that is still active after being released
+            Some(Modifiers::CapsLock) => {
+                if state == KeyState::Pressed.into() {
+                    self.mods ^= BitFlags::from_flag(Modifiers::CapsLock).bits();
+                    self.virtual_keyboard.modifiers(self.mods, 0, 0, 0)
+                }
+            }
+            // Other modifier keys
+            Some(modifier) => {
+                if state == KeyState::Pressed.into() {
+                    self.mods |= BitFlags::from_flag(modifier).bits()
+                } else {
+                    self.mods &= !BitFlags::from_flag(modifier).bits()
+                }
+                self.virtual_keyboard.modifiers(self.mods, 0, 0, 0)
+            }
+            // non-modifier key
+            _ => self.virtual_keyboard.key(100, keycode as u32, state),
+        }
     }
 
     pub fn notify_keyboard_keysym(&self, keysym: i32, state: u32) {
