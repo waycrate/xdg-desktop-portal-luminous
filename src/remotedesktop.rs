@@ -232,25 +232,25 @@ impl RemoteDesktopBackend {
         let screen_share_enabled = current_session.screen_share_enabled;
         let mut streams = vec![];
         let mut cast_thread = None;
+        let connection = libwayshot::WayshotConnection::new().unwrap();
+        let info = match libwaysip::get_area(
+            Some(libwaysip::WaysipConnection {
+                connection: &connection.conn,
+                globals: &connection.globals,
+            }),
+            SelectionType::Screen,
+        ) {
+            Ok(Some(info)) => info,
+            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
+            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
+        };
+
+        use libwaysip::Size;
+        let screen_info = info.screen_info;
+
+        let Size { width, height } = screen_info.get_wloutput_size();
         if screen_share_enabled {
             let show_cursor = current_session.cursor_mode.show_cursor();
-            let connection = libwayshot::WayshotConnection::new().unwrap();
-            let info = match libwaysip::get_area(
-                Some(libwaysip::WaysipConnection {
-                    connection: &connection.conn,
-                    globals: &connection.globals,
-                }),
-                SelectionType::Screen,
-            ) {
-                Ok(Some(info)) => info,
-                Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
-                Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
-            };
-
-            use libwaysip::Size;
-            let screen_info = info.screen_info;
-
-            let Size { width, height } = screen_info.get_wloutput_size();
 
             let output = screen_info.wl_output;
 
@@ -278,7 +278,7 @@ impl RemoteDesktopBackend {
             ));
             cast_thread = Some(cast_thread_target);
         }
-        let remote_control = RemoteControl::init();
+        let remote_control = RemoteControl::init(width as u32, height as u32);
 
         append_remote_session(RemoteSessionData {
             session_handle: session_handle.to_string(),
@@ -335,12 +335,7 @@ impl RemoteDesktopBackend {
         let remote_control = &session.remote_control;
         remote_control
             .sender
-            .send(KeyOrPointerRequest::PointerMotionAbsolute {
-                x,
-                y,
-                x_extent: 2000,
-                y_extent: 2000,
-            })
+            .send(KeyOrPointerRequest::PointerMotionAbsolute { x, y })
             .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
         Ok(())
     }

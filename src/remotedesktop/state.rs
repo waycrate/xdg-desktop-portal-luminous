@@ -17,17 +17,23 @@ pub struct AppData {
     pub(crate) virtual_keyboard: ZwpVirtualKeyboardV1,
     pub(crate) virtual_pointer: ZwlrVirtualPointerV1,
     pub(crate) mods: u32,
+    output_width: u32,
+    output_height: u32,
 }
 
 impl AppData {
     pub fn new(
         virtual_keyboard: ZwpVirtualKeyboardV1,
         virtual_pointer: ZwlrVirtualPointerV1,
+        output_width: u32,
+        output_height: u32,
     ) -> Self {
         Self {
             virtual_keyboard,
             virtual_pointer,
             mods: Modifiers::empty().bits(),
+            output_width,
+            output_height,
         }
     }
 }
@@ -83,9 +89,14 @@ impl AppData {
         self.virtual_pointer.motion(10, dx, dy);
     }
 
-    pub fn notify_pointer_motion_absolute(&self, x: f64, y: f64, x_extent: u32, y_extent: u32) {
-        self.virtual_pointer
-            .motion_absolute(10, x as u32, y as u32, x_extent, y_extent);
+    pub fn notify_pointer_motion_absolute(&self, x: f64, y: f64) {
+        self.virtual_pointer.motion_absolute(
+            10,
+            x as u32,
+            y as u32,
+            self.output_width,
+            self.output_height,
+        );
     }
 
     pub fn notify_pointer_button(&self, button: i32, state: u32) {

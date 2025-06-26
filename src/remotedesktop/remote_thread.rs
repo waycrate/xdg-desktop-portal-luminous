@@ -21,36 +21,13 @@ use calloop_wayland_source::WaylandSource;
 
 #[derive(Debug)]
 pub enum KeyOrPointerRequest {
-    PointerMotion {
-        dx: f64,
-        dy: f64,
-    },
-    PointerMotionAbsolute {
-        x: f64,
-        y: f64,
-        x_extent: u32,
-        y_extent: u32,
-    },
-    PointerButton {
-        button: i32,
-        state: u32,
-    },
-    PointerAxis {
-        dx: f64,
-        dy: f64,
-    },
-    PointerAxisDiscrate {
-        axis: u32,
-        steps: i32,
-    },
-    KeyboardKeycode {
-        keycode: i32,
-        state: u32,
-    },
-    KeyboardKeysym {
-        keysym: i32,
-        state: u32,
-    },
+    PointerMotion { dx: f64, dy: f64 },
+    PointerMotionAbsolute { x: f64, y: f64 },
+    PointerButton { button: i32, state: u32 },
+    PointerAxis { dx: f64, dy: f64 },
+    PointerAxisDiscrate { axis: u32, steps: i32 },
+    KeyboardKeycode { keycode: i32, state: u32 },
+    KeyboardKeysym { keysym: i32, state: u32 },
     Exit,
 }
 
@@ -60,10 +37,10 @@ pub struct RemoteControl {
 }
 
 impl RemoteControl {
-    pub fn init() -> Self {
+    pub fn init(output_width: u32, output_height: u32) -> Self {
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
-            let _ = remote_loop(receiver);
+            let _ = remote_loop(receiver, output_width, output_height);
         });
         Self { sender }
     }
@@ -73,7 +50,11 @@ impl RemoteControl {
     }
 }
 
-pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPointerError> {
+pub fn remote_loop(
+    receiver: Receiver<KeyOrPointerRequest>,
+    output_width: u32,
+    output_height: u32,
+) -> Result<(), KeyPointerError> {
     // Create a Wayland connection by connecting to the server through the
     // environment-provided configuration.
     let conn = Connection::connect_to_env().map_err(|_| {
@@ -138,7 +119,7 @@ pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPoi
 
     // At this point everything is ready, and we just need to wait to receive the events
     // from the wl_registry, our callback will print the advertized globals.
-    let mut data = AppData::new(virtual_keyboard, pointer);
+    let mut data = AppData::new(virtual_keyboard, pointer, output_width, output_height);
 
     let signal = event_loop.get_signal();
     event_loop
@@ -161,12 +142,9 @@ pub fn remote_loop(receiver: Receiver<KeyOrPointerRequest>) -> Result<(), KeyPoi
                         KeyOrPointerRequest::PointerMotion { dx, dy } => {
                             data.notify_pointer_motion(dx, dy)
                         }
-                        KeyOrPointerRequest::PointerMotionAbsolute {
-                            x,
-                            y,
-                            x_extent,
-                            y_extent,
-                        } => data.notify_pointer_motion_absolute(x, y, x_extent, y_extent),
+                        KeyOrPointerRequest::PointerMotionAbsolute { x, y } => {
+                            data.notify_pointer_motion_absolute(x, y)
+                        }
                         KeyOrPointerRequest::PointerButton { button, state } => {
                             data.notify_pointer_button(button, state)
                         }
