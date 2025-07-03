@@ -132,18 +132,19 @@ impl AppData {
     }
 
     pub fn notify_keyboard_keycode(&mut self, keycode: i32, state: u32) {
+        let pressed_key: u32 = KeyState::Pressed.into();
         match self.get_modifier_from_keycode(keycode) {
             // Caps lock is managed differently as it's the only
             // modifier key that is still active after being released
             Some(Modifiers::CapsLock) => {
-                if state == KeyState::Pressed.into() {
+                if state == pressed_key {
                     self.mods ^= BitFlags::from_flag(Modifiers::CapsLock).bits();
                     self.virtual_keyboard.modifiers(self.mods, 0, 0, 0)
                 }
             }
             // Other modifier keys
             Some(modifier) => {
-                if state == KeyState::Pressed.into() {
+                if state == pressed_key {
                     self.mods |= BitFlags::from_flag(modifier).bits()
                 } else {
                     self.mods &= !BitFlags::from_flag(modifier).bits()
