@@ -127,7 +127,7 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                 )
                 .await;
             }
-            Err(e) => println!("watch error: {:?}", e),
+            Err(e) => println!("watch error: {e:?}"),
             _ => {}
         }
     }
