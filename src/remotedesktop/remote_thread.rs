@@ -66,7 +66,7 @@ pub fn remote_loop(
     // be created.
     let display = conn.display();
 
-    let (globals, event_queue) = registry_queue_init::<AppData>(&conn)?; // We just need the
+    let (globals, mut event_queue) = registry_queue_init::<AppData>(&conn)?; // We just need the
 
     let qh = event_queue.handle();
     let seat = globals.bind::<WlSeat, _, _>(&qh, 7..=9, ())?;
@@ -88,6 +88,10 @@ pub fn remote_loop(
     // wl_registry will be assigned to, and the user-data that should be associated
     // with this registry (here it is () as we don't need user-data).
     let _registry = display.get_registry(&qh, ());
+    let keyboard = seat.get_keyboard(&qh, ());
+    let mut data = AppData::new(virtual_keyboard, pointer, output_width, output_height);
+    let _ = event_queue.roundtrip(&mut data);
+    keyboard.release();
 
     let mut event_loop: EventLoop<AppData> =
         EventLoop::try_new().expect("Failed to initialize the event loop");
@@ -119,7 +123,6 @@ pub fn remote_loop(
 
     // At this point everything is ready, and we just need to wait to receive the events
     // from the wl_registry, our callback will print the advertized globals.
-    let mut data = AppData::new(virtual_keyboard, pointer, output_width, output_height);
 
     let signal = event_loop.get_signal();
     event_loop

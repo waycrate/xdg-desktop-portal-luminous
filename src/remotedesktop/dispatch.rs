@@ -2,14 +2,14 @@ use super::state::AppData;
 use wayland_client::{
     Connection, Dispatch, Proxy, QueueHandle, delegate_noop,
     globals::GlobalListContents,
-    protocol::{wl_registry, wl_seat::WlSeat, wl_shm::WlShm},
+    protocol::{wl_keyboard, wl_registry, wl_seat::WlSeat, wl_shm::WlShm},
 };
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
     zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
 };
 
-use std::{ffi::CString, fs::File, io::Write, path::PathBuf};
+use std::{ffi::CString, fs::File, io::Write, os::fd::AsFd, path::PathBuf};
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
     zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1,
     zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1,
@@ -53,6 +53,28 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for AppData {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
+    }
+}
+
+impl Dispatch<wl_keyboard::WlKeyboard, ()> for AppData {
+    fn event(
+        state: &mut Self,
+        _proxy: &wl_keyboard::WlKeyboard,
+        event: <wl_keyboard::WlKeyboard as Proxy>::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qhandle: &QueueHandle<Self>,
+    ) {
+        if let wl_keyboard::Event::Keymap { format, fd, size } = event {
+            match format.into_result() {
+                Ok(wl_keyboard::KeymapFormat::XkbV1) => state.virtual_keyboard.keymap(
+                    wl_keyboard::KeymapFormat::XkbV1.into(),
+                    fd.as_fd(),
+                    size,
+                ),
+                _ => tracing::error!("Cannot obtain valid keymap format from keymap event"),
+            }
+        }
     }
 }
 
