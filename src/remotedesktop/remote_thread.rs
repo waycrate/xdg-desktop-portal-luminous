@@ -5,6 +5,8 @@ use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1;
 use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1;
 
+use crate::remotedesktop::dispatch::init_xkb_objects;
+
 use super::dispatch::get_keymap_as_file;
 use super::state::AppData;
 use super::state::KeyPointerError;
@@ -74,7 +76,8 @@ pub fn remote_loop(
         globals.bind::<ZwpVirtualKeyboardManagerV1, _, _>(&qh, 1..=1, ())?;
 
     let virtual_keyboard = virtual_keyboard_manager.create_virtual_keyboard(&seat, &qh, ());
-    let (file, size) = get_keymap_as_file();
+    let (xkb_context, xkb_keymap, xkb_state) = init_xkb_objects();
+    let (file, size) = get_keymap_as_file(&xkb_state);
     virtual_keyboard.keymap(wl_keyboard::KeymapFormat::XkbV1.into(), file.as_fd(), size);
 
     let virtual_pointer_manager =
@@ -89,7 +92,15 @@ pub fn remote_loop(
     // with this registry (here it is () as we don't need user-data).
     let _registry = display.get_registry(&qh, ());
     let keyboard = seat.get_keyboard(&qh, ());
-    let mut data = AppData::new(virtual_keyboard, pointer, output_width, output_height);
+    let mut data = AppData::new(
+        virtual_keyboard,
+        pointer,
+        xkb_context,
+        xkb_keymap,
+        xkb_state,
+        output_width,
+        output_height,
+    );
     let _ = event_queue.roundtrip(&mut data);
     keyboard.release();
 

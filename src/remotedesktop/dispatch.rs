@@ -14,25 +14,20 @@ use wayland_protocols_wlr::virtual_pointer::v1::client::{
     zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1,
     zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1,
 };
-use xkbcommon::xkb;
+use xkbcommon::xkb::{
+    CONTEXT_NO_FLAGS, Context, KEYMAP_COMPILE_NO_FLAGS, KEYMAP_FORMAT_TEXT_V1, Keymap, State,
+};
 
-pub fn get_keymap_as_file() -> (File, u32) {
-    let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+pub fn init_xkb_objects() -> (Context, Keymap, State) {
+    let context = Context::new(CONTEXT_NO_FLAGS);
+    let keymap = Keymap::new_from_names(&context, "", "", "us", "", None, KEYMAP_COMPILE_NO_FLAGS)
+        .expect("xkbcommon keymap panicked!");
+    let state = State::new(&keymap);
+    (context, keymap, state)
+}
 
-    let keymap = xkb::Keymap::new_from_names(
-        &context,
-        "",
-        "",
-        "us",
-        "",
-        None,
-        xkb::KEYMAP_COMPILE_NO_FLAGS,
-    )
-    .expect("xkbcommon keymap panicked!");
-    let xkb_state = xkb::State::new(&keymap);
-    let keymap = xkb_state
-        .get_keymap()
-        .get_as_string(xkb::KEYMAP_FORMAT_TEXT_V1);
+pub fn get_keymap_as_file(state: &State) -> (File, u32) {
+    let keymap = state.get_keymap().get_as_string(KEYMAP_FORMAT_TEXT_V1);
     let keymap = CString::new(keymap).expect("Keymap should not contain interior nul bytes");
     let keymap = keymap.as_bytes_with_nul();
     let dir = std::env::var_os("XDG_RUNTIME_DIR")

@@ -8,15 +8,17 @@ use wayland_client::{
 use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1;
 
 use enumflags2::{BitFlag, BitFlags, bitflags};
-
 use thiserror::Error;
+use xkbcommon::xkb::{Context, Keymap, State};
 // This struct represents the state of our app. This simple app does not
 // need any state, by this type still supports the `Dispatch` implementations.
-#[derive(Debug)]
 pub struct AppData {
     pub(crate) virtual_keyboard: ZwpVirtualKeyboardV1,
     pub(crate) virtual_pointer: ZwlrVirtualPointerV1,
     pub(crate) mods: u32,
+    pub(crate) xkb_context: Context,
+    pub(crate) xkb_keymap: Keymap,
+    pub(crate) xkb_state: State,
     output_width: u32,
     output_height: u32,
 }
@@ -25,6 +27,9 @@ impl AppData {
     pub fn new(
         virtual_keyboard: ZwpVirtualKeyboardV1,
         virtual_pointer: ZwlrVirtualPointerV1,
+        xkb_context: Context,
+        xkb_keymap: Keymap,
+        xkb_state: State,
         output_width: u32,
         output_height: u32,
     ) -> Self {
@@ -32,6 +37,9 @@ impl AppData {
             virtual_keyboard,
             virtual_pointer,
             mods: Modifiers::empty().bits(),
+            xkb_context,
+            xkb_keymap,
+            xkb_state,
             output_width,
             output_height,
         }
