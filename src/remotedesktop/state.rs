@@ -8,15 +8,20 @@ use wayland_client::{
 use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1;
 
 use enumflags2::{BitFlag, BitFlags, bitflags};
-
 use thiserror::Error;
+use xkbcommon::xkb::{Context, Keycode, Keymap, Keysym, STATE_LAYOUT_EFFECTIVE, State};
+
+const LEFT_SHIFT: i32 = 42;
+const ALTGR: i32 = 100;
 // This struct represents the state of our app. This simple app does not
 // need any state, by this type still supports the `Dispatch` implementations.
-#[derive(Debug)]
 pub struct AppData {
     pub(crate) virtual_keyboard: ZwpVirtualKeyboardV1,
     pub(crate) virtual_pointer: ZwlrVirtualPointerV1,
     pub(crate) mods: u32,
+    pub(crate) xkb_context: Context,
+    pub(crate) xkb_keymap: Keymap,
+    pub(crate) xkb_state: State,
     output_width: u32,
     output_height: u32,
 }
@@ -25,6 +30,9 @@ impl AppData {
     pub fn new(
         virtual_keyboard: ZwpVirtualKeyboardV1,
         virtual_pointer: ZwlrVirtualPointerV1,
+        xkb_context: Context,
+        xkb_keymap: Keymap,
+        xkb_state: State,
         output_width: u32,
         output_height: u32,
     ) -> Self {
@@ -32,6 +40,9 @@ impl AppData {
             virtual_keyboard,
             virtual_pointer,
             mods: Modifiers::empty().bits(),
+            xkb_context,
+            xkb_keymap,
+            xkb_state,
             output_width,
             output_height,
         }
@@ -75,14 +86,34 @@ impl AppData {
     // Keycode mappings as can be found in the file `/usr/include/linux/input-event-codes.h`.
     fn get_modifier_from_keycode(&self, keycode: i32) -> Option<Modifiers> {
         match keycode {
-            42 | 54 => Some(Modifiers::Shift), // left and right Shift
+            LEFT_SHIFT | 54 => Some(Modifiers::Shift), // left and right Shift
             58 => Some(Modifiers::CapsLock),
             29 | 97 => Some(Modifiers::Ctrl), // left and right Ctrl
             56 => Some(Modifiers::Alt),
             125 | 126 => Some(Modifiers::Super), // left and right Super
-            100 => Some(Modifiers::AltGr),
+            ALTGR => Some(Modifiers::AltGr),
             _ => None,
         }
+    }
+
+    fn get_keycode_from_keysym(&self, keysym: Keysym) -> Option<(u32, u32)> {
+        const EVDEV_OFFSET: u32 = 8;
+        let layout = self.xkb_state.serialize_layout(STATE_LAYOUT_EFFECTIVE);
+        let max_keycode = self.xkb_keymap.max_keycode();
+        for keycode in (self.xkb_keymap.min_keycode().raw()..max_keycode.raw()).map(Keycode::new) {
+            let n_levels = self.xkb_keymap.num_levels_for_key(keycode, layout);
+            for level in 0..n_levels {
+                let syms = self
+                    .xkb_keymap
+                    .key_get_syms_by_level(keycode, layout, level);
+                for sym in syms {
+                    if *sym == keysym {
+                        return Some((u32::from(keycode) - EVDEV_OFFSET, level));
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn notify_pointer_motion(&self, dx: f64, dy: f64) {
@@ -156,7 +187,20 @@ impl AppData {
         }
     }
 
-    pub fn notify_keyboard_keysym(&self, keysym: i32, state: u32) {
-        self.virtual_keyboard.key(100, keysym as u32, state);
+    pub fn notify_keyboard_keysym(&mut self, keysym: i32, state: u32) {
+        if let Some((keycode, level)) = self.get_keycode_from_keysym(Keysym::new(keysym as u32)) {
+            match level {
+                0 => {}
+                1 => self.notify_keyboard_keycode(LEFT_SHIFT, state),
+                2 => self.notify_keyboard_keycode(ALTGR, state),
+                _ => tracing::warn!(
+                    "Received unsupported key level during keysym conversion: {}",
+                    level
+                ),
+            }
+            self.notify_keyboard_keycode(keycode as i32, state);
+        } else {
+            tracing::warn!("Could not find keycode for keysym: {}", keysym);
+        }
     }
 }
