@@ -62,11 +62,27 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for AppData {
     ) {
         if let wl_keyboard::Event::Keymap { format, fd, size } = event {
             match format.into_result() {
-                Ok(wl_keyboard::KeymapFormat::XkbV1) => state.virtual_keyboard.keymap(
-                    wl_keyboard::KeymapFormat::XkbV1.into(),
-                    fd.as_fd(),
-                    size,
-                ),
+                Ok(wl_keyboard::KeymapFormat::XkbV1) => {
+                    state.virtual_keyboard.keymap(
+                        wl_keyboard::KeymapFormat::XkbV1.into(),
+                        fd.as_fd(),
+                        size,
+                    );
+                    if let Some(xkb_keymap) = unsafe {
+                        Keymap::new_from_fd(
+                            &state.xkb_context,
+                            fd,
+                            size as usize,
+                            wl_keyboard::KeymapFormat::XkbV1.into(),
+                            KEYMAP_COMPILE_NO_FLAGS,
+                        )
+                    }
+                    .expect("Failed to create XKB keymap from file descriptor")
+                    {
+                        state.xkb_state = State::new(&xkb_keymap);
+                        state.xkb_keymap = xkb_keymap;
+                    }
+                }
                 _ => tracing::error!("Cannot obtain valid keymap format from keymap event"),
             }
         }
