@@ -26,7 +26,7 @@ slint-build = "1.11.0"
 screenshotdialog.workspace = true
 accessdialog.workspace = true
 
-zbus = { version = "5.8", default-features = false, features = [
+zbus = { version = "5.9", default-features = false, features = [
 	"tokio",
 	"url",
 ] }
