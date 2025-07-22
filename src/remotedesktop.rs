@@ -127,6 +127,25 @@ pub async fn remove_remote_session(path: &str) {
     sessions.remove(index);
 }
 
+async fn notify_input_event(
+    session_handle: ObjectPath<'_>,
+    event: InputRequest,
+) -> zbus::fdo::Result<()> {
+    let remote_sessions = REMOTE_SESSIONS.lock().await;
+    let Some(session) = remote_sessions
+        .iter()
+        .find(|session| session.session_handle == session_handle.to_string())
+    else {
+        return Ok(());
+    };
+    let remote_control = &session.remote_control;
+    remote_control
+        .sender
+        .send(event)
+        .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+    Ok(())
+}
+
 pub struct RemoteDesktopBackend;
 
 #[interface(name = "org.freedesktop.impl.portal.RemoteDesktop")]
@@ -302,19 +321,7 @@ impl RemoteDesktopBackend {
         dx: f64,
         dy: f64,
     ) -> zbus::fdo::Result<()> {
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
-        let Some(session) = remote_sessions
-            .iter()
-            .find(|session| session.session_handle == session_handle.to_string())
-        else {
-            return Ok(());
-        };
-        let remote_control = &session.remote_control;
-        remote_control
-            .sender
-            .send(InputRequest::PointerMotion { dx, dy })
-            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
-        Ok(())
+        notify_input_event(session_handle, InputRequest::PointerMotion { dx, dy }).await
     }
 
     async fn notify_pointer_motion_absolute(
@@ -325,19 +332,7 @@ impl RemoteDesktopBackend {
         x: f64,
         y: f64,
     ) -> zbus::fdo::Result<()> {
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
-        let Some(session) = remote_sessions
-            .iter()
-            .find(|session| session.session_handle == session_handle.to_string())
-        else {
-            return Ok(());
-        };
-        let remote_control = &session.remote_control;
-        remote_control
-            .sender
-            .send(InputRequest::PointerMotionAbsolute { x, y })
-            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
-        Ok(())
+        notify_input_event(session_handle, InputRequest::PointerMotionAbsolute { x, y }).await
     }
 
     async fn notify_pointer_button(
@@ -347,19 +342,11 @@ impl RemoteDesktopBackend {
         button: i32,
         state: u32,
     ) -> zbus::fdo::Result<()> {
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
-        let Some(session) = remote_sessions
-            .iter()
-            .find(|session| session.session_handle == session_handle.to_string())
-        else {
-            return Ok(());
-        };
-        let remote_control = &session.remote_control;
-        remote_control
-            .sender
-            .send(InputRequest::PointerButton { button, state })
-            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
-        Ok(())
+        notify_input_event(
+            session_handle,
+            InputRequest::PointerButton { button, state },
+        )
+        .await
     }
 
     async fn notify_pointer_axis(
@@ -369,19 +356,7 @@ impl RemoteDesktopBackend {
         dx: f64,
         dy: f64,
     ) -> zbus::fdo::Result<()> {
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
-        let Some(session) = remote_sessions
-            .iter()
-            .find(|session| session.session_handle == session_handle.to_string())
-        else {
-            return Ok(());
-        };
-        let remote_control = &session.remote_control;
-        remote_control
-            .sender
-            .send(InputRequest::PointerAxis { dx, dy })
-            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
-        Ok(())
+        notify_input_event(session_handle, InputRequest::PointerAxis { dx, dy }).await
     }
 
     async fn notify_pointer_axis_discrate(
@@ -391,19 +366,11 @@ impl RemoteDesktopBackend {
         axis: u32,
         steps: i32,
     ) -> zbus::fdo::Result<()> {
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
-        let Some(session) = remote_sessions
-            .iter()
-            .find(|session| session.session_handle == session_handle.to_string())
-        else {
-            return Ok(());
-        };
-        let remote_control = &session.remote_control;
-        remote_control
-            .sender
-            .send(InputRequest::PointerAxisDiscrate { axis, steps })
-            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
-        Ok(())
+        notify_input_event(
+            session_handle,
+            InputRequest::PointerAxisDiscrate { axis, steps },
+        )
+        .await
     }
 
     async fn notify_keyboard_keycode(
@@ -413,19 +380,11 @@ impl RemoteDesktopBackend {
         keycode: i32,
         state: u32,
     ) -> zbus::fdo::Result<()> {
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
-        let Some(session) = remote_sessions
-            .iter()
-            .find(|session| session.session_handle == session_handle.to_string())
-        else {
-            return Ok(());
-        };
-        let remote_control = &session.remote_control;
-        remote_control
-            .sender
-            .send(InputRequest::KeyboardKeycode { keycode, state })
-            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
-        Ok(())
+        notify_input_event(
+            session_handle,
+            InputRequest::KeyboardKeycode { keycode, state },
+        )
+        .await
     }
 
     async fn notify_keyboard_keysym(
@@ -435,18 +394,10 @@ impl RemoteDesktopBackend {
         keysym: i32,
         state: u32,
     ) -> zbus::fdo::Result<()> {
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
-        let Some(session) = remote_sessions
-            .iter()
-            .find(|session| session.session_handle == session_handle.to_string())
-        else {
-            return Ok(());
-        };
-        let remote_control = &session.remote_control;
-        remote_control
-            .sender
-            .send(InputRequest::KeyboardKeysym { keysym, state })
-            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
-        Ok(())
+        notify_input_event(
+            session_handle,
+            InputRequest::KeyboardKeysym { keysym, state },
+        )
+        .await
     }
 }
