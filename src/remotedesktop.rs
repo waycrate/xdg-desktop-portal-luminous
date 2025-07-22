@@ -28,7 +28,7 @@ use crate::session::{
 
 use crate::PortalResponse;
 
-use self::remote_thread::KeyOrPointerRequest;
+use self::remote_thread::InputRequest;
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -312,7 +312,7 @@ impl RemoteDesktopBackend {
         let remote_control = &session.remote_control;
         remote_control
             .sender
-            .send(KeyOrPointerRequest::PointerMotion { dx, dy })
+            .send(InputRequest::PointerMotion { dx, dy })
             .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
         Ok(())
     }
@@ -335,7 +335,7 @@ impl RemoteDesktopBackend {
         let remote_control = &session.remote_control;
         remote_control
             .sender
-            .send(KeyOrPointerRequest::PointerMotionAbsolute { x, y })
+            .send(InputRequest::PointerMotionAbsolute { x, y })
             .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
         Ok(())
     }
@@ -357,7 +357,7 @@ impl RemoteDesktopBackend {
         let remote_control = &session.remote_control;
         remote_control
             .sender
-            .send(KeyOrPointerRequest::PointerButton { button, state })
+            .send(InputRequest::PointerButton { button, state })
             .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
         Ok(())
     }
@@ -379,7 +379,7 @@ impl RemoteDesktopBackend {
         let remote_control = &session.remote_control;
         remote_control
             .sender
-            .send(KeyOrPointerRequest::PointerAxis { dx, dy })
+            .send(InputRequest::PointerAxis { dx, dy })
             .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
         Ok(())
     }
@@ -401,7 +401,7 @@ impl RemoteDesktopBackend {
         let remote_control = &session.remote_control;
         remote_control
             .sender
-            .send(KeyOrPointerRequest::PointerAxisDiscrate { axis, steps })
+            .send(InputRequest::PointerAxisDiscrate { axis, steps })
             .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
         Ok(())
     }
@@ -423,7 +423,7 @@ impl RemoteDesktopBackend {
         let remote_control = &session.remote_control;
         remote_control
             .sender
-            .send(KeyOrPointerRequest::KeyboardKeycode { keycode, state })
+            .send(InputRequest::KeyboardKeycode { keycode, state })
             .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
         Ok(())
     }
@@ -445,7 +445,7 @@ impl RemoteDesktopBackend {
         let remote_control = &session.remote_control;
         remote_control
             .sender
-            .send(KeyOrPointerRequest::KeyboardKeysym { keysym, state })
+            .send(InputRequest::KeyboardKeysym { keysym, state })
             .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
         Ok(())
     }
