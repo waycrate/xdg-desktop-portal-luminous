@@ -400,4 +400,37 @@ impl RemoteDesktopBackend {
         )
         .await
     }
+
+    async fn notify_touch_down(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        _stream: u32,
+        slot: u32,
+        x: f64,
+        y: f64,
+    ) -> zbus::fdo::Result<()> {
+        notify_input_event(session_handle, InputRequest::TouchDown { slot, x, y }).await
+    }
+
+    async fn notify_touch_motion(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        _stream: u32,
+        slot: u32,
+        x: f64,
+        y: f64,
+    ) -> zbus::fdo::Result<()> {
+        notify_input_event(session_handle, InputRequest::TouchMotion { slot, x, y }).await
+    }
+
+    async fn notify_touch_up(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        slot: u32,
+    ) -> zbus::fdo::Result<()> {
+        notify_input_event(session_handle, InputRequest::TouchUp { slot }).await
+    }
 }
