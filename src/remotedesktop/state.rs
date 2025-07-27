@@ -203,4 +203,16 @@ impl AppData {
             tracing::warn!("Could not find keycode for keysym: {}", keysym);
         }
     }
+
+    pub fn notify_touch_down(&mut self, _slot: u32, _x: f64, _y: f64) {
+        tracing::debug!("NotifyTouchDown: touch events are currently unsupported");
+    }
+
+    pub fn notify_touch_motion(&mut self, _slot: u32, _x: f64, _y: f64) {
+        tracing::debug!("NotifyTouchMotion: touch events are currently unsupported");
+    }
+
+    pub fn notify_touch_up(&mut self, _slot: u32) {
+        tracing::debug!("NotifyTouchUp: touch events are currently unsupported");
+    }
 }

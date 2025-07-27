@@ -22,7 +22,7 @@ use calloop::EventLoop;
 use calloop_wayland_source::WaylandSource;
 
 #[derive(Debug)]
-pub enum KeyOrPointerRequest {
+pub enum InputRequest {
     PointerMotion { dx: f64, dy: f64 },
     PointerMotionAbsolute { x: f64, y: f64 },
     PointerButton { button: i32, state: u32 },
@@ -30,12 +30,15 @@ pub enum KeyOrPointerRequest {
     PointerAxisDiscrate { axis: u32, steps: i32 },
     KeyboardKeycode { keycode: i32, state: u32 },
     KeyboardKeysym { keysym: i32, state: u32 },
+    TouchMotion { slot: u32, x: f64, y: f64 },
+    TouchDown { slot: u32, x: f64, y: f64 },
+    TouchUp { slot: u32 },
     Exit,
 }
 
 #[derive(Debug)]
 pub struct RemoteControl {
-    pub sender: Sender<KeyOrPointerRequest>,
+    pub sender: Sender<InputRequest>,
 }
 
 impl RemoteControl {
@@ -48,12 +51,12 @@ impl RemoteControl {
     }
 
     pub fn stop(&self) {
-        let _ = self.sender.send(KeyOrPointerRequest::Exit);
+        let _ = self.sender.send(InputRequest::Exit);
     }
 }
 
 pub fn remote_loop(
-    receiver: Receiver<KeyOrPointerRequest>,
+    receiver: Receiver<InputRequest>,
     output_width: u32,
     output_height: u32,
 ) -> Result<(), KeyPointerError> {
@@ -113,7 +116,7 @@ pub fn remote_loop(
 
     let to_exit = Arc::new(AtomicBool::new(false));
 
-    let events: Arc<Mutex<Vec<KeyOrPointerRequest>>> = Arc::new(Mutex::new(Vec::new()));
+    let events: Arc<Mutex<Vec<InputRequest>>> = Arc::new(Mutex::new(Vec::new()));
 
     let to_exit2 = to_exit.clone();
     let to_exit3 = to_exit.clone();
@@ -153,28 +156,35 @@ pub fn remote_loop(
                 drop(local_events);
                 for message in swapped_events {
                     match message {
-                        KeyOrPointerRequest::PointerMotion { dx, dy } => {
+                        InputRequest::PointerMotion { dx, dy } => {
                             data.notify_pointer_motion(dx, dy)
                         }
-                        KeyOrPointerRequest::PointerMotionAbsolute { x, y } => {
+                        InputRequest::PointerMotionAbsolute { x, y } => {
                             data.notify_pointer_motion_absolute(x, y)
                         }
-                        KeyOrPointerRequest::PointerButton { button, state } => {
+                        InputRequest::PointerButton { button, state } => {
                             data.notify_pointer_button(button, state)
                         }
-                        KeyOrPointerRequest::PointerAxis { dx, dy } => {
-                            data.notify_pointer_axis(dx, dy)
-                        }
-                        KeyOrPointerRequest::PointerAxisDiscrate { axis, steps } => {
+                        InputRequest::PointerAxis { dx, dy } => data.notify_pointer_axis(dx, dy),
+                        InputRequest::PointerAxisDiscrate { axis, steps } => {
                             data.notify_pointer_axis_discrete(axis, steps)
                         }
-                        KeyOrPointerRequest::KeyboardKeycode { keycode, state } => {
+                        InputRequest::KeyboardKeycode { keycode, state } => {
                             data.notify_keyboard_keycode(keycode, state)
                         }
-                        KeyOrPointerRequest::KeyboardKeysym { keysym, state } => {
+                        InputRequest::KeyboardKeysym { keysym, state } => {
                             data.notify_keyboard_keysym(keysym, state)
                         }
-                        KeyOrPointerRequest::Exit => {
+                        InputRequest::TouchDown { slot, x, y } => {
+                            data.notify_touch_down(slot, x, y);
+                        }
+                        InputRequest::TouchMotion { slot, x, y } => {
+                            data.notify_touch_motion(slot, x, y);
+                        }
+                        InputRequest::TouchUp { slot } => {
+                            data.notify_touch_up(slot);
+                        }
+                        InputRequest::Exit => {
                             signal.stop();
                             break;
                         }
