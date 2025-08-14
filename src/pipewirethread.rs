@@ -266,7 +266,7 @@ fn buffers2(width: u32, height: u32) -> Vec<u8> {
 }
 
 fn format(width: u32, height: u32) -> Vec<u8> {
-    value_to_bytes(pod::Value::Object(spa::pod::object!(
+    let mut obj = spa::pod::object!(
         spa::utils::SpaTypes::ObjectParamFormat,
         spa::param::ParamType::EnumFormat,
         spa::pod::property!(
@@ -278,17 +278,6 @@ fn format(width: u32, height: u32) -> Vec<u8> {
             spa::param::format::FormatProperties::MediaSubtype,
             Id,
             spa::param::format::MediaSubtype::Raw
-        ),
-        spa::pod::property!(
-            spa::param::format::FormatProperties::VideoFormat,
-            Choice,
-            Enum,
-            Id,
-            spa::param::video::VideoFormat::RGBA,
-            spa::param::video::VideoFormat::RGBx,
-            spa::param::video::VideoFormat::RGB8P,
-            spa::param::video::VideoFormat::BGR,
-            spa::param::video::VideoFormat::YUY2,
         ),
         // XXX modifiers
         spa::pod::property!(
@@ -310,5 +299,31 @@ fn format(width: u32, height: u32) -> Vec<u8> {
             spa::utils::Fraction { num: 60, denom: 1 }
         ),
         // TODO max framerate
-    )))
+    );
+    let video_formats = vec![
+        spa::param::video::VideoFormat::RGBA,
+        spa::param::video::VideoFormat::RGBx,
+        spa::param::video::VideoFormat::RGB8P,
+        spa::param::video::VideoFormat::BGR,
+        spa::param::video::VideoFormat::YUY2,
+    ];
+
+    let format_choice =
+        pod::Value::Choice(pod::ChoiceValue::Id(spa::utils::Choice::<spa::utils::Id>(
+            spa::utils::ChoiceFlags::empty(),
+            spa::utils::ChoiceEnum::<spa::utils::Id>::Enum {
+                default: spa::utils::Id(video_formats[0].as_raw()),
+                alternatives: video_formats
+                    .iter()
+                    .map(|f| spa::utils::Id(f.as_raw()))
+                    .collect(),
+            },
+        )));
+
+    obj.properties.push(pod::Property {
+        key: spa::param::format::FormatProperties::VideoFormat.as_raw(),
+        flags: pod::PropertyFlags::empty(),
+        value: format_choice,
+    });
+    value_to_bytes(pod::Value::Object(obj))
 }
