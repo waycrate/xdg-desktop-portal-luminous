@@ -3,7 +3,8 @@ use libwayshot::{WayshotConnection, reexport::WlOutput};
 use pipewire::{
     spa::{
         self,
-        pod::{self, deserialize::PodDeserializer, serialize::PodSerializer},
+        param::video::VideoInfoRaw,
+        pod::{self, serialize::PodSerializer},
     },
     stream::StreamState,
 };
@@ -125,8 +126,16 @@ fn start_stream(
                 return;
             }
             if let Some(pod) = pod {
-                let value = PodDeserializer::deserialize_from::<pod::Value>(pod.as_bytes());
-                tracing::info!("param-changed: {} {:?}", id, value);
+                let mut chosen_format_info = VideoInfoRaw::new();
+                match chosen_format_info.parse(pod) {
+                    Ok(_) => tracing::info!(
+                        "param-changed: chosen format id is {}",
+                        chosen_format_info.format().as_raw()
+                    ),
+                    Err(e) => {
+                        tracing::error!("Could not parse format chosen by PipeWire server: {e}")
+                    }
+                };
             }
         })
         .add_buffer(move |_, _, buffer| {
