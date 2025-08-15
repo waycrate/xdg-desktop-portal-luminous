@@ -1,4 +1,7 @@
-use libwayshot::WayshotConnection;
+use libwayshot::{
+    WayshotConnection, region,
+    region::{LogicalRegion, Region, Size},
+};
 use libwaysip::Position;
 use screenshotdialog::ScreenInfo;
 use screenshotdialog::SlintSelection;
@@ -90,16 +93,19 @@ impl ScreenShotBackend {
                         x: x_coordinate,
                         y: y_coordinate,
                     } = info.left_top_point();
-                    let width = info.width();
-                    let height = info.height();
+                    let width = info.width() as u32;
+                    let height = info.height() as u32;
 
                     wayshot_connection
                         .screenshot(
-                            libwayshot::CaptureRegion {
-                                x_coordinate,
-                                y_coordinate,
-                                width,
-                                height,
+                            LogicalRegion {
+                                inner: Region {
+                                    position: region::Position {
+                                        x: x_coordinate,
+                                        y: y_coordinate,
+                                    },
+                                    size: Size { width, height },
+                                },
                             },
                             false,
                         )
@@ -150,15 +156,22 @@ impl ScreenShotBackend {
 
         let image = wayshot_connection
             .screenshot(
-                libwayshot::CaptureRegion {
-                    x_coordinate,
-                    y_coordinate,
-                    width: 1,
-                    height: 1,
+                LogicalRegion {
+                    inner: Region {
+                        position: region::Position {
+                            x: x_coordinate,
+                            y: y_coordinate,
+                        },
+                        size: Size {
+                            width: 1,
+                            height: 1,
+                        },
+                    },
                 },
                 false,
             )
-            .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?;
+            .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?
+            .to_rgba8();
 
         let pixel = image.get_pixel(0, 0);
         Ok(PortalResponse::Success(Color {

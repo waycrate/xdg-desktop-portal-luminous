@@ -1,4 +1,4 @@
-use libwayshot::CaptureRegion;
+use libwayshot::region::EmbeddedRegion;
 use libwayshot::{WayshotConnection, reexport::WlOutput};
 use pipewire::{
     spa::{
@@ -24,7 +24,7 @@ impl ScreencastThread {
         overlay_cursor: bool,
         width: u32,
         height: u32,
-        capture_region: Option<CaptureRegion>,
+        embedded_region: Option<EmbeddedRegion>,
         output: WlOutput,
         connection: WayshotConnection,
     ) -> anyhow::Result<Self> {
@@ -36,7 +36,7 @@ impl ScreencastThread {
                 overlay_cursor,
                 width,
                 height,
-                capture_region,
+                embedded_region,
                 output,
             ) {
                 Ok((loop_, listener, context, node_id_rx)) => {
@@ -80,7 +80,7 @@ fn start_stream(
     overlay_cursor: bool,
     width: u32,
     height: u32,
-    capture_region: Option<CaptureRegion>,
+    embedded_region: Option<EmbeddedRegion>,
     output: WlOutput,
 ) -> Result<PipewireStreamResult, pipewire::Error> {
     let loop_ = pipewire::main_loop::MainLoop::new(None).unwrap();
@@ -174,7 +174,12 @@ fn start_stream(
                 let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
                 // TODO error
                 connection
-                    .capture_output_frame_shm_fd(overlay_cursor as i32, &output, fd, capture_region)
+                    .capture_output_frame_shm_fd(
+                        overlay_cursor as i32,
+                        &output,
+                        fd,
+                        embedded_region,
+                    )
                     .unwrap();
             }
         })
