@@ -142,13 +142,14 @@ fn start_stream(
             if let Some(pod) = pod {
                 let mut chosen_format_info = VideoInfoRaw::new();
                 match chosen_format_info.parse(pod) {
-                    Ok(_) => {
-                        *chosen_format =
-                            Some(spa_format_to_wl_shm(chosen_format_info.format()).unwrap())
-                    }
-                    Err(e) => {
-                        tracing::error!("Could not parse format chosen by PipeWire server: {e}")
-                    }
+                    Ok(_) =>
+                        if let Some(wl_shm_fmt) = spa_format_to_wl_shm(chosen_format_info.format()) {
+                            *chosen_format = Some(wl_shm_fmt);
+                        } else {
+                            tracing::error!("Could not convert SPA format chosen by PipeWire server to wl_shm format");
+                        },
+                    Err(e) =>
+                        tracing::error!("Could not parse format chosen by PipeWire server: {e}"),
                 };
             }
         })
@@ -188,20 +189,20 @@ fn start_stream(
                 let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
                 match chosen_format {
                     Some(format) => {
-                        // TODO error
-                        connection
+                        if let Err(e) = connection
                             .capture_output_frame_shm_fd_with_format(
                                 overlay_cursor as i32,
                                 &output,
                                 fd,
                                 *format,
                                 embedded_region,
-                            )
-                            .unwrap();
+                            ) {
+                                tracing::error!("Could not capture video frame: {e}")
+                            }
                     }
                     None => {
                         tracing::error!(
-                            "Pipewire: couldn't capture video frames, chosen format is empty"
+                            "Could not capture video frame, chosen format is empty"
                         );
                     }
                 }
