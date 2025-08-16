@@ -68,9 +68,14 @@ impl ScreencastThread {
     }
 }
 
+#[derive(Default)]
+struct StreamingData {
+    chosen_format: Option<Format>,
+}
+
 type PipewireStreamResult = (
     pipewire::main_loop::MainLoop,
-    pipewire::stream::StreamListener<Option<Format>>,
+    pipewire::stream::StreamListener<StreamingData>,
     pipewire::context::Context,
     oneshot::Receiver<anyhow::Result<u32>>,
 );
@@ -115,10 +120,9 @@ fn start_stream(
             vec![VideoFormat::BGRx, VideoFormat::BGRA]
         }
     };
-    let chosen_format: Option<Format> = None;
 
     let listener = stream
-        .add_local_listener_with_user_data(chosen_format)
+        .add_local_listener_with_user_data(StreamingData::default())
         .state_changed(move |_, _, old, new| {
             tracing::info!("state-changed '{:?}' -> '{:?}'", old, new);
             match new {
@@ -135,7 +139,7 @@ fn start_stream(
                 _ => {}
             }
         })
-        .param_changed(|_, chosen_format, id, pod| {
+        .param_changed(|_, streaming_data, id, pod| {
             if id != libspa_sys::SPA_PARAM_Format {
                 return;
             }
@@ -144,7 +148,7 @@ fn start_stream(
                 match chosen_format_info.parse(pod) {
                     Ok(_) =>
                         if let Some(wl_shm_fmt) = spa_format_to_wl_shm(chosen_format_info.format()) {
-                            *chosen_format = Some(wl_shm_fmt);
+                            streaming_data.chosen_format = Some(wl_shm_fmt);
                         } else {
                             tracing::error!("Could not convert SPA format chosen by PipeWire server to wl_shm format");
                         },
@@ -183,18 +187,18 @@ fn start_stream(
                 data.fd = -1;
             }
         })
-        .process(move |stream, chosen_format| {
+        .process(move |stream, streaming_data| {
             if let Some(mut buffer) = stream.dequeue_buffer() {
                 let datas = buffer.datas_mut();
                 let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
-                match chosen_format {
+                match streaming_data.chosen_format {
                     Some(format) => {
                         if let Err(e) = connection
                             .capture_output_frame_shm_fd_with_format(
                                 overlay_cursor as i32,
                                 &output,
                                 fd,
-                                *format,
+                                format,
                                 embedded_region,
                             ) {
                                 tracing::error!("Could not capture video frame: {e}")
