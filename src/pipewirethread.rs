@@ -1,15 +1,16 @@
-use libwayshot::CaptureRegion;
+use libwayshot::region::EmbeddedRegion;
 use libwayshot::{WayshotConnection, reexport::WlOutput};
 use pipewire::{
     spa::{
         self,
-        pod::{self, deserialize::PodDeserializer, serialize::PodSerializer},
+        param::video::{VideoFormat, VideoInfoRaw},
+        pod::{self, serialize::PodSerializer},
     },
     stream::StreamState,
 };
 use rustix::fd::BorrowedFd;
-
 use std::{cell::RefCell, io, os::fd::IntoRawFd, rc::Rc, slice};
+use wayland_client::protocol::wl_shm::Format;
 
 use tokio::sync::oneshot;
 
@@ -23,7 +24,7 @@ impl ScreencastThread {
         overlay_cursor: bool,
         width: u32,
         height: u32,
-        capture_region: Option<CaptureRegion>,
+        embedded_region: Option<EmbeddedRegion>,
         output: WlOutput,
         connection: WayshotConnection,
     ) -> anyhow::Result<Self> {
@@ -35,7 +36,7 @@ impl ScreencastThread {
                 overlay_cursor,
                 width,
                 height,
-                capture_region,
+                embedded_region,
                 output,
             ) {
                 Ok((loop_, listener, context, node_id_rx)) => {
@@ -67,9 +68,14 @@ impl ScreencastThread {
     }
 }
 
+#[derive(Default)]
+struct StreamingData {
+    chosen_format: Option<Format>,
+}
+
 type PipewireStreamResult = (
     pipewire::main_loop::MainLoop,
-    pipewire::stream::StreamListener<()>,
+    pipewire::stream::StreamListener<StreamingData>,
     pipewire::context::Context,
     oneshot::Receiver<anyhow::Result<u32>>,
 );
@@ -79,7 +85,7 @@ fn start_stream(
     overlay_cursor: bool,
     width: u32,
     height: u32,
-    capture_region: Option<CaptureRegion>,
+    embedded_region: Option<EmbeddedRegion>,
     output: WlOutput,
 ) -> Result<PipewireStreamResult, pipewire::Error> {
     let loop_ = pipewire::main_loop::MainLoop::new(None).unwrap();
@@ -102,8 +108,21 @@ fn start_stream(
     let stream_cell: Rc<RefCell<Option<pipewire::stream::Stream>>> = Rc::new(RefCell::new(None));
     let stream_cell_clone = stream_cell.clone();
 
+    let available_video_formats = match connection.get_available_frame_formats(&output) {
+        Ok(frame_format_list) => frame_format_list
+            .iter()
+            .filter_map(|frame_format| wl_shm_format_to_spa(frame_format.format))
+            .collect(),
+        Err(e) => {
+            tracing::warn!("Could not get available video formats from libwayshot: {e}");
+            // Xrgb8888 and Argb8888 should be supported by all renderers
+            // https://smithay.github.io/wayland-rs/wayland_client/protocol/wl_shm/enum.Format.html
+            vec![VideoFormat::BGRx, VideoFormat::BGRA]
+        }
+    };
+
     let listener = stream
-        .add_local_listener_with_user_data(())
+        .add_local_listener_with_user_data(StreamingData::default())
         .state_changed(move |_, _, old, new| {
             tracing::info!("state-changed '{:?}' -> '{:?}'", old, new);
             match new {
@@ -120,13 +139,22 @@ fn start_stream(
                 _ => {}
             }
         })
-        .param_changed(|_, _, id, pod| {
+        .param_changed(|_, streaming_data, id, pod| {
             if id != libspa_sys::SPA_PARAM_Format {
                 return;
             }
             if let Some(pod) = pod {
-                let value = PodDeserializer::deserialize_from::<pod::Value>(pod.as_bytes());
-                tracing::info!("param-changed: {} {:?}", id, value);
+                let mut chosen_format_info = VideoInfoRaw::new();
+                match chosen_format_info.parse(pod) {
+                    Ok(_) =>
+                        if let Some(wl_shm_fmt) = spa_format_to_wl_shm(chosen_format_info.format()) {
+                            streaming_data.chosen_format = Some(wl_shm_fmt);
+                        } else {
+                            tracing::error!("Could not convert SPA format chosen by PipeWire server to wl_shm format");
+                        },
+                    Err(e) =>
+                        tracing::error!("Could not parse format chosen by PipeWire server: {e}"),
+                };
             }
         })
         .add_buffer(move |_, _, buffer| {
@@ -159,19 +187,34 @@ fn start_stream(
                 data.fd = -1;
             }
         })
-        .process(move |stream, ()| {
+        .process(move |stream, streaming_data| {
             if let Some(mut buffer) = stream.dequeue_buffer() {
                 let datas = buffer.datas_mut();
                 let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
-                // TODO error
-                connection
-                    .capture_output_frame_shm_fd(overlay_cursor as i32, &output, fd, capture_region)
-                    .unwrap();
+                match streaming_data.chosen_format {
+                    Some(format) => {
+                        if let Err(e) = connection
+                            .capture_output_frame_shm_fd_with_format(
+                                overlay_cursor as i32,
+                                &output,
+                                fd,
+                                format,
+                                embedded_region,
+                            ) {
+                                tracing::error!("Could not capture video frame: {e}")
+                            }
+                    }
+                    None => {
+                        tracing::error!(
+                            "Could not capture video frame, chosen format is empty"
+                        );
+                    }
+                }
             }
         })
         .register()?;
 
-    let format = format(width, height);
+    let format = format(width, height, available_video_formats);
     let buffers = buffers(width, height);
 
     let params = &mut [
@@ -256,8 +299,8 @@ fn buffers2(width: u32, height: u32) -> Vec<u8> {
     )))
 }
 
-fn format(width: u32, height: u32) -> Vec<u8> {
-    value_to_bytes(pod::Value::Object(spa::pod::object!(
+fn format(width: u32, height: u32, available_video_formats: Vec<VideoFormat>) -> Vec<u8> {
+    let mut obj = spa::pod::object!(
         spa::utils::SpaTypes::ObjectParamFormat,
         spa::param::ParamType::EnumFormat,
         spa::pod::property!(
@@ -269,17 +312,6 @@ fn format(width: u32, height: u32) -> Vec<u8> {
             spa::param::format::FormatProperties::MediaSubtype,
             Id,
             spa::param::format::MediaSubtype::Raw
-        ),
-        spa::pod::property!(
-            spa::param::format::FormatProperties::VideoFormat,
-            Choice,
-            Enum,
-            Id,
-            spa::param::video::VideoFormat::RGBA,
-            spa::param::video::VideoFormat::RGBx,
-            spa::param::video::VideoFormat::RGB8P,
-            spa::param::video::VideoFormat::BGR,
-            spa::param::video::VideoFormat::YUY2,
         ),
         // XXX modifiers
         spa::pod::property!(
@@ -301,5 +333,69 @@ fn format(width: u32, height: u32) -> Vec<u8> {
             spa::utils::Fraction { num: 60, denom: 1 }
         ),
         // TODO max framerate
-    )))
+    );
+
+    let format_choice =
+        pod::Value::Choice(pod::ChoiceValue::Id(spa::utils::Choice::<spa::utils::Id>(
+            spa::utils::ChoiceFlags::empty(),
+            spa::utils::ChoiceEnum::<spa::utils::Id>::Enum {
+                default: spa::utils::Id(VideoFormat::BGRA.as_raw()),
+                alternatives: available_video_formats
+                    .iter()
+                    .map(|f| spa::utils::Id(f.as_raw()))
+                    .collect(),
+            },
+        )));
+
+    obj.properties.push(pod::Property {
+        key: spa::param::format::FormatProperties::VideoFormat.as_raw(),
+        flags: pod::PropertyFlags::empty(),
+        value: format_choice,
+    });
+    value_to_bytes(pod::Value::Object(obj))
+}
+
+// wl_shm::Format uses FourCC codes, hence the conversion logic
+fn spa_format_to_wl_shm(format: VideoFormat) -> Option<Format> {
+    match format {
+        VideoFormat::BGRA => Some(Format::Argb8888),
+        VideoFormat::BGRx => Some(Format::Xrgb8888),
+        VideoFormat::ABGR => Some(Format::Rgba8888),
+        VideoFormat::xBGR => Some(Format::Rgbx8888),
+        VideoFormat::RGBA => Some(Format::Abgr8888),
+        VideoFormat::RGBx => Some(Format::Xbgr8888),
+        VideoFormat::ARGB => Some(Format::Bgra8888),
+        VideoFormat::xRGB => Some(Format::Bgrx8888),
+        VideoFormat::xRGB_210LE => Some(Format::Xrgb2101010),
+        VideoFormat::xBGR_210LE => Some(Format::Xbgr2101010),
+        VideoFormat::RGBx_102LE => Some(Format::Rgbx1010102),
+        VideoFormat::BGRx_102LE => Some(Format::Bgrx1010102),
+        VideoFormat::ARGB_210LE => Some(Format::Argb2101010),
+        VideoFormat::ABGR_210LE => Some(Format::Abgr2101010),
+        VideoFormat::RGBA_102LE => Some(Format::Rgba1010102),
+        VideoFormat::BGRA_102LE => Some(Format::Bgra1010102),
+        _ => None,
+    }
+}
+
+fn wl_shm_format_to_spa(format: Format) -> Option<VideoFormat> {
+    match format {
+        Format::Argb8888 => Some(VideoFormat::BGRA),
+        Format::Xrgb8888 => Some(VideoFormat::BGRx),
+        Format::Rgba8888 => Some(VideoFormat::ABGR),
+        Format::Rgbx8888 => Some(VideoFormat::xBGR),
+        Format::Abgr8888 => Some(VideoFormat::RGBA),
+        Format::Xbgr8888 => Some(VideoFormat::RGBx),
+        Format::Bgra8888 => Some(VideoFormat::ARGB),
+        Format::Bgrx8888 => Some(VideoFormat::xRGB),
+        Format::Xrgb2101010 => Some(VideoFormat::xRGB_210LE),
+        Format::Xbgr2101010 => Some(VideoFormat::xBGR_210LE),
+        Format::Rgbx1010102 => Some(VideoFormat::RGBx_102LE),
+        Format::Bgrx1010102 => Some(VideoFormat::BGRx_102LE),
+        Format::Argb2101010 => Some(VideoFormat::ARGB_210LE),
+        Format::Abgr2101010 => Some(VideoFormat::ABGR_210LE),
+        Format::Rgba1010102 => Some(VideoFormat::RGBA_102LE),
+        Format::Bgra1010102 => Some(VideoFormat::BGRA_102LE),
+        _ => None,
+    }
 }
