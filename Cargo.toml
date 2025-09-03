@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.1.11"
+version = "0.1.12"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/waycrate/xdg-desktop-portal-luminous"
@@ -19,21 +19,21 @@ members = ["libs/screenshotdialog", "libs/accessdialog", "."]
 [workspace.dependencies]
 screenshotdialog = { path = "libs/screenshotdialog" }
 accessdialog = { path = "libs/accessdialog" }
-slint = "1.11.0"
-slint-build = "1.11.0"
+slint = "1.13.0"
+slint-build = "1.13.0"
 
 [dependencies]
 screenshotdialog.workspace = true
 accessdialog.workspace = true
 
-zbus = { version = "5.9", default-features = false, features = [
+zbus = { version = "5.10", default-features = false, features = [
 	"tokio",
 	"url",
 ] }
-tokio = { version = "1.47.0", features = ["full"] }
+tokio = { version = "1.47.1", features = ["full"] }
 serde = { version = "1.0.219", features = ["derive"] }
 tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = "0.3.20"
 url = { version = "2.5", features = ["serde"] }
 serde_repr = "0.1"
 image = { version = "=0.24", default-features = false, features = [
@@ -43,37 +43,37 @@ image = { version = "=0.24", default-features = false, features = [
 	"qoi",
 ] }
 
-bitflags = "2.9.0"
-enumflags2 = "0.7.11"
-anyhow = "1.0.98"
+bitflags = "2.9.4"
+enumflags2 = "0.7.12"
+anyhow = "1.0.99"
 
 # pipewire
 pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
 libwayshot = { git = "https://github.com/waycrate/wayshot" }
-rustix = { version = "1.0.5", features = ["fs", "use-libc"] }
+rustix = { version = "1.0.8", features = ["fs", "use-libc"] }
 
 # REMOTE
-wayland-protocols = { version = "0.32.6", default-features = false, features = [
+wayland-protocols = { version = "0.32.9", default-features = false, features = [
 	"unstable",
 	"client",
 ] }
 
-wayland-protocols-wlr = { version = "0.3.6", default-features = false, features = [
+wayland-protocols-wlr = { version = "0.3.9", default-features = false, features = [
 	"client",
 ] }
-wayland-client = { version = "0.31.8" }
+wayland-client = { version = "0.31.11" }
 
-wayland-protocols-misc = { version = "0.3.6", features = ["client"] }
-xkbcommon = "0.8.0"
-tempfile = "3.20.0"
-thiserror = "2.0.12"
-toml = "0.9.0"
-csscolorparser = "0.7.0"
-notify = "8.1.0"
+wayland-protocols-misc = { version = "0.3.9", features = ["client"] }
+xkbcommon = "0.9.0"
+tempfile = "3.21.0"
+thiserror = "2.0.16"
+toml = "0.9.5"
+csscolorparser = "0.7.2"
+notify = "8.2.0"
 futures = "0.3.31"
 libwaysip = "0.4.0"
 
-calloop = "0.14.1"
+calloop = "0.14.3"
 calloop-wayland-source = "0.4.0"
