@@ -22,7 +22,7 @@ use crate::session::{
     CursorMode, PersistMode, SESSIONS, Session, SessionType, SourceType, append_session,
 };
 
-use libwaysip::SelectionType;
+use libwaysip::{SelectionType, WaySip};
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -215,13 +215,11 @@ impl ScreenCastBackend {
         let show_cursor = current_session.cursor_mode.show_cursor();
         let connection = libwayshot::WayshotConnection::new().unwrap();
 
-        let info = match libwaysip::get_area(
-            Some(libwaysip::WaysipConnection {
-                connection: &connection.conn,
-                globals: &connection.globals,
-            }),
-            SelectionType::Screen,
-        ) {
+        let info = match WaySip::new()
+            .with_connection(connection.conn.clone())
+            .with_selection_type(SelectionType::Screen)
+            .get()
+        {
             Ok(Some(info)) => info,
             Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),

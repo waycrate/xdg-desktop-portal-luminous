@@ -20,7 +20,7 @@ use zbus::{
 use crate::PortalResponse;
 use crate::utils::USER_RUNNING_DIR;
 
-use libwaysip::SelectionType;
+use libwaysip::{SelectionType, WaySip};
 
 #[derive(Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
@@ -79,7 +79,7 @@ impl ScreenShotBackend {
             match screenshotdialog::selectgui(screen_infos) {
                 SlintSelection::Canceled => return Ok(PortalResponse::Cancelled),
                 SlintSelection::Slurp => {
-                    let info = match libwaysip::get_area(None, SelectionType::Area) {
+                    let info = match WaySip::new().with_selection_type(SelectionType::Area).get() {
                         Ok(Some(info)) => info,
                         Ok(None) => {
                             return Err(zbus::Error::Failure("You cancel it".to_string()).into());
@@ -144,7 +144,10 @@ impl ScreenShotBackend {
     ) -> fdo::Result<PortalResponse<Color>> {
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
-        let info = match libwaysip::get_area(None, SelectionType::Point) {
+        let info = match WaySip::new()
+            .with_selection_type(SelectionType::Point)
+            .get()
+        {
             Ok(Some(info)) => info,
             Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),

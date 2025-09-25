@@ -2,7 +2,7 @@ mod dispatch;
 mod remote_thread;
 mod state;
 
-use libwaysip::SelectionType;
+use libwaysip::{SelectionType, WaySip};
 use remote_thread::RemoteControl;
 
 use std::collections::HashMap;
@@ -252,13 +252,11 @@ impl RemoteDesktopBackend {
         let mut streams = vec![];
         let mut cast_thread = None;
         let connection = libwayshot::WayshotConnection::new().unwrap();
-        let info = match libwaysip::get_area(
-            Some(libwaysip::WaysipConnection {
-                connection: &connection.conn,
-                globals: &connection.globals,
-            }),
-            SelectionType::Screen,
-        ) {
+        let info = match WaySip::new()
+            .with_connection(connection.conn.clone())
+            .with_selection_type(SelectionType::Screen)
+            .get()
+        {
             Ok(Some(info)) => info,
             Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),

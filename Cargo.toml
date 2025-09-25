@@ -73,7 +73,7 @@ toml = "0.9.5"
 csscolorparser = "0.7.2"
 notify = "8.2.0"
 futures = "0.3.31"
-libwaysip = "0.4.0"
+libwaysip = "0.5.0"
 
 calloop = "0.14.3"
 calloop-wayland-source = "0.4.0"
