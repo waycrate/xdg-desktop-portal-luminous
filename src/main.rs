@@ -126,6 +126,13 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                         .unwrap(),
                 )
                 .await;
+                let _ = SettingsBackend::setting_changed(
+                    &signal_context,
+                    "org.freedesktop.appearance".to_string(),
+                    "contrast".to_string(),
+                    config.get_contrast().into(),
+                )
+                .await;
             }
             Err(e) => println!("watch error: {e:?}"),
             _ => {}

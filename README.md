@@ -19,6 +19,7 @@ Luminous is configured through the following auto hot-reloaded file: `~/.config/
 ```toml
 color_scheme = "dark" # can also be "light"
 accent_color = "#880022"
+contrast = "higher" # can also be "default"
 ```
 
 # How to set priority of portal backend:

@@ -6,10 +6,14 @@ const LIGHT_COLOR_NAME: &str = "light";
 
 const DEFAULT_ACCENT_COLLOR: &str = "#ffffff";
 
+const DEFAULT_CONTRAST: &str = "default";
+const HIGHER_CONTRAST: &str = "higher";
+
 #[derive(Deserialize, PartialEq, Eq, Debug)]
 pub struct SettingsConfig {
     pub color_scheme: String,
     pub accent_color: String,
+    pub contrast: String,
 }
 
 impl SettingsConfig {
@@ -35,6 +39,13 @@ impl SettingsConfig {
             color[2] as f64 / 256.0,
         ]
     }
+    pub fn get_contrast(&self) -> u32 {
+        match self.contrast.as_str() {
+            DEFAULT_CONTRAST => super::DEFAULT_CONTRAST,
+            HIGHER_CONTRAST => super::HIGHER_CONTRAST,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl Default for SettingsConfig {
@@ -42,6 +53,7 @@ impl Default for SettingsConfig {
         SettingsConfig {
             color_scheme: DEFAULT_COLOR_NAME.to_string(),
             accent_color: DEFAULT_ACCENT_COLLOR.to_string(),
+            contrast: DEFAULT_CONTRAST.to_string(),
         }
     }
 }
