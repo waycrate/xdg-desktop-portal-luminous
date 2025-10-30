@@ -8,9 +8,13 @@ const DEFAULT_COLOR: u32 = 0;
 const DARK_COLOR: u32 = 1;
 const LIGHT_COLOR: u32 = 2;
 
+const DEFAULT_CONTRAST: u32 = 0;
+const HIGHER_CONTRAST: u32 = 1;
+
 const APPEARANCE: &str = "org.freedesktop.appearance";
 const COLOR_SCHEME: &str = "color-scheme";
 const ACCENT_COLOR: &str = "accent-color";
+const CONTRAST: &str = "contrast";
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -61,6 +65,9 @@ impl SettingsBackend {
                 .try_into()
                 .unwrap());
         }
+        if key == CONTRAST {
+            return Ok(OwnedValue::from(config.get_contrast()));
+        }
         Err(zbus::fdo::Error::Failed("No such key".to_string()))
     }
 
@@ -78,6 +85,7 @@ impl SettingsBackend {
             ACCENT_COLOR.to_string(),
             OwnedValue::try_from(AccentColor::new(config.get_accent_color())).unwrap(),
         );
+        output_setting.insert(CONTRAST.to_string(), config.get_contrast().into());
         let output = HashMap::<String, HashMap<String, OwnedValue>>::from_iter([(
             APPEARANCE.to_string(),
             output_setting,
