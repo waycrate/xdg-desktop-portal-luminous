@@ -9,11 +9,15 @@ const DEFAULT_ACCENT_COLLOR: &str = "#ffffff";
 const DEFAULT_CONTRAST: &str = "default";
 const HIGHER_CONTRAST: &str = "higher";
 
+const DEFAULT_REDUCED_MOTION: &str = "default";
+const REDUCED_REDUCED_MOTION: &str = "reduced";
+
 #[derive(Deserialize, PartialEq, Eq, Debug)]
 pub struct SettingsConfig {
     pub color_scheme: String,
     pub accent_color: String,
     pub contrast: String,
+    pub reduced_motion: String,
 }
 
 impl SettingsConfig {
@@ -46,6 +50,13 @@ impl SettingsConfig {
             _ => unreachable!(),
         }
     }
+    pub fn get_reduced_motion(&self) -> u32 {
+        match self.contrast.as_str() {
+            DEFAULT_REDUCED_MOTION => super::DEFAULT_REDUCED_MOTION,
+            REDUCED_REDUCED_MOTION => super::REDUCED_REDUCED_MOTION,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl Default for SettingsConfig {
@@ -54,6 +65,7 @@ impl Default for SettingsConfig {
             color_scheme: DEFAULT_COLOR_NAME.to_string(),
             accent_color: DEFAULT_ACCENT_COLLOR.to_string(),
             contrast: DEFAULT_CONTRAST.to_string(),
+            reduced_motion: DEFAULT_REDUCED_MOTION.to_string(),
         }
     }
 }

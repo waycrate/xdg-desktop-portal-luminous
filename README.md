@@ -20,6 +20,7 @@ Luminous is configured through the following auto hot-reloaded file: `~/.config/
 color_scheme = "dark" # can also be "light"
 accent_color = "#880022"
 contrast = "higher" # enable higher contrast
+reduced_motion = "reduced" # enable reduced motion
 ```
 
 # How to set priority of portal backend:
