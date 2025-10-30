@@ -11,10 +11,14 @@ const LIGHT_COLOR: u32 = 2;
 const DEFAULT_CONTRAST: u32 = 0;
 const HIGHER_CONTRAST: u32 = 1;
 
+const DEFAULT_REDUCED_MOTION: u32 = 0;
+const REDUCED_REDUCED_MOTION: u32 = 1;
+
 const APPEARANCE: &str = "org.freedesktop.appearance";
 const COLOR_SCHEME: &str = "color-scheme";
 const ACCENT_COLOR: &str = "accent-color";
 const CONTRAST: &str = "contrast";
+const REDUCED_MOTION: &str = "reduced-motion";
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -68,6 +72,9 @@ impl SettingsBackend {
         if key == CONTRAST {
             return Ok(OwnedValue::from(config.get_contrast()));
         }
+        if key == REDUCED_MOTION {
+            return Ok(OwnedValue::from(config.get_reduced_motion()));
+        }
         Err(zbus::fdo::Error::Failed("No such key".to_string()))
     }
 
@@ -86,6 +93,10 @@ impl SettingsBackend {
             OwnedValue::try_from(AccentColor::new(config.get_accent_color())).unwrap(),
         );
         output_setting.insert(CONTRAST.to_string(), config.get_contrast().into());
+        output_setting.insert(
+            REDUCED_MOTION.to_string(),
+            config.get_reduced_motion().into(),
+        );
         let output = HashMap::<String, HashMap<String, OwnedValue>>::from_iter([(
             APPEARANCE.to_string(),
             output_setting,

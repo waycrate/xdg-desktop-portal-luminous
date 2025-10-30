@@ -133,6 +133,13 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                     config.get_contrast().into(),
                 )
                 .await;
+                let _ = SettingsBackend::setting_changed(
+                    &signal_context,
+                    "org.freedesktop.appearance".to_string(),
+                    "reduced-motion".to_string(),
+                    config.get_reduced_motion().into(),
+                )
+                .await;
             }
             Err(e) => println!("watch error: {e:?}"),
             _ => {}
