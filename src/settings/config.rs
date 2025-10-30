@@ -51,7 +51,7 @@ impl SettingsConfig {
         }
     }
     pub fn get_reduced_motion(&self) -> u32 {
-        match self.contrast.as_str() {
+        match self.reduced_motion.as_str() {
             DEFAULT_REDUCED_MOTION => super::DEFAULT_REDUCED_MOTION,
             REDUCED_REDUCED_MOTION => super::REDUCED_REDUCED_MOTION,
             _ => unreachable!(),
