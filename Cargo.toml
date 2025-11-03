@@ -19,19 +19,19 @@ members = ["libs/screenshotdialog", "libs/accessdialog", "."]
 [workspace.dependencies]
 screenshotdialog = { path = "libs/screenshotdialog" }
 accessdialog = { path = "libs/accessdialog" }
-slint = "1.13.0"
-slint-build = "1.13.0"
+slint = "1.14.1"
+slint-build = "1.14.1"
 
 [dependencies]
 screenshotdialog.workspace = true
 accessdialog.workspace = true
 
-zbus = { version = "5.10", default-features = false, features = [
+zbus = { version = "5.12", default-features = false, features = [
 	"tokio",
 	"url",
 ] }
-tokio = { version = "1.47.1", features = ["full"] }
-serde = { version = "1.0.219", features = ["derive"] }
+tokio = { version = "1.48.0", features = ["full"] }
+serde = { version = "1.0.228", features = ["derive"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
 url = { version = "2.5", features = ["serde"] }
@@ -43,16 +43,16 @@ image = { version = "=0.24", default-features = false, features = [
 	"qoi",
 ] }
 
-bitflags = "2.9.4"
+bitflags = "2.10.0"
 enumflags2 = "0.7.12"
-anyhow = "1.0.99"
+anyhow = "1.0.100"
 
 # pipewire
 pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
 libwayshot = { git = "https://github.com/waycrate/wayshot" }
-rustix = { version = "1.0.8", features = ["fs", "use-libc"] }
+rustix = { version = "1.1.2", features = ["fs", "use-libc"] }
 
 # REMOTE
 wayland-protocols = { version = "0.32.9", default-features = false, features = [
@@ -67,13 +67,13 @@ wayland-client = { version = "0.31.11" }
 
 wayland-protocols-misc = { version = "0.3.9", features = ["client"] }
 xkbcommon = "0.9.0"
-tempfile = "3.21.0"
-thiserror = "2.0.16"
-toml = "0.9.5"
+tempfile = "3.23.0"
+thiserror = "2.0.17"
+toml = "0.9.8"
 csscolorparser = "0.7.2"
 notify = "8.2.0"
 futures = "0.3.31"
 libwaysip = "0.5.0"
 
 calloop = "0.14.3"
-calloop-wayland-source = "0.4.0"
+calloop-wayland-source = "0.4.1"
