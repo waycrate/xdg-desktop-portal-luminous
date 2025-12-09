@@ -13,19 +13,7 @@ license.workspace = true
 repository.workspace = true
 keywords = ["wayland"]
 
-[workspace]
-members = ["libs/screenshotdialog", "libs/accessdialog", "."]
-
-[workspace.dependencies]
-screenshotdialog = { path = "libs/screenshotdialog" }
-accessdialog = { path = "libs/accessdialog" }
-slint = "1.14.1"
-slint-build = "1.14.1"
-
 [dependencies]
-screenshotdialog.workspace = true
-accessdialog.workspace = true
-
 zbus = { version = "5.12", default-features = false, features = [
 	"tokio",
 	"url",
@@ -51,7 +39,7 @@ anyhow = "1.0.100"
 pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
-libwayshot = { git = "https://github.com/waycrate/wayshot" }
+libwayshot = "0.4.0-rc2"
 rustix = { version = "1.1.2", features = ["fs", "use-libc"] }
 
 # REMOTE
@@ -77,3 +65,4 @@ libwaysip = "0.5.0"
 
 calloop = "0.14.3"
 calloop-wayland-source = "0.4.1"
+iced_layershell = "0.14.0-beta3"
