@@ -3,8 +3,6 @@ use libwayshot::{
     region::{LogicalRegion, Region, Size},
 };
 use libwaysip::Position;
-use screenshotdialog::ScreenInfo;
-use screenshotdialog::SlintSelection;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -67,64 +65,9 @@ impl ScreenShotBackend {
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
 
-        let image_buffer = if options.interactive {
-            let wayinfos = wayshot_connection.get_all_outputs();
-            let screen_infos = wayinfos
-                .iter()
-                .map(|screen| ScreenInfo {
-                    name: screen.name.clone().into(),
-                    description: screen.description.clone().into(),
-                })
-                .collect();
-            match screenshotdialog::selectgui(screen_infos) {
-                SlintSelection::Canceled => return Ok(PortalResponse::Cancelled),
-                SlintSelection::Slurp => {
-                    let info = match WaySip::new().with_selection_type(SelectionType::Area).get() {
-                        Ok(Some(info)) => info,
-                        Ok(None) => {
-                            return Err(zbus::Error::Failure("You cancel it".to_string()).into());
-                        }
-                        Err(e) => {
-                            return Err(zbus::Error::Failure(format!("wayland error, {e}")).into());
-                        }
-                    };
-
-                    let Position {
-                        x: x_coordinate,
-                        y: y_coordinate,
-                    } = info.left_top_point();
-                    let width = info.width() as u32;
-                    let height = info.height() as u32;
-
-                    wayshot_connection
-                        .screenshot(
-                            LogicalRegion {
-                                inner: Region {
-                                    position: region::Position {
-                                        x: x_coordinate,
-                                        y: y_coordinate,
-                                    },
-                                    size: Size { width, height },
-                                },
-                            },
-                            false,
-                        )
-                        .map_err(|e| {
-                            zbus::Error::Failure(format!("Wayland screencopy failed, {e}"))
-                        })?
-                }
-                SlintSelection::GlobalScreen { showcursor } => wayshot_connection
-                    .screenshot_all(showcursor)
-                    .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
-                SlintSelection::Selection { index, showcursor } => wayshot_connection
-                    .screenshot_single_output(&wayinfos[index as usize], showcursor)
-                    .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
-            }
-        } else {
-            wayshot_connection
-                .screenshot_all(false)
-                .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?
-        };
+        let image_buffer = wayshot_connection
+            .screenshot_all(false)
+            .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?;
         let savepath = USER_RUNNING_DIR.join("wayshot.png");
         image_buffer.save(&savepath).map_err(|e| {
             zbus::Error::Failure(format!("Cannot save to {}, e: {e}", savepath.display()))
