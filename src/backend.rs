@@ -4,15 +4,15 @@ use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
 use crate::settings::{AccentColor, SETTING_CONFIG, SettingsBackend, SettingsConfig};
 
-use std::future::pending;
-use zbus::{Connection, connection, object_server::SignalEmitter};
-
+use crate::gui::{CopySelect, Message};
 use futures::{
     SinkExt, StreamExt,
-    channel::mpsc::{Receiver, channel},
+    channel::mpsc::{Receiver, Sender, channel},
 };
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::future::pending;
 use std::path::Path;
+use zbus::{Connection, connection, object_server::SignalEmitter};
 
 use std::sync::OnceLock;
 
@@ -108,11 +108,17 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
     Ok(())
 }
 
-pub async fn backend() -> anyhow::Result<()> {
+pub async fn backend(
+    sender: Sender<Message>,
+    receiver: Receiver<CopySelect>,
+) -> anyhow::Result<()> {
     let conn = connection::Builder::session()?
         .name("org.freedesktop.impl.portal.desktop.luminous")?
         .serve_at("/org/freedesktop/portal/desktop", AccessBackend)?
-        .serve_at("/org/freedesktop/portal/desktop", ScreenShotBackend)?
+        .serve_at(
+            "/org/freedesktop/portal/desktop",
+            ScreenShotBackend { sender, receiver },
+        )?
         .serve_at("/org/freedesktop/portal/desktop", ScreenCastBackend)?
         .serve_at("/org/freedesktop/portal/desktop", RemoteDesktopBackend)?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?

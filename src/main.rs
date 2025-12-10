@@ -44,6 +44,9 @@ impl<T: zvariant::Type + serde::Serialize> serde::Serialize for PortalResponse<T
 }
 
 fn main() -> anyhow::Result<()> {
-    let _ = gui::gui()?;
+    let support_toplevel_capture = libwayshot::WayshotConnection::new()
+        .map(|conn| conn.toplevel_capture_support())
+        .unwrap_or(false);
+    let _ = gui::gui(support_toplevel_capture)?;
     Ok(())
 }

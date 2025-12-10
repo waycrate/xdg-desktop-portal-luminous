@@ -49,7 +49,7 @@ anyhow = "1.0.100"
 pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
-libwayshot = "0.4.0-rc2"
+libwayshot = "0.4.0-rc3"
 rustix = { version = "1.1.2", features = ["fs", "use-libc"] }
 
 # REMOTE
