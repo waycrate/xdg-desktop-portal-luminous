@@ -47,6 +47,6 @@ fn main() -> anyhow::Result<()> {
     let support_toplevel_capture = libwayshot::WayshotConnection::new()
         .map(|conn| conn.toplevel_capture_support())
         .unwrap_or(false);
-    let _ = gui::gui(support_toplevel_capture)?;
+    gui::gui(support_toplevel_capture)?;
     Ok(())
 }
