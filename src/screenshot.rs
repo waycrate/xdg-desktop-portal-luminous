@@ -15,8 +15,13 @@ use zbus::{
     },
 };
 
-use crate::PortalResponse;
+use crate::gui::Message;
 use crate::utils::USER_RUNNING_DIR;
+use crate::{PortalResponse, gui::CopySelect};
+use futures::{
+    SinkExt, StreamExt,
+    channel::mpsc::{Receiver, Sender},
+};
 
 use libwaysip::{SelectionType, WaySip};
 
@@ -46,7 +51,10 @@ pub struct ScreenshotOption {
 }
 
 #[derive(Debug)]
-pub struct ScreenShotBackend;
+pub struct ScreenShotBackend {
+    pub sender: Sender<Message>,
+    pub receiver: Receiver<CopySelect>,
+}
 
 #[interface(name = "org.freedesktop.impl.portal.Screenshot")]
 impl ScreenShotBackend {
@@ -54,20 +62,43 @@ impl ScreenShotBackend {
     fn version(&self) -> u32 {
         1
     }
-    fn screenshot(
+    async fn screenshot(
         &mut self,
         handle: ObjectPath<'_>,
         app_id: String,
         _parent_window: String,
         options: ScreenshotOption,
     ) -> fdo::Result<PortalResponse<Screenshot>> {
-        tracing::info!("Start shot: path :{}, appid: {}", handle.as_str(), app_id);
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
+        tracing::info!("Start shot: path :{}, appid: {}", handle.as_str(), app_id);
+        let image_buffer = if options.interactive {
+            let top_levels = wayshot_connection.get_all_toplevels();
+            let screens = wayshot_connection.get_all_outputs();
+            let _ = self
+                .sender
+                .send(Message::ScreenShotOpen {
+                    toplevels: top_levels.to_vec(),
+                    screens: screens.to_vec(),
+                })
+                .await;
+            let Some(select) = self.receiver.next().await else {
+                return Ok(PortalResponse::Cancelled);
+            };
+            match select {
+                CopySelect::Screen(index) => wayshot_connection
+                    .screenshot_single_output(&screens[index], false)
+                    .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
+                CopySelect::Window(index) => wayshot_connection
+                    .screenshot_toplevel(&top_levels[index], false)
+                    .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
+            }
+        } else {
+            wayshot_connection
+                .screenshot_all(false)
+                .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?
+        };
 
-        let image_buffer = wayshot_connection
-            .screenshot_all(false)
-            .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?;
         let savepath = USER_RUNNING_DIR.join("wayshot.png");
         image_buffer.save(&savepath).map_err(|e| {
             zbus::Error::Failure(format!("Cannot save to {}, e: {e}", savepath.display()))

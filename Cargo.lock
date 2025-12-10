@@ -685,7 +685,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -2499,9 +2499,9 @@ dependencies = [
 
 [[package]]
 name = "libwayshot"
-version = "0.4.0-rc2"
+version = "0.4.0-rc3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c4afd400501efd33890c0aea7b06d07e63fad59f5ce1056ae7152f39fb16595"
+checksum = "0e0440c57fd083328166d9cc3c20ba87ffee18fa84e356ff3743642bfcbe47fd"
 dependencies = [
  "drm",
  "gbm",
