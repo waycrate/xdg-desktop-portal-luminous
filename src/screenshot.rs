@@ -15,7 +15,7 @@ use zbus::{
     },
 };
 
-use crate::gui::Message;
+use crate::gui::{GuiMode, Message};
 use crate::utils::USER_RUNNING_DIR;
 use crate::{PortalResponse, gui::CopySelect};
 use futures::{
@@ -56,6 +56,28 @@ pub struct ScreenShotBackend {
     pub receiver: Receiver<CopySelect>,
 }
 
+pub fn waysip_to_region(
+    size: libwaysip::Size,
+    position: libwaysip::Position,
+) -> libwayshot::Result<LogicalRegion> {
+    let size: Size = Size {
+        width: size.width.try_into().map_err(|_| {
+            libwayshot::Error::FreezeCallbackError("width cannot be negative".to_string())
+        })?,
+        height: size.height.try_into().map_err(|_| {
+            libwayshot::Error::FreezeCallbackError("height cannot be negative".to_string())
+        })?,
+    };
+    let position: libwayshot::region::Position = libwayshot::region::Position {
+        x: position.x,
+        y: position.y,
+    };
+
+    Ok(LogicalRegion {
+        inner: Region { position, size },
+    })
+}
+
 #[interface(name = "org.freedesktop.impl.portal.Screenshot")]
 impl ScreenShotBackend {
     #[zbus(property, name = "version")]
@@ -77,9 +99,10 @@ impl ScreenShotBackend {
             let screens = wayshot_connection.get_all_outputs();
             let _ = self
                 .sender
-                .send(Message::ScreenShotOpen {
+                .send(Message::ImageCopyOpen {
                     toplevels: top_levels.to_vec(),
                     screens: screens.to_vec(),
+                    copytype: GuiMode::ScreenShot,
                 })
                 .await;
             let Some(select) = self.receiver.next().await else {
@@ -92,6 +115,28 @@ impl ScreenShotBackend {
                 CopySelect::Window(index) => wayshot_connection
                     .screenshot_toplevel(&top_levels[index], false)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
+                CopySelect::All => wayshot_connection
+                    .screenshot_all(false)
+                    .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
+                CopySelect::Slurp => wayshot_connection
+                    .screenshot_freeze(
+                        |w_conn| {
+                            let info = WaySip::new()
+                                .with_connection(w_conn.conn.clone())
+                                .with_selection_type(libwaysip::SelectionType::Area)
+                                .get()
+                                .map_err(|e| libwayshot::Error::FreezeCallbackError(e.to_string()))?
+                                .ok_or(libwayshot::Error::FreezeCallbackError(
+                                    "Failed to capture the area".to_string(),
+                                ))?;
+                            waysip_to_region(info.size(), info.left_top_point())
+                        },
+                        false,
+                    )
+                    .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
+                CopySelect::Cancel => {
+                    return Ok(PortalResponse::Cancelled);
+                }
             }
         } else {
             wayshot_connection
