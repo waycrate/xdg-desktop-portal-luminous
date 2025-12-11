@@ -1,5 +1,5 @@
 use libwayshot::region::EmbeddedRegion;
-use libwayshot::{WayshotConnection, reexport::WlOutput};
+use libwayshot::{FormatCheckTarget, TopLevel, WayshotConnection, reexport::WlOutput};
 use pipewire::{
     spa::{
         self,
@@ -19,13 +19,28 @@ pub struct ScreencastThread {
     thread_stop_tx: pipewire::channel::Sender<()>,
 }
 
+#[derive(Debug, Clone)]
+pub enum CastTarget {
+    TopLevel(TopLevel),
+    Screen(WlOutput),
+}
+
+impl From<&CastTarget> for FormatCheckTarget {
+    fn from(value: &CastTarget) -> Self {
+        match value {
+            CastTarget::Screen(screen) => Self::Screen(screen.clone()),
+            CastTarget::TopLevel(toplevel) => Self::Toplevel(toplevel.clone()),
+        }
+    }
+}
+
 impl ScreencastThread {
     pub async fn start_cast(
         overlay_cursor: bool,
         width: u32,
         height: u32,
         embedded_region: Option<EmbeddedRegion>,
-        output: WlOutput,
+        target: CastTarget,
         connection: WayshotConnection,
     ) -> anyhow::Result<Self> {
         let (tx, rx) = oneshot::channel();
@@ -37,7 +52,7 @@ impl ScreencastThread {
                 width,
                 height,
                 embedded_region,
-                output,
+                target,
             ) {
                 Ok((loop_, listener, context, node_id_rx)) => {
                     tx.send(Ok(node_id_rx)).unwrap();
@@ -86,7 +101,7 @@ fn start_stream(
     width: u32,
     height: u32,
     embedded_region: Option<EmbeddedRegion>,
-    output: WlOutput,
+    target: CastTarget,
 ) -> Result<PipewireStreamResult, pipewire::Error> {
     let loop_ = pipewire::main_loop::MainLoop::new(None).unwrap();
     let context = pipewire::context::Context::new(&loop_).unwrap();
@@ -108,7 +123,7 @@ fn start_stream(
     let stream_cell: Rc<RefCell<Option<pipewire::stream::Stream>>> = Rc::new(RefCell::new(None));
     let stream_cell_clone = stream_cell.clone();
 
-    let available_video_formats = match connection.get_available_frame_formats(&output) {
+    let available_video_formats = match connection.get_available_frame_formats(&(&target).into()) {
         Ok(frame_format_list) => frame_format_list
             .iter()
             .filter_map(|frame_format| wl_shm_format_to_spa(frame_format.format))
@@ -193,16 +208,32 @@ fn start_stream(
                 let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
                 match streaming_data.chosen_format {
                     Some(format) => {
-                        if let Err(e) = connection
-                            .capture_output_frame_shm_fd_with_format(
-                                overlay_cursor as i32,
-                                &output,
-                                fd,
-                                format,
-                                embedded_region,
-                            ) {
-                                tracing::error!("Could not capture video frame: {e}")
+                        match &target {
+                            CastTarget::Screen(output) => {
+                                if let Err(e) = connection
+                                    .capture_output_frame_shm_fd_with_format(
+                                        overlay_cursor as i32,
+                                        output,
+                                        fd,
+                                        format,
+                                        embedded_region,
+                                    ) {
+                                        tracing::error!("Could not capture video frame: {e}")
+                                    }
+                            },
+                            CastTarget::TopLevel(top_level) => {
+                                if let Err(e) = connection
+                                    .capture_toplevel_frame_shm_fd_with_format(
+                                        overlay_cursor,
+                                        top_level,
+                                        fd,
+                                        format,
+                                    ) {
+                                        tracing::error!("Could not capture video frame: {e}")
+                                    }
                             }
+                        }
+
                     }
                     None => {
                         tracing::error!(

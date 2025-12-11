@@ -2,7 +2,6 @@ use libwayshot::{
     WayshotConnection, region,
     region::{LogicalRegion, Region, Size},
 };
-use libwaysip::Position;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -15,7 +14,7 @@ use zbus::{
     },
 };
 
-use crate::gui::{GuiMode, Message};
+use crate::gui::{Message, TopLevelInfo, WlOutputInfo};
 use crate::utils::USER_RUNNING_DIR;
 use crate::{PortalResponse, gui::CopySelect};
 use futures::{
@@ -97,23 +96,36 @@ impl ScreenShotBackend {
         let image_buffer = if options.interactive {
             let top_levels = wayshot_connection.get_all_toplevels();
             let screens = wayshot_connection.get_all_outputs();
+            let top_levels_iced = top_levels
+                .iter()
+                .map(|level| TopLevelInfo {
+                    top_level: level.clone(),
+                    image: None,
+                })
+                .collect();
+            let screens_iced = screens
+                .iter()
+                .map(|output| WlOutputInfo {
+                    output: output.clone(),
+                    image: None,
+                })
+                .collect();
             let _ = self
                 .sender
                 .send(Message::ImageCopyOpen {
-                    toplevels: top_levels.to_vec(),
-                    screens: screens.to_vec(),
-                    copytype: GuiMode::ScreenShot,
+                    top_levels: top_levels_iced,
+                    screens: screens_iced,
                 })
                 .await;
             let Some(select) = self.receiver.next().await else {
                 return Ok(PortalResponse::Cancelled);
             };
             match select {
-                CopySelect::Screen(index) => wayshot_connection
-                    .screenshot_single_output(&screens[index], false)
+                CopySelect::Screen { index, show_cursor } => wayshot_connection
+                    .screenshot_single_output(&screens[index], show_cursor)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
-                CopySelect::Window(index) => wayshot_connection
-                    .screenshot_toplevel(&top_levels[index], false)
+                CopySelect::Window { index, show_cursor } => wayshot_connection
+                    .screenshot_toplevel(&top_levels[index], show_cursor)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
                 CopySelect::All => wayshot_connection
                     .screenshot_all(false)
@@ -161,6 +173,7 @@ impl ScreenShotBackend {
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
     ) -> fdo::Result<PortalResponse<Color>> {
+        use libwaysip::Position;
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
         let info = match WaySip::new()

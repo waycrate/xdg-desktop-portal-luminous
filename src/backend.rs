@@ -111,15 +111,29 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
 pub async fn backend(
     sender: Sender<Message>,
     receiver: Receiver<CopySelect>,
+    receiver_cast: Receiver<CopySelect>,
 ) -> anyhow::Result<()> {
+    let toplevel_capture_support = libwayshot::WayshotConnection::new()
+        .map(|conn| conn.toplevel_capture_support())
+        .unwrap_or(false);
     let conn = connection::Builder::session()?
         .name("org.freedesktop.impl.portal.desktop.luminous")?
         .serve_at("/org/freedesktop/portal/desktop", AccessBackend)?
         .serve_at(
             "/org/freedesktop/portal/desktop",
-            ScreenShotBackend { sender, receiver },
+            ScreenShotBackend {
+                sender: sender.clone(),
+                receiver: receiver,
+            },
         )?
-        .serve_at("/org/freedesktop/portal/desktop", ScreenCastBackend)?
+        .serve_at(
+            "/org/freedesktop/portal/desktop",
+            ScreenCastBackend {
+                toplevel_capture_support,
+                sender,
+                receiver: receiver_cast,
+            },
+        )?
         .serve_at("/org/freedesktop/portal/desktop", RemoteDesktopBackend)?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
         .build()
