@@ -29,6 +29,7 @@ use crate::session::{
 use crate::PortalResponse;
 
 use self::remote_thread::InputRequest;
+use crate::pipewirethread::CastTarget;
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -276,7 +277,7 @@ impl RemoteDesktopBackend {
                 width as u32,
                 height as u32,
                 None,
-                output,
+                CastTarget::Screen(output),
                 connection,
             )
             .await

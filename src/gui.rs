@@ -1,5 +1,5 @@
 use iced::futures::channel::mpsc::Sender;
-use iced::widget::{Space, button, checkbox, column, container, row, scrollable, text};
+use iced::widget::{Row, Space, button, checkbox, column, container, row, scrollable, text};
 use iced::{Alignment, Element, Length, Task};
 use iced_layershell::daemon;
 use iced_layershell::reexport::{
@@ -56,27 +56,50 @@ struct AreaSelectorGUI {
     window_show: bool,
     toplevel_capture_support: bool,
     sender: Option<Sender<CopySelect>>,
-    toplevels: Vec<TopLevel>,
-    screens: Vec<OutputInfo>,
+    sender_cast: Option<Sender<CopySelect>>,
+    toplevels: Vec<TopLevelInfo>,
+    screens: Vec<WlOutputInfo>,
     use_curor: bool,
 }
 
 #[derive(Debug, Clone)]
 pub enum CopySelect {
-    Window(usize),
-    Screen(usize),
+    Window { index: usize, show_cursor: bool },
+    Screen { index: usize, show_cursor: bool },
     All,
     Slurp,
     Cancel,
+}
+use iced::widget::image;
+#[derive(Debug, Clone)]
+pub struct TopLevelInfo {
+    pub top_level: TopLevel,
+    pub image: Option<image::Handle>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WlOutputInfo {
+    pub output: OutputInfo,
+    pub image: Option<image::Handle>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ShowMode {
+    Screens,
+    Windows,
+    Others,
 }
 
 #[to_layer_message(multi)]
 #[derive(Debug, Clone)]
 pub enum Message {
     ImageCopyOpen {
-        copytype: GuiMode,
-        toplevels: Vec<TopLevel>,
-        screens: Vec<OutputInfo>,
+        top_levels: Vec<TopLevelInfo>,
+        screens: Vec<WlOutputInfo>,
+    },
+    ScreenCastOpen {
+        toplevels: Vec<TopLevelInfo>,
+        screens: Vec<WlOutputInfo>,
     },
     #[allow(unused)]
     Selected {
@@ -84,21 +107,110 @@ pub enum Message {
         use_curor: bool,
         select: CopySelect,
     },
-    ShowScreens,
-    ShowWindows,
-    ShowOthers,
+    ShowModeChange(ShowMode),
     ReadyShoot(Sender<CopySelect>),
+    ReadyCast(Sender<CopySelect>),
     ToggleCursor(bool),
 }
 
 impl AreaSelectorGUI {
+    fn toplevel_preview(
+        &self,
+        id: iced::window::Id,
+        index: usize,
+        info: &TopLevelInfo,
+    ) -> Element<'_, Message> {
+        button(
+            text(info.top_level.id_and_title())
+                .center()
+                .width(Length::Fill),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::Window {
+                index,
+                show_cursor: self.use_curor,
+            },
+            use_curor: self.use_curor,
+        })
+        .style(button::subtle)
+        .into()
+    }
+    fn output_preview<'a>(
+        &'a self,
+        id: iced::window::Id,
+        index: usize,
+        info: &'a WlOutputInfo,
+    ) -> Element<'a, Message> {
+        button(text(&info.output.name).center().width(Length::Fill))
+            .on_press(Message::Selected {
+                id,
+                select: CopySelect::Screen {
+                    index,
+                    show_cursor: self.use_curor,
+                },
+                use_curor: self.use_curor,
+            })
+            .style(button::subtle)
+            .into()
+    }
+    fn selector(&self) -> Row<'_, Message> {
+        let mut button_list = vec![];
+        if self.gui_mode == GuiMode::ScreenShot {
+            button_list.push(
+                button(text("Others").center().width(Length::Fill))
+                    .on_press_maybe(if self.gui_mode == GuiMode::ScreenShot {
+                        Some(Message::ShowModeChange(ShowMode::Others))
+                    } else {
+                        None
+                    })
+                    .width(Length::Fill)
+                    .style(if self.mode == ViewMode::Others {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .into(),
+            );
+        }
+        button_list.append(&mut vec![
+            button(text("Screen").center().width(Length::Fill))
+                .on_press(Message::ShowModeChange(ShowMode::Screens))
+                .width(Length::Fill)
+                .style(if self.mode == ViewMode::Screens {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .into(),
+            button(text("Window").center().width(Length::Fill))
+                .on_press_maybe(if self.toplevel_capture_support {
+                    Some(Message::ShowModeChange(ShowMode::Windows))
+                } else {
+                    None
+                })
+                .width(Length::Fill)
+                .style(if self.mode == ViewMode::Windows {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .into(),
+        ]);
+        Row::from_vec(button_list)
+            .align_y(Alignment::Center)
+            .spacing(10)
+            .padding(20)
+            .width(Length::Fill)
+    }
     fn new(toplevel_capture_support: bool) -> Self {
         Self {
             gui_mode: GuiMode::ScreenShot,
-            mode: ViewMode::Screens,
+            mode: ViewMode::Others,
             window_show: false,
             toplevel_capture_support,
             sender: None,
+            sender_cast: None,
             toplevels: Vec::new(),
             screens: Vec::new(),
             use_curor: false,
@@ -111,15 +223,15 @@ impl AreaSelectorGUI {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::ShowScreens => {
+            Message::ShowModeChange(ShowMode::Screens) => {
                 self.mode = ViewMode::Screens;
                 Task::none()
             }
-            Message::ShowWindows => {
+            Message::ShowModeChange(ShowMode::Windows) => {
                 self.mode = ViewMode::Windows;
                 Task::none()
             }
-            Message::ShowOthers => {
+            Message::ShowModeChange(ShowMode::Others) => {
                 self.mode = ViewMode::Others;
                 Task::none()
             }
@@ -131,15 +243,40 @@ impl AreaSelectorGUI {
                 iced_runtime::task::effect(Action::Window(WindowAction::Close(id)))
             }
 
-            Message::ImageCopyOpen {
-                copytype,
-                toplevels,
-                screens,
-            } => {
+            Message::ImageCopyOpen { top_levels: toplevels, screens } => {
                 if self.window_show {
+                    let _ = self.sender.as_mut().unwrap().try_send(CopySelect::Cancel);
                     return Task::none();
                 }
-                self.gui_mode = copytype;
+                if self.gui_mode != GuiMode::ScreenShot {
+                    self.mode = ViewMode::Others;
+                }
+                self.gui_mode = GuiMode::ScreenShot;
+                self.window_show = true;
+                self.toplevels = toplevels;
+                self.screens = screens;
+                Task::done(Message::NewLayerShell {
+                    settings: NewLayerShellSettings {
+                        exclusive_zone: None,
+                        anchor: Anchor::Right | Anchor::Top | Anchor::Left | Anchor::Bottom,
+                        size: Some((400, 400)),
+                        margin: Some((100, 100, 100, 100)),
+                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                        output_option: OutputOption::None,
+                        ..Default::default()
+                    },
+                    id: iced::window::Id::unique(),
+                })
+            }
+            Message::ScreenCastOpen { toplevels, screens } => {
+                if self.window_show {
+                    let _ = self.sender.as_mut().unwrap().try_send(CopySelect::Cancel);
+                    return Task::none();
+                }
+                if self.gui_mode == GuiMode::ScreenShot {
+                    self.mode = ViewMode::Screens;
+                }
+                self.gui_mode = GuiMode::ScreenCast;
                 self.window_show = true;
                 self.toplevels = toplevels;
                 self.screens = screens;
@@ -160,6 +297,10 @@ impl AreaSelectorGUI {
                 self.sender = Some(sender);
                 Task::none()
             }
+            Message::ReadyCast(sender) => {
+                self.sender = Some(sender);
+                Task::none()
+            }
             Message::ToggleCursor(cursor) => {
                 self.use_curor = cursor;
                 Task::none()
@@ -169,72 +310,27 @@ impl AreaSelectorGUI {
     }
 
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
-        let selector = row![
-            button(text("Screen").center().width(Length::Fill))
-                .on_press(Message::ShowScreens)
-                .width(Length::Fill)
-                .style(if self.mode == ViewMode::Screens {
-                    button::primary
-                } else {
-                    button::secondary
-                }),
-            button(text("Window").center().width(Length::Fill))
-                .on_press_maybe(if self.toplevel_capture_support {
-                    Some(Message::ShowWindows)
-                } else {
-                    None
-                })
-                .width(Length::Fill)
-                .style(if self.mode == ViewMode::Windows {
-                    button::primary
-                } else {
-                    button::secondary
-                }),
-            button(text("Others").center().width(Length::Fill))
-                .on_press_maybe(if self.gui_mode == GuiMode::ScreenShot {
-                    Some(Message::ShowOthers)
-                } else {
-                    None
-                })
-                .width(Length::Fill)
-                .style(if self.mode == ViewMode::Others {
-                    button::primary
-                } else {
-                    button::secondary
-                }),
-        ]
-        .align_y(Alignment::Center)
-        .spacing(10)
-        .padding(20)
-        .width(Length::Fill);
+        let selector = self.selector();
 
         let content: Element<'_, Message> = match self.mode {
             ViewMode::Screens => scrollable(
-                column(self.screens.iter().enumerate().map(|(index, info)| {
-                    button(text(&info.name).center().width(Length::Fill))
-                        .on_press(Message::Selected {
-                            id,
-                            select: CopySelect::Screen(index),
-                            use_curor: self.use_curor,
-                        })
-                        .style(button::subtle)
-                        .into()
-                }))
+                column(
+                    self.screens
+                        .iter()
+                        .enumerate()
+                        .map(|(index, info)| self.output_preview(id, index, info)),
+                )
                 .spacing(10),
             )
             .height(Length::Fill)
             .into(),
             ViewMode::Windows => scrollable(
-                column(self.toplevels.iter().enumerate().map(|(index, info)| {
-                    button(text(info.id_and_title()).center().width(Length::Fill))
-                        .on_press(Message::Selected {
-                            id,
-                            select: CopySelect::Window(index),
-                            use_curor: self.use_curor,
-                        })
-                        .style(button::subtle)
-                        .into()
-                }))
+                column(
+                    self.toplevels
+                        .iter()
+                        .enumerate()
+                        .map(|(index, info)| self.toplevel_preview(id, index, info)),
+                )
                 .spacing(10),
             )
             .height(Length::Fill)
@@ -304,9 +400,11 @@ impl AreaSelectorGUI {
                 use iced::futures::channel::mpsc::channel;
                 use iced::futures::sink::SinkExt;
                 let (sender, receiver) = channel(100);
+                let (sender_cast, receiver_cast) = channel(100);
                 let _ = output.send(Message::ReadyShoot(sender)).await;
+                let _ = output.send(Message::ReadyCast(sender_cast)).await;
 
-                let _ = crate::backend::backend(output, receiver).await;
+                let _ = crate::backend::backend(output, receiver, receiver_cast).await;
             })
         })
     }

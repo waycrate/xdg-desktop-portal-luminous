@@ -11,6 +11,12 @@ use enumflags2::BitFlags;
 
 use serde::{Deserialize, Serialize};
 
+use futures::{
+    SinkExt, StreamExt,
+    channel::mpsc::{Receiver, Sender},
+};
+
+use crate::pipewirethread::CastTarget;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
@@ -21,6 +27,8 @@ use crate::request::RequestInterface;
 use crate::session::{
     CursorMode, PersistMode, SESSIONS, Session, SessionType, SourceType, append_session,
 };
+
+use crate::gui::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
 
 use libwaysip::{SelectionType, WaySip};
 
@@ -107,7 +115,11 @@ pub async fn remove_cast_session(path: &str) {
     sessions.remove(index);
 }
 
-pub struct ScreenCastBackend;
+pub struct ScreenCastBackend {
+    pub toplevel_capture_support: bool,
+    pub sender: Sender<Message>,
+    pub receiver: Receiver<CopySelect>,
+}
 
 #[interface(name = "org.freedesktop.impl.portal.ScreenCast")]
 impl ScreenCastBackend {
@@ -123,7 +135,11 @@ impl ScreenCastBackend {
 
     #[zbus(property)]
     fn available_source_types(&self) -> u32 {
-        BitFlags::from_flag(SourceType::Monitor).bits()
+        if self.toplevel_capture_support {
+            (SourceType::Monitor | SourceType::Window).bits()
+        } else {
+            BitFlags::from_flag(SourceType::Monitor).bits()
+        }
     }
 
     async fn create_session(
@@ -175,7 +191,7 @@ impl ScreenCastBackend {
     }
 
     async fn start(
-        &self,
+        &mut self,
         _request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         _app_id: String,
@@ -215,6 +231,71 @@ impl ScreenCastBackend {
         let show_cursor = current_session.cursor_mode.show_cursor();
         let connection = libwayshot::WayshotConnection::new().unwrap();
 
+        use iced::widget::image;
+        let top_levels = connection.get_all_toplevels();
+        let mut top_levels_iced = vec![];
+        if self.toplevel_capture_support {
+            top_levels_iced = top_levels
+                .iter()
+                .map(|top_level| {
+                    let image = connection
+                        .screenshot_toplevel(top_level, show_cursor)
+                        .map(|data| {
+                            let rgba_data = data.to_rgb8();
+                            image::Handle::from_rgba(
+                                rgba_data.width(),
+                                rgba_data.height(),
+                                rgba_data.to_vec(),
+                            )
+                        })
+                        .ok();
+                    TopLevelInfo {
+                        top_level: top_level.clone(),
+                        image,
+                    }
+                })
+                .collect();
+        }
+        let outputs = connection.get_all_outputs();
+        let outputs_iced: Vec<WlOutputInfo> = outputs
+            .iter()
+            .map(|output| {
+                let image = connection
+                    .screenshot_single_output(output, show_cursor)
+                    .map(|data| {
+                        let rgba_data = data.to_rgb8();
+                        image::Handle::from_rgba(
+                            rgba_data.width(),
+                            rgba_data.height(),
+                            rgba_data.to_vec(),
+                        )
+                    })
+                    .ok();
+                WlOutputInfo {
+                    output: output.clone(),
+                    image,
+                }
+            })
+            .collect();
+        let _ = self
+            .sender
+            .send(Message::ImageCopyOpen {
+                top_levels: top_levels_iced,
+                screens: outputs_iced,
+            })
+            .await;
+        let Some(select) = self.receiver.next().await else {
+            return Ok(PortalResponse::Cancelled);
+        };
+        let target = match select {
+            CopySelect::Screen { index, .. } => {
+                CastTarget::Screen(outputs[index].wl_output.clone())
+            }
+            CopySelect::Window { index, .. } => CastTarget::TopLevel(top_levels[index].clone()),
+            _ => {
+                return Ok(PortalResponse::Cancelled);
+            }
+        };
         let info = match WaySip::new()
             .with_connection(connection.conn.clone())
             .with_selection_type(SelectionType::Screen)
@@ -235,7 +316,7 @@ impl ScreenCastBackend {
             width as u32,
             height as u32,
             None,
-            output,
+            target,
             connection,
         )
         .await
