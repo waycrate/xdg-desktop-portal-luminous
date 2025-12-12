@@ -9,7 +9,7 @@ use pipewire::{
     stream::StreamState,
 };
 use rustix::fd::BorrowedFd;
-use std::{cell::RefCell, io, os::fd::IntoRawFd, rc::Rc, slice};
+use std::{io, os::fd::IntoRawFd, slice};
 use wayland_client::protocol::wl_shm::Format;
 
 use tokio::sync::oneshot;
@@ -37,8 +37,6 @@ impl From<&CastTarget> for FormatCheckTarget {
 impl ScreencastThread {
     pub async fn start_cast(
         overlay_cursor: bool,
-        width: u32,
-        height: u32,
         embedded_region: Option<EmbeddedRegion>,
         target: CastTarget,
         connection: WayshotConnection,
@@ -46,15 +44,8 @@ impl ScreencastThread {
         let (tx, rx) = oneshot::channel();
         let (thread_stop_tx, thread_stop_rx) = pipewire::channel::channel::<()>();
         std::thread::spawn(move || {
-            match start_stream(
-                connection,
-                overlay_cursor,
-                width,
-                height,
-                embedded_region,
-                target,
-            ) {
-                Ok((loop_, listener, context, node_id_rx)) => {
+            match start_stream(connection, overlay_cursor, embedded_region, target) {
+                Ok((loop_, listener, _stream, context, node_id_rx)) => {
                     tx.send(Ok(node_id_rx)).unwrap();
                     let weak_loop = loop_.downgrade();
                     let _receiver = thread_stop_rx.attach(loop_.loop_(), move |()| {
@@ -86,23 +77,112 @@ impl ScreencastThread {
 #[derive(Default)]
 struct StreamingData {
     chosen_format: Option<Format>,
+    size: libwayshot::Size,
 }
 
 type PipewireStreamResult = (
     pipewire::main_loop::MainLoop,
     pipewire::stream::StreamListener<StreamingData>,
+    pipewire::stream::Stream,
     pipewire::context::Context,
     oneshot::Receiver<anyhow::Result<u32>>,
 );
+use std::{
+    ffi::CString,
+    os::fd::OwnedFd,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+fn get_mem_file_handle() -> String {
+    format!(
+        "/luminous-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|time| time.subsec_nanos().to_string())
+            .unwrap_or("unknown".into())
+    )
+}
+
+pub fn create_shm_fd() -> std::io::Result<OwnedFd> {
+    use rustix::{
+        fs::{self, SealFlags},
+        io, shm,
+    };
+    // Only try memfd on linux and freebsd.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    loop {
+        // Create a file that closes on successful execution and seal it's operations.
+        match fs::memfd_create(
+            CString::new("luminous")?.as_c_str(),
+            fs::MemfdFlags::CLOEXEC | fs::MemfdFlags::ALLOW_SEALING,
+        ) {
+            Ok(fd) => {
+                // This is only an optimization, so ignore errors.
+                // F_SEAL_SRHINK = File cannot be reduced in size.
+                // F_SEAL_SEAL = Prevent further calls to fcntl().
+                let _ = fs::fcntl_add_seals(&fd, fs::SealFlags::SHRINK | SealFlags::SEAL);
+                return Ok(fd);
+            }
+            Err(io::Errno::INTR) => continue,
+            Err(io::Errno::NOSYS) => break,
+            Err(errno) => return Err(std::io::Error::from(errno)),
+        }
+    }
+
+    // Fallback to using shm_open.
+    let mut mem_file_handle = get_mem_file_handle();
+    loop {
+        let open_result = shm::open(
+            mem_file_handle.as_str(),
+            shm::OFlags::CREATE | shm::OFlags::EXCL | shm::OFlags::RDWR,
+            fs::Mode::RUSR | fs::Mode::WUSR,
+        );
+        // O_CREAT = Create file if does not exist.
+        // O_EXCL = Error if create and file exists.
+        // O_RDWR = Open for reading and writing.
+        // O_CLOEXEC = Close on successful execution.
+        // S_IRUSR = Set user read permission bit .
+        // S_IWUSR = Set user write permission bit.
+        match open_result {
+            Ok(fd) => match shm::unlink(mem_file_handle.as_str()) {
+                Ok(_) => return Ok(fd),
+                Err(errno) => return Err(std::io::Error::from(errno)),
+            },
+            Err(io::Errno::EXIST) => {
+                // If a file with that handle exists then change the handle
+                mem_file_handle = get_mem_file_handle();
+                continue;
+            }
+            Err(io::Errno::INTR) => continue,
+            Err(errno) => return Err(std::io::Error::from(errno)),
+        }
+    }
+}
+
+pub fn try_cast(
+    target: &CastTarget,
+    connection: &WayshotConnection,
+) -> anyhow::Result<libwayshot::Size> {
+    let shm_file = create_shm_fd()?;
+
+    let (_, guard_test) = match &target {
+        CastTarget::Screen(output) => {
+            connection.capture_output_frame_shm_fd(0, output, shm_file, None)?
+        }
+        CastTarget::TopLevel(toplevel) => {
+            connection.capture_toplevel_frame_shm_fd(true, toplevel, shm_file)?
+        }
+    };
+
+    Ok(guard_test.size)
+}
 
 fn start_stream(
     connection: WayshotConnection,
     overlay_cursor: bool,
-    width: u32,
-    height: u32,
     embedded_region: Option<EmbeddedRegion>,
     target: CastTarget,
-) -> Result<PipewireStreamResult, pipewire::Error> {
+) -> anyhow::Result<PipewireStreamResult> {
     let loop_ = pipewire::main_loop::MainLoop::new(None).unwrap();
     let context = pipewire::context::Context::new(&loop_).unwrap();
     let core = context.connect(None).unwrap();
@@ -120,8 +200,6 @@ fn start_stream(
 
     let (node_id_tx, node_id_rx) = oneshot::channel();
     let mut node_id_tx = Some(node_id_tx);
-    let stream_cell: Rc<RefCell<Option<pipewire::stream::Stream>>> = Rc::new(RefCell::new(None));
-    let stream_cell_clone = stream_cell.clone();
 
     let available_video_formats = match connection.get_available_frame_formats(&(&target).into()) {
         Ok(frame_format_list) => frame_format_list
@@ -135,15 +213,14 @@ fn start_stream(
             vec![VideoFormat::BGRx, VideoFormat::BGRA]
         }
     };
+    let libwayshot::Size { width, height } = try_cast(&target, &connection)?;
 
     let listener = stream
         .add_local_listener_with_user_data(StreamingData::default())
-        .state_changed(move |_, _, old, new| {
+        .state_changed(move |stream, _, old, new| {
             tracing::info!("state-changed '{:?}' -> '{:?}'", old, new);
             match new {
                 StreamState::Paused => {
-                    let stream = stream_cell_clone.borrow_mut();
-                    let stream = stream.as_ref().unwrap();
                     if let Some(node_id_tx) = node_id_tx.take() {
                         node_id_tx.send(Ok(stream.node_id())).unwrap();
                     }
@@ -172,7 +249,7 @@ fn start_stream(
                 };
             }
         })
-        .add_buffer(move |_, _, buffer| {
+        .add_buffer(move |_,_, buffer| {
             let buf = unsafe { &mut *(*buffer).buffer };
             let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
             for data in datas {
@@ -206,31 +283,27 @@ fn start_stream(
             if let Some(mut buffer) = stream.dequeue_buffer() {
                 let datas = buffer.datas_mut();
                 let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
-                match streaming_data.chosen_format {
+                let guard_result = match streaming_data.chosen_format {
                     Some(format) => {
                         match &target {
                             CastTarget::Screen(output) => {
-                                if let Err(e) = connection
+                                connection
                                     .capture_output_frame_shm_fd_with_format(
                                         overlay_cursor as i32,
                                         output,
                                         fd,
                                         format,
                                         embedded_region,
-                                    ) {
-                                        tracing::error!("Could not capture video frame: {e}")
-                                    }
+                                    )
                             },
                             CastTarget::TopLevel(top_level) => {
-                                if let Err(e) = connection
+                                 connection
                                     .capture_toplevel_frame_shm_fd_with_format(
                                         overlay_cursor,
                                         top_level,
                                         fd,
                                         format,
-                                    ) {
-                                        tracing::error!("Could not capture video frame: {e}")
-                                    }
+                                    )
                             }
                         }
 
@@ -239,12 +312,20 @@ fn start_stream(
                         tracing::error!(
                             "Could not capture video frame, chosen format is empty"
                         );
+                        return;
                     }
-                }
+                };
+                let guard = match guard_result {
+                    Ok(guard) => guard,
+                    Err(e)  => {
+                        tracing::error!("Could not capture video frame: {e}");
+                        return;
+                    }
+                };
+                streaming_data.size = guard.size;
             }
         })
         .register()?;
-
     let format = format(width, height, available_video_formats);
     let buffers = buffers(width, height);
 
@@ -255,10 +336,7 @@ fn start_stream(
 
     let flags = pipewire::stream::StreamFlags::ALLOC_BUFFERS;
     stream.connect(pipewire::spa::utils::Direction::Output, None, flags, params)?;
-
-    *stream_cell.borrow_mut() = Some(stream);
-
-    Ok((loop_, listener, context, node_id_rx))
+    Ok((loop_, listener, stream, context, node_id_rx))
 }
 
 fn value_to_bytes(value: pod::Value) -> Vec<u8> {

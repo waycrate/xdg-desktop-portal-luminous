@@ -238,12 +238,23 @@ impl AreaSelectorGUI {
             Message::Selected { id, select, .. } => {
                 use iced_runtime::Action;
                 use iced_runtime::window::Action as WindowAction;
-                let _ = self.sender.as_mut().unwrap().try_send(select);
+                match self.gui_mode {
+                    GuiMode::ScreenCast => {
+                        let _ = self.sender_cast.as_mut().unwrap().try_send(select);
+                    }
+                    GuiMode::ScreenShot => {
+                        let _ = self.sender.as_mut().unwrap().try_send(select);
+                    }
+                }
+
                 self.window_show = false;
                 iced_runtime::task::effect(Action::Window(WindowAction::Close(id)))
             }
 
-            Message::ImageCopyOpen { top_levels: toplevels, screens } => {
+            Message::ImageCopyOpen {
+                top_levels: toplevels,
+                screens,
+            } => {
                 if self.window_show {
                     let _ = self.sender.as_mut().unwrap().try_send(CopySelect::Cancel);
                     return Task::none();
@@ -270,7 +281,11 @@ impl AreaSelectorGUI {
             }
             Message::ScreenCastOpen { toplevels, screens } => {
                 if self.window_show {
-                    let _ = self.sender.as_mut().unwrap().try_send(CopySelect::Cancel);
+                    let _ = self
+                        .sender_cast
+                        .as_mut()
+                        .unwrap()
+                        .try_send(CopySelect::Cancel);
                     return Task::none();
                 }
                 if self.gui_mode == GuiMode::ScreenShot {
