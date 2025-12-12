@@ -14,9 +14,9 @@ use zbus::{
     },
 };
 
-use crate::gui::{Message, TopLevelInfo, WlOutputInfo};
+use crate::PortalResponse;
+use crate::dialog::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
 use crate::utils::USER_RUNNING_DIR;
-use crate::{PortalResponse, gui::CopySelect};
 use futures::{
     SinkExt, StreamExt,
     channel::mpsc::{Receiver, Sender},

@@ -4,7 +4,7 @@ use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
 use crate::settings::{AccentColor, SETTING_CONFIG, SettingsBackend, SettingsConfig};
 
-use crate::gui::{CopySelect, Message};
+use crate::dialog::{CopySelect, Message};
 use futures::{
     SinkExt, StreamExt,
     channel::mpsc::{Receiver, Sender, channel},

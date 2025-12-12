@@ -1,6 +1,6 @@
 mod access;
 mod backend;
-mod gui;
+mod dialog;
 mod remotedesktop;
 mod request;
 mod screencast;
@@ -47,6 +47,6 @@ fn main() -> anyhow::Result<()> {
     let support_toplevel_capture = libwayshot::WayshotConnection::new()
         .map(|conn| conn.toplevel_capture_support())
         .unwrap_or(false);
-    gui::gui(support_toplevel_capture)?;
+    dialog::dialog(support_toplevel_capture)?;
     Ok(())
 }
