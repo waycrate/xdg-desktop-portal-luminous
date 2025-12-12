@@ -1,5 +1,6 @@
 use libwayshot::region::EmbeddedRegion;
 use libwayshot::{FormatCheckTarget, TopLevel, WayshotConnection, reexport::WlOutput};
+use pipewire::spa::pod::Pod;
 use pipewire::{
     spa::{
         self,
@@ -74,21 +75,37 @@ impl ScreencastThread {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug)]
 struct StreamingData {
     chosen_format: Option<Format>,
+    connection: WayshotConnection,
+    overlay_cursor: bool,
     available_video_formats: Vec<VideoFormat>,
+    embedded_region: Option<EmbeddedRegion>,
     size: libwayshot::Size,
     oldsize: libwayshot::Size,
+    target: CastTarget,
 }
 
 impl StreamingData {
-    fn new(width: u32, height: u32, available_video_formats: Vec<VideoFormat>) -> Self {
+    fn new(
+        width: u32,
+        height: u32,
+        connection: WayshotConnection,
+        overlay_cursor: bool,
+        available_video_formats: Vec<VideoFormat>,
+        embedded_region: Option<EmbeddedRegion>,
+        target: CastTarget,
+    ) -> Self {
         Self {
             chosen_format: None,
+            connection,
+            overlay_cursor,
             available_video_formats,
             size: libwayshot::Size { width, height },
             oldsize: libwayshot::Size { width, height },
+            embedded_region,
+            target,
         }
     }
     fn need_update(&self) -> bool {
@@ -96,6 +113,112 @@ impl StreamingData {
     }
     fn sync_size(&mut self) {
         self.oldsize = self.size
+    }
+
+    fn process(&mut self, stream: &pipewire::stream::StreamRef) {
+        let Some(mut buffer) = stream.dequeue_buffer() else {
+            return;
+        };
+        let datas = buffer.datas_mut();
+        let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
+        let guard_result = match self.chosen_format {
+            Some(format) => match &self.target {
+                CastTarget::Screen(output) => {
+                    self.connection.capture_output_frame_shm_fd_with_format(
+                        self.overlay_cursor as i32,
+                        output,
+                        fd,
+                        format,
+                        self.embedded_region,
+                    )
+                }
+                CastTarget::TopLevel(top_level) => {
+                    self.connection.capture_toplevel_frame_shm_fd_with_format(
+                        self.overlay_cursor,
+                        top_level,
+                        fd,
+                        format,
+                    )
+                }
+            },
+            None => {
+                tracing::error!("Could not capture video frame, chosen format is empty");
+                return;
+            }
+        };
+        let guard = match guard_result {
+            Ok(guard) => guard,
+            Err(e) => {
+                tracing::error!("Could not capture video frame: {e}");
+                return;
+            }
+        };
+        self.size = guard.size;
+    }
+    fn add_buffer(&self, buffer: *mut pipewire::sys::pw_buffer) {
+        let libwayshot::Size { width, height } = self.size;
+        let buf = unsafe { &mut *(*buffer).buffer };
+        let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
+        for data in datas {
+            let name = c"pipewire-screencopy";
+            let fd = rustix::fs::memfd_create(name, rustix::fs::MemfdFlags::CLOEXEC).unwrap();
+            rustix::fs::ftruncate(&fd, (width * height * 4) as _).unwrap();
+
+            data.type_ = libspa_sys::SPA_DATA_MemFd;
+            data.flags = 0;
+            data.fd = fd.into_raw_fd().into();
+
+            data.data = std::ptr::null_mut();
+            data.maxsize = width * height * 4;
+            data.mapoffset = 0;
+            let chunk = unsafe { &mut *data.chunk };
+            chunk.size = width * height * 4;
+            chunk.offset = 0;
+            chunk.stride = 4 * width as i32;
+        }
+    }
+    fn remove_buffer(&self, buffer: *mut pipewire::sys::pw_buffer) {
+        let buf = unsafe { &mut *(*buffer).buffer };
+        let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
+
+        for data in datas {
+            unsafe { rustix::io::close(data.fd as _) };
+            data.fd = -1;
+        }
+    }
+    fn param_changed(&mut self, stream: &pipewire::stream::StreamRef, id: u32, pod: Option<&Pod>) {
+        if id != libspa_sys::SPA_PARAM_Format {
+            return;
+        }
+        if let Some(pod) = pod {
+            let mut chosen_format_info = VideoInfoRaw::new();
+            match chosen_format_info.parse(pod) {
+                Ok(_) => {
+                    if let Some(wl_shm_fmt) = spa_format_to_wl_shm(chosen_format_info.format()) {
+                        self.chosen_format = Some(wl_shm_fmt);
+                    } else {
+                        tracing::error!(
+                            "Could not convert SPA format chosen by PipeWire server to wl_shm format"
+                        );
+                    }
+                }
+                Err(e) => tracing::error!("Could not parse format chosen by PipeWire server: {e}"),
+            };
+        }
+        if self.need_update() {
+            let libwayshot::Size { width, height } = self.size;
+            let format = format(width, height, self.available_video_formats.clone());
+            let buffers = buffers(width, height);
+
+            let params = &mut [
+                pod::Pod::from_bytes(&format).unwrap(),
+                pod::Pod::from_bytes(&buffers).unwrap(),
+            ];
+            if let Err(err) = stream.update_params(params) {
+                tracing::error!("failed to update pipewire params: {}", err);
+            }
+            self.sync_size();
+        }
     }
 }
 
@@ -235,7 +358,15 @@ fn start_stream(
     let libwayshot::Size { width, height } = try_cast(&target, &connection)?;
 
     let listener = stream
-        .add_local_listener_with_user_data(StreamingData::new(width, height, available_video_formats.clone()))
+        .add_local_listener_with_user_data(StreamingData::new(
+            width,
+            height,
+            connection,
+            overlay_cursor,
+            available_video_formats.clone(),
+            embedded_region,
+            target,
+        ))
         .state_changed(move |stream, _, old, new| {
             tracing::info!("state-changed '{:?}' -> '{:?}'", old, new);
             match new {
@@ -251,112 +382,16 @@ fn start_stream(
             }
         })
         .param_changed(|stream, streaming_data, id, pod| {
-            if id != libspa_sys::SPA_PARAM_Format {
-                return;
-            }
-            if let Some(pod) = pod {
-                let mut chosen_format_info = VideoInfoRaw::new();
-                match chosen_format_info.parse(pod) {
-                    Ok(_) =>
-                        if let Some(wl_shm_fmt) = spa_format_to_wl_shm(chosen_format_info.format()) {
-                            streaming_data.chosen_format = Some(wl_shm_fmt);
-                        } else {
-                            tracing::error!("Could not convert SPA format chosen by PipeWire server to wl_shm format");
-                        },
-                    Err(e) =>
-                        tracing::error!("Could not parse format chosen by PipeWire server: {e}"),
-                };
-            }
-            if streaming_data.need_update() {
-                let libwayshot::Size { width, height} = streaming_data.size;
-                let format = format(width, height, streaming_data.available_video_formats.clone());
-                let buffers = buffers(width, height);
-
-                let params = &mut [
-                    pod::Pod::from_bytes(&format).unwrap(),
-                    pod::Pod::from_bytes(&buffers).unwrap(),
-                ];
-                if let Err(err) = stream.update_params( params) {
-                    tracing::error!("failed to update pipewire params: {}", err);
-                }
-                streaming_data.sync_size();
-            }
+            streaming_data.param_changed(stream, id, pod);
         })
-        .add_buffer(move |_,_, buffer| {
-            let buf = unsafe { &mut *(*buffer).buffer };
-            let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
-            for data in datas {
-                let name = c"pipewire-screencopy";
-                let fd = rustix::fs::memfd_create(name, rustix::fs::MemfdFlags::CLOEXEC).unwrap();
-                rustix::fs::ftruncate(&fd, (width * height * 4) as _).unwrap();
-
-                data.type_ = libspa_sys::SPA_DATA_MemFd;
-                data.flags = 0;
-                data.fd = fd.into_raw_fd().into();
-
-                data.data = std::ptr::null_mut();
-                data.maxsize = width * height * 4;
-                data.mapoffset = 0;
-                let chunk = unsafe { &mut *data.chunk };
-                chunk.size = width * height * 4;
-                chunk.offset = 0;
-                chunk.stride = 4 * width as i32;
-            }
+        .add_buffer(|_, data, buffer| {
+            data.add_buffer(buffer);
         })
-        .remove_buffer(|_, _, buffer| {
-            let buf = unsafe { &mut *(*buffer).buffer };
-            let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
-
-            for data in datas {
-                unsafe { rustix::io::close(data.fd as _) };
-                data.fd = -1;
-            }
+        .remove_buffer(|_, data, buffer| {
+            data.remove_buffer(buffer);
         })
         .process(move |stream, streaming_data| {
-            if let Some(mut buffer) = stream.dequeue_buffer() {
-                let datas = buffer.datas_mut();
-                let fd = unsafe { BorrowedFd::borrow_raw(datas[0].as_raw().fd as _) };
-                let guard_result = match streaming_data.chosen_format {
-                    Some(format) => {
-                        match &target {
-                            CastTarget::Screen(output) => {
-                                connection
-                                    .capture_output_frame_shm_fd_with_format(
-                                        overlay_cursor as i32,
-                                        output,
-                                        fd,
-                                        format,
-                                        embedded_region,
-                                    )
-                            },
-                            CastTarget::TopLevel(top_level) => {
-                                 connection
-                                    .capture_toplevel_frame_shm_fd_with_format(
-                                        overlay_cursor,
-                                        top_level,
-                                        fd,
-                                        format,
-                                    )
-                            }
-                        }
-
-                    }
-                    None => {
-                        tracing::error!(
-                            "Could not capture video frame, chosen format is empty"
-                        );
-                        return;
-                    }
-                };
-                let guard = match guard_result {
-                    Ok(guard) => guard,
-                    Err(e)  => {
-                        tracing::error!("Could not capture video frame: {e}");
-                        return;
-                    }
-                };
-                streaming_data.size = guard.size;
-            }
+            streaming_data.process(stream);
         })
         .register()?;
     let format = format(width, height, available_video_formats);
