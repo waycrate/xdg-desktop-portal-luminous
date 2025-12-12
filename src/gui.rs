@@ -1,5 +1,5 @@
 use iced::futures::channel::mpsc::Sender;
-use iced::widget::{Row, Space, button, checkbox, column, container, row, scrollable, text};
+use iced::widget::{Row, Space, button, checkbox, column, container, image, row, scrollable, text};
 use iced::{Alignment, Element, Length, Task};
 use iced_layershell::daemon;
 use iced_layershell::reexport::{
@@ -70,7 +70,7 @@ pub enum CopySelect {
     Slurp,
     Cancel,
 }
-use iced::widget::image;
+
 #[derive(Debug, Clone)]
 pub struct TopLevelInfo {
     pub top_level: TopLevel,
@@ -235,7 +235,7 @@ impl AreaSelectorGUI {
     }
 
     fn namespace() -> String {
-        String::from("Area Selector")
+        String::from("xdg-desktop-protal-luminous")
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {

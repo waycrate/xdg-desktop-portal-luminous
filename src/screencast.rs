@@ -239,7 +239,7 @@ impl ScreenCastBackend {
                 .iter()
                 .map(|top_level| {
                     let image = connection
-                        .screenshot_toplevel(top_level, show_cursor)
+                        .screenshot_toplevel(top_level, false)
                         .map(|data| {
                             let rgba_data = data.to_rgb8();
                             image::Handle::from_rgba(
@@ -261,7 +261,7 @@ impl ScreenCastBackend {
             .iter()
             .map(|output| {
                 let image = connection
-                    .screenshot_single_output(output, show_cursor)
+                    .screenshot_single_output(output, false)
                     .map(|data| {
                         let rgba_data = data.to_rgb8();
                         image::Handle::from_rgba(
@@ -287,11 +287,15 @@ impl ScreenCastBackend {
         let Some(select) = self.receiver.next().await else {
             return Ok(PortalResponse::Cancelled);
         };
-        let target = match select {
-            CopySelect::Screen { index, .. } => {
-                CastTarget::Screen(outputs[index].wl_output.clone())
-            }
-            CopySelect::Window { index, .. } => CastTarget::TopLevel(top_levels[index].clone()),
+        let (target, source_type) = match select {
+            CopySelect::Screen { index, .. } => (
+                CastTarget::Screen(outputs[index].wl_output.clone()),
+                SourceType::Monitor,
+            ),
+            CopySelect::Window { index, .. } => (
+                CastTarget::TopLevel(top_levels[index].clone()),
+                SourceType::Window,
+            ),
             _ => {
                 return Ok(PortalResponse::Cancelled);
             }
@@ -315,7 +319,7 @@ impl ScreenCastBackend {
             streams: vec![Stream(
                 node_id,
                 StreamProperties {
-                    source_type: SourceType::Monitor,
+                    source_type,
                     ..Default::default()
                 },
             )],

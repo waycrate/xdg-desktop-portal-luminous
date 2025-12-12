@@ -77,7 +77,26 @@ impl ScreencastThread {
 #[derive(Default)]
 struct StreamingData {
     chosen_format: Option<Format>,
+    available_video_formats: Vec<VideoFormat>,
     size: libwayshot::Size,
+    oldsize: libwayshot::Size,
+}
+
+impl StreamingData {
+    fn new(width: u32, height: u32, available_video_formats: Vec<VideoFormat>) -> Self {
+        Self {
+            chosen_format: None,
+            available_video_formats,
+            size: libwayshot::Size { width, height },
+            oldsize: libwayshot::Size { width, height },
+        }
+    }
+    fn need_update(&self) -> bool {
+        self.size != self.oldsize
+    }
+    fn sync_size(&mut self) {
+        self.oldsize = self.size
+    }
 }
 
 type PipewireStreamResult = (
@@ -216,7 +235,7 @@ fn start_stream(
     let libwayshot::Size { width, height } = try_cast(&target, &connection)?;
 
     let listener = stream
-        .add_local_listener_with_user_data(StreamingData::default())
+        .add_local_listener_with_user_data(StreamingData::new(width, height, available_video_formats.clone()))
         .state_changed(move |stream, _, old, new| {
             tracing::info!("state-changed '{:?}' -> '{:?}'", old, new);
             match new {
@@ -231,7 +250,7 @@ fn start_stream(
                 _ => {}
             }
         })
-        .param_changed(|_, streaming_data, id, pod| {
+        .param_changed(|stream, streaming_data, id, pod| {
             if id != libspa_sys::SPA_PARAM_Format {
                 return;
             }
@@ -247,6 +266,20 @@ fn start_stream(
                     Err(e) =>
                         tracing::error!("Could not parse format chosen by PipeWire server: {e}"),
                 };
+            }
+            if streaming_data.need_update() {
+                let libwayshot::Size { width, height} = streaming_data.size;
+                let format = format(width, height, streaming_data.available_video_formats.clone());
+                let buffers = buffers(width, height);
+
+                let params = &mut [
+                    pod::Pod::from_bytes(&format).unwrap(),
+                    pod::Pod::from_bytes(&buffers).unwrap(),
+                ];
+                if let Err(err) = stream.update_params( params) {
+                    tracing::error!("failed to update pipewire params: {}", err);
+                }
+                streaming_data.sync_size();
             }
         })
         .add_buffer(move |_,_, buffer| {
@@ -398,14 +431,6 @@ fn buffers(width: u32, height: u32) -> Vec<u8> {
             },
         ],
     }))
-}
-
-#[allow(unused)]
-fn buffers2(width: u32, height: u32) -> Vec<u8> {
-    value_to_bytes(pod::Value::Object(spa::pod::object!(
-        spa::utils::SpaTypes::ObjectParamBuffers,
-        spa::param::ParamType::Buffers,
-    )))
 }
 
 fn format(width: u32, height: u32, available_video_formats: Vec<VideoFormat>) -> Vec<u8> {
