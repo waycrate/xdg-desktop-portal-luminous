@@ -274,8 +274,6 @@ impl RemoteDesktopBackend {
 
             let cast_thread_target = ScreencastThread::start_cast(
                 show_cursor,
-                width as u32,
-                height as u32,
                 None,
                 CastTarget::Screen(output),
                 connection,

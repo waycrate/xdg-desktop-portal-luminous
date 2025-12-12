@@ -30,7 +30,7 @@ use crate::session::{
 
 use crate::gui::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
 
-use libwaysip::{SelectionType, WaySip};
+//use libwaysip::{SelectionType, WaySip};
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -296,31 +296,12 @@ impl ScreenCastBackend {
                 return Ok(PortalResponse::Cancelled);
             }
         };
-        let info = match WaySip::new()
-            .with_connection(connection.conn.clone())
-            .with_selection_type(SelectionType::Screen)
-            .get()
-        {
-            Ok(Some(info)) => info,
-            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
-            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
-        };
 
-        use libwaysip::Size;
-        let screen_info = info.screen_info;
-
-        let Size { width, height } = screen_info.get_wloutput_size();
-        let output = screen_info.wl_output;
-        let cast_thread = ScreencastThread::start_cast(
-            show_cursor,
-            width as u32,
-            height as u32,
-            None,
-            target,
-            connection,
-        )
-        .await
-        .map_err(|e| zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}")))?;
+        let cast_thread = ScreencastThread::start_cast(show_cursor, None, target, connection)
+            .await
+            .map_err(|e| {
+                zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}"))
+            })?;
 
         let node_id = cast_thread.node_id();
 
@@ -334,7 +315,6 @@ impl ScreenCastBackend {
             streams: vec![Stream(
                 node_id,
                 StreamProperties {
-                    size: (width, height),
                     source_type: SourceType::Monitor,
                     ..Default::default()
                 },
