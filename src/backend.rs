@@ -123,7 +123,7 @@ pub async fn backend(
             "/org/freedesktop/portal/desktop",
             ScreenShotBackend {
                 sender: sender.clone(),
-                receiver: receiver,
+                receiver,
             },
         )?
         .serve_at(
