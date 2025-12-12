@@ -98,7 +98,7 @@ pub enum Message {
         screens: Vec<WlOutputInfo>,
     },
     ScreenCastOpen {
-        toplevels: Vec<TopLevelInfo>,
+        top_levels: Vec<TopLevelInfo>,
         screens: Vec<WlOutputInfo>,
     },
     #[allow(unused)]
@@ -120,21 +120,30 @@ impl AreaSelectorGUI {
         index: usize,
         info: &TopLevelInfo,
     ) -> Element<'_, Message> {
-        button(
-            text(info.top_level.id_and_title())
+        let button_context: Element<Message> = match &info.image {
+            Some(handle) => column![
+                text(info.top_level.id_and_title())
+                    .center()
+                    .width(Length::Fill),
+                image(handle).width(Length::Fill)
+            ]
+            .into(),
+            None => text(info.top_level.id_and_title())
                 .center()
-                .width(Length::Fill),
-        )
-        .on_press(Message::Selected {
-            id,
-            select: CopySelect::Window {
-                index,
-                show_cursor: self.use_curor,
-            },
-            use_curor: self.use_curor,
-        })
-        .style(button::subtle)
-        .into()
+                .width(Length::Fill)
+                .into(),
+        };
+        button(button_context)
+            .on_press(Message::Selected {
+                id,
+                select: CopySelect::Window {
+                    index,
+                    show_cursor: self.use_curor,
+                },
+                use_curor: self.use_curor,
+            })
+            .style(button::subtle)
+            .into()
     }
     fn output_preview<'a>(
         &'a self,
@@ -142,7 +151,15 @@ impl AreaSelectorGUI {
         index: usize,
         info: &'a WlOutputInfo,
     ) -> Element<'a, Message> {
-        button(text(&info.output.name).center().width(Length::Fill))
+        let button_context: Element<'a, Message> = match &info.image {
+            Some(handle) => column![
+                text(&info.output.name).center().width(Length::Fill),
+                image(handle).width(Length::Fill)
+            ]
+            .into(),
+            None => text(&info.output.name).center().width(Length::Fill).into(),
+        };
+        button(button_context)
             .on_press(Message::Selected {
                 id,
                 select: CopySelect::Screen {
@@ -279,7 +296,10 @@ impl AreaSelectorGUI {
                     id: iced::window::Id::unique(),
                 })
             }
-            Message::ScreenCastOpen { toplevels, screens } => {
+            Message::ScreenCastOpen {
+                top_levels: toplevels,
+                screens,
+            } => {
                 if self.window_show {
                     let _ = self
                         .sender_cast
@@ -313,7 +333,7 @@ impl AreaSelectorGUI {
                 Task::none()
             }
             Message::ReadyCast(sender) => {
-                self.sender = Some(sender);
+                self.sender_cast = Some(sender);
                 Task::none()
             }
             Message::ToggleCursor(cursor) => {
