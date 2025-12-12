@@ -245,7 +245,7 @@ impl ScreenCastBackend {
                             image::Handle::from_rgba(
                                 rgba_data.width(),
                                 rgba_data.height(),
-                                rgba_data.to_vec(),
+                                rgba_data.into_raw(),
                             )
                         })
                         .ok();
@@ -267,7 +267,7 @@ impl ScreenCastBackend {
                         image::Handle::from_rgba(
                             rgba_data.width(),
                             rgba_data.height(),
-                            rgba_data.to_vec(),
+                            rgba_data.into_raw(),
                         )
                     })
                     .ok();
@@ -279,7 +279,7 @@ impl ScreenCastBackend {
             .collect();
         let _ = self
             .sender
-            .send(Message::ImageCopyOpen {
+            .send(Message::ScreenCastOpen {
                 top_levels: top_levels_iced,
                 screens: outputs_iced,
             })

@@ -2558,7 +2558,7 @@ dependencies = [
 [[package]]
 name = "libwayshot"
 version = "0.4.0-rc3"
-source = "git+https://github.com/waycrate/wayshot?branch=apiadjust#1af8f78840c3f20b74e0225a747505f8a4eaf73f"
+source = "git+https://github.com/waycrate/wayshot?branch=apiadjust#b675a135cefa38926a03badbc61140b2a99b4afa"
 dependencies = [
  "drm",
  "gbm",
