@@ -1,5 +1,7 @@
 use iced::futures::channel::mpsc::Sender;
-use iced::widget::{Row, Space, button, checkbox, column, container, image, row, scrollable, text};
+use iced::widget::{
+    Row, Space, button, checkbox, column, container, grid, image, row, scrollable, text,
+};
 use iced::{Alignment, Element, Length, Task};
 use iced_layershell::daemon;
 use iced_layershell::reexport::{
@@ -22,7 +24,6 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Err
         AreaSelectorGUI::view,
     )
     .layer_settings(LayerShellSettings {
-        size: Some((400, 400)),
         exclusive_zone: 0,
         anchor: Anchor::Bottom | Anchor::Left | Anchor::Right | Anchor::Top,
         keyboard_interactivity: KeyboardInteractivity::OnDemand,
@@ -283,8 +284,7 @@ impl AreaSelectorGUI {
                     settings: NewLayerShellSettings {
                         exclusive_zone: None,
                         anchor: Anchor::Right | Anchor::Top | Anchor::Left | Anchor::Bottom,
-                        size: Some((400, 400)),
-                        margin: Some((100, 100, 100, 100)),
+                        margin: Some((300, 300, 300, 300)),
                         keyboard_interactivity: KeyboardInteractivity::OnDemand,
                         output_option: OutputOption::None,
                         ..Default::default()
@@ -315,8 +315,7 @@ impl AreaSelectorGUI {
                     settings: NewLayerShellSettings {
                         exclusive_zone: None,
                         anchor: Anchor::Right | Anchor::Top | Anchor::Left | Anchor::Bottom,
-                        size: Some((400, 400)),
-                        margin: Some((100, 100, 100, 100)),
+                        margin: Some((300, 500, 300, 500)),
                         keyboard_interactivity: KeyboardInteractivity::OnDemand,
                         output_option: OutputOption::None,
                         ..Default::default()
@@ -345,23 +344,25 @@ impl AreaSelectorGUI {
 
         let content: Element<'_, Message> = match self.mode {
             ViewMode::Screens => scrollable(
-                column(
+                grid(
                     self.screens
                         .iter()
                         .enumerate()
                         .map(|(index, info)| self.output_preview(id, index, info)),
                 )
+                .columns(2)
                 .spacing(10),
             )
             .height(Length::Fill)
             .into(),
             ViewMode::Windows => scrollable(
-                column(
+                grid(
                     self.toplevels
                         .iter()
                         .enumerate()
                         .map(|(index, info)| self.toplevel_preview(id, index, info)),
                 )
+                .columns(3)
                 .spacing(10),
             )
             .height(Length::Fill)
