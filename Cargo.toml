@@ -49,7 +49,7 @@ anyhow = "1.0.100"
 pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
-libwayshot = { git = "https://github.com/waycrate/wayshot", branch = "debug_api_2" }
+libwayshot = { git = "https://github.com/waycrate/wayshot" }
 rustix = { version = "1.1.2", features = ["fs", "use-libc"] }
 
 # REMOTE
