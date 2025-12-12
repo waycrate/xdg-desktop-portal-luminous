@@ -130,22 +130,29 @@ impl ScreenShotBackend {
                 CopySelect::All => wayshot_connection
                     .screenshot_all(false)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
-                CopySelect::Slurp => wayshot_connection
-                    .screenshot_freeze(
-                        |w_conn| {
-                            let info = WaySip::new()
-                                .with_connection(w_conn.conn.clone())
-                                .with_selection_type(libwaysip::SelectionType::Area)
-                                .get()
-                                .map_err(|e| libwayshot::Error::FreezeCallbackError(e.to_string()))?
-                                .ok_or(libwayshot::Error::FreezeCallbackError(
-                                    "Failed to capture the area".to_string(),
-                                ))?;
-                            waysip_to_region(info.size(), info.left_top_point())
-                        },
-                        false,
-                    )
-                    .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
+                CopySelect::Slurp => {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    wayshot_connection
+                        .screenshot_freeze(
+                            |w_conn| {
+                                let info = WaySip::new()
+                                    .with_connection(w_conn.conn.clone())
+                                    .with_selection_type(libwaysip::SelectionType::Area)
+                                    .get()
+                                    .map_err(|e| {
+                                        libwayshot::Error::FreezeCallbackError(e.to_string())
+                                    })?
+                                    .ok_or(libwayshot::Error::FreezeCallbackError(
+                                        "Failed to capture the area".to_string(),
+                                    ))?;
+                                waysip_to_region(info.size(), info.left_top_point())
+                            },
+                            false,
+                        )
+                        .map_err(|e| {
+                            zbus::Error::Failure(format!("Wayland screencopy failed, {e}"))
+                        })?
+                }
                 CopySelect::Cancel => {
                     return Ok(PortalResponse::Cancelled);
                 }
