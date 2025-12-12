@@ -101,10 +101,8 @@ pub enum Message {
         top_levels: Vec<TopLevelInfo>,
         screens: Vec<WlOutputInfo>,
     },
-    #[allow(unused)]
     Selected {
         id: iced::window::Id,
-        use_curor: bool,
         select: CopySelect,
     },
     ShowModeChange(ShowMode),
@@ -140,7 +138,6 @@ impl AreaSelectorGUI {
                     index,
                     show_cursor: self.use_curor,
                 },
-                use_curor: self.use_curor,
             })
             .style(button::subtle)
             .into()
@@ -166,7 +163,6 @@ impl AreaSelectorGUI {
                     index,
                     show_cursor: self.use_curor,
                 },
-                use_curor: self.use_curor,
             })
             .style(button::subtle)
             .into()
@@ -252,7 +248,7 @@ impl AreaSelectorGUI {
                 self.mode = ViewMode::Others;
                 Task::none()
             }
-            Message::Selected { id, select, .. } => {
+            Message::Selected { id, select } => {
                 use iced_runtime::Action;
                 use iced_runtime::window::Action as WindowAction;
                 match self.gui_mode {
@@ -380,7 +376,6 @@ impl AreaSelectorGUI {
                 .width(Length::Fill)
                 .on_press(Message::Selected {
                     id,
-                    use_curor: self.use_curor,
                     select: CopySelect::Slurp
                 })
                 .style(button::subtle),
@@ -393,7 +388,6 @@ impl AreaSelectorGUI {
                 .width(Length::Fill)
                 .on_press(Message::Selected {
                     id,
-                    use_curor: self.use_curor,
                     select: CopySelect::All
                 })
                 .style(button::subtle),
@@ -414,7 +408,6 @@ impl AreaSelectorGUI {
             Space::new().width(Length::Fixed(2.)),
             button(text("Cancel")).on_press(Message::Selected {
                 id,
-                use_curor: self.use_curor,
                 select: CopySelect::Cancel
             })
         ])
