@@ -11,7 +11,7 @@ use iced_layershell::to_layer_message;
 use libwayshot::output::OutputInfo;
 use libwayshot::region::TopLevel;
 
-pub fn gui(toplevel_capture_support: bool) -> Result<(), iced_layershell::Error> {
+pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Error> {
     unsafe { std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info") }
     tracing_subscriber::fmt().init();
     tracing::info!("luminous Start");

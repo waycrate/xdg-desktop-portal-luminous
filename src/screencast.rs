@@ -28,7 +28,7 @@ use crate::session::{
     CursorMode, PersistMode, SESSIONS, Session, SessionType, SourceType, append_session,
 };
 
-use crate::gui::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
+use crate::dialog::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
 
 //use libwaysip::{SelectionType, WaySip};
 
