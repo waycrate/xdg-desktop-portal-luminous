@@ -51,14 +51,14 @@ async fn update_settings<'a>(signal_context: &SignalEmitter<'a>) {
     let mut config = SETTING_CONFIG.lock().await;
     *config = SettingsConfig::config_from_file();
     let _ = SettingsBackend::setting_changed(
-        &signal_context,
+        signal_context,
         "org.freedesktop.appearance".to_string(),
         "color-scheme".to_string(),
         config.get_color_scheme().into(),
     )
     .await;
     let _ = SettingsBackend::setting_changed(
-        &signal_context,
+        signal_context,
         "org.freedesktop.appearance".to_string(),
         "accent-color".to_string(),
         AccentColor::new(config.get_accent_color())
@@ -67,14 +67,14 @@ async fn update_settings<'a>(signal_context: &SignalEmitter<'a>) {
     )
     .await;
     let _ = SettingsBackend::setting_changed(
-        &signal_context,
+        signal_context,
         "org.freedesktop.appearance".to_string(),
         "contrast".to_string(),
         config.get_contrast().into(),
     )
     .await;
     let _ = SettingsBackend::setting_changed(
-        &signal_context,
+        signal_context,
         "org.freedesktop.appearance".to_string(),
         "reduced-motion".to_string(),
         config.get_reduced_motion().into(),
