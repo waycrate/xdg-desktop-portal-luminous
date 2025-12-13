@@ -6109,7 +6109,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 
 [[package]]
 name = "xdg-desktop-portal-luminous"
-version = "0.1.12"
+version = "0.1.13-beta1"
 dependencies = [
  "anyhow",
  "bitflags 2.10.0",
