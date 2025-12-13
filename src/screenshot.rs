@@ -1,5 +1,5 @@
 use libwayshot::{
-    WayshotConnection, region,
+    WayshotConnection,
     region::{LogicalRegion, Region, Size},
 };
 use serde::Deserialize;
@@ -22,7 +22,7 @@ use futures::{
     channel::mpsc::{Receiver, Sender},
 };
 
-use libwaysip::{SelectionType, WaySip};
+use libwaysip::WaySip;
 
 #[derive(Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
@@ -173,48 +173,39 @@ impl ScreenShotBackend {
         }))
     }
 
-    fn pick_color(
+    async fn pick_color(
         &mut self,
         _handle: ObjectPath<'_>,
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
     ) -> fdo::Result<PortalResponse<Color>> {
-        use libwaysip::Position;
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
-        let info = match WaySip::new()
-            .with_selection_type(SelectionType::Point)
-            .get()
-        {
-            Ok(Some(info)) => info,
-            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
-            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
-        };
-        let Position {
-            x: x_coordinate,
-            y: y_coordinate,
-        } = info.left_top_point();
 
         let image = wayshot_connection
-            .screenshot(
-                LogicalRegion {
-                    inner: Region {
-                        position: region::Position {
-                            x: x_coordinate,
-                            y: y_coordinate,
-                        },
-                        size: Size {
+            .screenshot_freeze(
+                |w_conn| {
+                    let info = WaySip::new()
+                        .with_connection(w_conn.conn.clone())
+                        .with_selection_type(libwaysip::SelectionType::Point)
+                        .get()
+                        .map_err(|e| libwayshot::Error::FreezeCallbackError(e.to_string()))?
+                        .ok_or(libwayshot::Error::FreezeCallbackError(
+                            "Failed to capture the area".to_string(),
+                        ))?;
+                    waysip_to_region(
+                        libwaysip::Size {
                             width: 1,
                             height: 1,
                         },
-                    },
+                        info.left_top_point(),
+                    )
                 },
                 false,
             )
             .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?
             .to_rgba8();
-
         let pixel = image.get_pixel(0, 0);
         Ok(PortalResponse::Success(Color {
             color: [

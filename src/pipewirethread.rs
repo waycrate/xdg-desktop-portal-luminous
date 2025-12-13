@@ -1,5 +1,5 @@
 use libwayshot::region::EmbeddedRegion;
-use libwayshot::{FormatCheckTarget, TopLevel, WayshotConnection, reexport::WlOutput};
+use libwayshot::{TopLevel, WayshotConnection, WayshotTarget, reexport::WlOutput};
 use pipewire::spa::pod::Pod;
 use pipewire::{
     spa::{
@@ -28,7 +28,7 @@ pub enum CastTarget {
     Screen(WlOutput),
 }
 
-impl From<&CastTarget> for FormatCheckTarget {
+impl From<&CastTarget> for WayshotTarget {
     fn from(value: &CastTarget) -> Self {
         match value {
             CastTarget::Screen(screen) => Self::Screen(screen.clone()),

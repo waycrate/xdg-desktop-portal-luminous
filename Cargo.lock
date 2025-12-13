@@ -2557,8 +2557,9 @@ dependencies = [
 
 [[package]]
 name = "libwayshot"
-version = "0.4.0-rc3"
-source = "git+https://github.com/waycrate/wayshot#2724174b140791464be2fc5a0e9a58a9c7e3cb8d"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61e2d8cad87b94d056356fc76e76cd0a0c26233e95a93a4b44eec9e680b84941"
 dependencies = [
  "drm",
  "gbm",
