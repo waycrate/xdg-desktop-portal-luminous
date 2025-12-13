@@ -47,6 +47,41 @@ fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Resul
     Ok((watcher, rx))
 }
 
+async fn update_settings<'a>(signal_context: &SignalEmitter<'a>) {
+    let mut config = SETTING_CONFIG.lock().await;
+    *config = SettingsConfig::config_from_file();
+    let _ = SettingsBackend::setting_changed(
+        &signal_context,
+        "org.freedesktop.appearance".to_string(),
+        "color-scheme".to_string(),
+        config.get_color_scheme().into(),
+    )
+    .await;
+    let _ = SettingsBackend::setting_changed(
+        &signal_context,
+        "org.freedesktop.appearance".to_string(),
+        "accent-color".to_string(),
+        AccentColor::new(config.get_accent_color())
+            .try_into()
+            .unwrap(),
+    )
+    .await;
+    let _ = SettingsBackend::setting_changed(
+        &signal_context,
+        "org.freedesktop.appearance".to_string(),
+        "contrast".to_string(),
+        config.get_contrast().into(),
+    )
+    .await;
+    let _ = SettingsBackend::setting_changed(
+        &signal_context,
+        "org.freedesktop.appearance".to_string(),
+        "reduced-motion".to_string(),
+        config.get_reduced_motion().into(),
+    )
+    .await;
+}
+
 async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
     let connection = get_connection().await;
     let (mut watcher, mut rx) = async_watcher()?;
@@ -67,38 +102,7 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                 kind: EventKind::Create(_),
                 ..
             }) => {
-                let mut config = SETTING_CONFIG.lock().await;
-                *config = SettingsConfig::config_from_file();
-                let _ = SettingsBackend::setting_changed(
-                    &signal_context,
-                    "org.freedesktop.appearance".to_string(),
-                    "color-scheme".to_string(),
-                    config.get_color_scheme().into(),
-                )
-                .await;
-                let _ = SettingsBackend::setting_changed(
-                    &signal_context,
-                    "org.freedesktop.appearance".to_string(),
-                    "accent-color".to_string(),
-                    AccentColor::new(config.get_accent_color())
-                        .try_into()
-                        .unwrap(),
-                )
-                .await;
-                let _ = SettingsBackend::setting_changed(
-                    &signal_context,
-                    "org.freedesktop.appearance".to_string(),
-                    "contrast".to_string(),
-                    config.get_contrast().into(),
-                )
-                .await;
-                let _ = SettingsBackend::setting_changed(
-                    &signal_context,
-                    "org.freedesktop.appearance".to_string(),
-                    "reduced-motion".to_string(),
-                    config.get_reduced_motion().into(),
-                )
-                .await;
+                update_settings(&signal_context).await;
             }
             Err(e) => println!("watch error: {e:?}"),
             _ => {}
@@ -152,6 +156,11 @@ pub async fn backend(
         }
     });
 
+    let connection = get_connection().await;
+
+    let signal_context =
+        SignalEmitter::new(&connection, "/org/freedesktop/portal/desktop").unwrap();
+    update_settings(&signal_context).await;
     pending::<()>().await;
 
     Ok(())

@@ -20,6 +20,29 @@ pub struct SettingsConfig {
     pub reduced_motion: String,
 }
 
+#[derive(Deserialize, PartialEq, Eq, Debug)]
+struct SettingsConfigRead {
+    pub color_scheme: Option<String>,
+    pub accent_color: Option<String>,
+    pub contrast: Option<String>,
+    pub reduced_motion: Option<String>,
+}
+
+impl From<SettingsConfigRead> for SettingsConfig {
+    fn from(value: SettingsConfigRead) -> Self {
+        Self {
+            color_scheme: value.color_scheme.unwrap_or(DEFAULT_COLOR_NAME.to_string()),
+            accent_color: value
+                .accent_color
+                .unwrap_or(DEFAULT_ACCENT_COLLOR.to_string()),
+            contrast: value.contrast.unwrap_or(DEFAULT_CONTRAST.to_string()),
+            reduced_motion: value
+                .reduced_motion
+                .unwrap_or(DEFAULT_REDUCED_MOTION.to_string()),
+        }
+    }
+}
+
 impl SettingsConfig {
     pub fn get_color_scheme(&self) -> u32 {
         match self.color_scheme.as_str() {
@@ -86,6 +109,9 @@ impl SettingsConfig {
         if file.read_to_string(&mut buf).is_err() {
             return Self::default();
         };
-        toml::from_str(&buf).unwrap_or(Self::default())
+        let Ok(file_config) = toml::from_str::<SettingsConfigRead>(&buf) else {
+            return Self::default();
+        };
+        file_config.into()
     }
 }
