@@ -70,14 +70,14 @@ impl SettingsConfig {
         match self.contrast.as_str() {
             DEFAULT_CONTRAST => super::DEFAULT_CONTRAST,
             HIGHER_CONTRAST => super::HIGHER_CONTRAST,
-            _ => unreachable!(),
+            _ => super::DEFAULT_CONTRAST,
         }
     }
     pub fn get_reduced_motion(&self) -> u32 {
         match self.reduced_motion.as_str() {
             DEFAULT_REDUCED_MOTION => super::DEFAULT_REDUCED_MOTION,
             REDUCED_REDUCED_MOTION => super::REDUCED_REDUCED_MOTION,
-            _ => unreachable!(),
+            _ => super::DEFAULT_REDUCED_MOTION,
         }
     }
 }
