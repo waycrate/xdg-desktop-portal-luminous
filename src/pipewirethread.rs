@@ -161,7 +161,7 @@ impl StreamingData {
             .connection
             .create_screencast_with_format(
                 self.chosen_format.unwrap(),
-                self.embedded_region.clone(),
+                self.embedded_region,
                 (&self.target).into(),
                 self.overlay_cursor,
                 &fd,
