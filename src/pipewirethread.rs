@@ -146,7 +146,6 @@ impl StreamingData {
                 };
 
                 let libwayshot::Size { width, height } = size;
-                println!("size = {size:?}");
                 let format = format(width, height, self.available_video_formats.clone());
                 let buffers = buffers(width, height);
 
