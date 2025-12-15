@@ -101,6 +101,7 @@ pub enum Message {
     ScreenCastOpen {
         top_levels: Vec<TopLevelInfo>,
         screens: Vec<WlOutputInfo>,
+        show_cursor: bool,
     },
     Selected {
         id: iced::window::Id,
@@ -295,6 +296,7 @@ impl AreaSelectorGUI {
             Message::ScreenCastOpen {
                 top_levels: toplevels,
                 screens,
+                show_cursor,
             } => {
                 if self.window_show {
                     let _ = self
@@ -307,6 +309,7 @@ impl AreaSelectorGUI {
                 if self.gui_mode == GuiMode::ScreenShot {
                     self.mode = ViewMode::Screens;
                 }
+                self.use_curor = show_cursor;
                 self.gui_mode = GuiMode::ScreenCast;
                 self.window_show = true;
                 self.toplevels = toplevels;

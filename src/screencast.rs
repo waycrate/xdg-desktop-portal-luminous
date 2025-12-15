@@ -282,19 +282,22 @@ impl ScreenCastBackend {
             .send(Message::ScreenCastOpen {
                 top_levels: top_levels_iced,
                 screens: outputs_iced,
+                show_cursor,
             })
             .await;
         let Some(select) = self.receiver.next().await else {
             return Ok(PortalResponse::Cancelled);
         };
-        let (target, source_type) = match select {
-            CopySelect::Screen { index, .. } => (
+        let (target, source_type, show_cursor) = match select {
+            CopySelect::Screen { index, show_cursor } => (
                 CastTarget::Screen(outputs[index].wl_output.clone()),
                 SourceType::Monitor,
+                show_cursor,
             ),
-            CopySelect::Window { index, .. } => (
+            CopySelect::Window { index, show_cursor } => (
                 CastTarget::TopLevel(top_levels[index].clone()),
                 SourceType::Window,
+                show_cursor,
             ),
             _ => {
                 return Ok(PortalResponse::Cancelled);
