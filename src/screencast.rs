@@ -234,12 +234,13 @@ impl ScreenCastBackend {
         use iced::widget::image;
         let top_levels = connection.get_all_toplevels();
         let mut top_levels_iced = vec![];
+        // NOTE: seems that when we shot the screen first time, it will influence the status later
         if self.toplevel_capture_support {
             top_levels_iced = top_levels
                 .iter()
                 .map(|top_level| {
                     let image = connection
-                        .screenshot_toplevel(top_level, false)
+                        .screenshot_toplevel(top_level, show_cursor)
                         .map(|data| {
                             let rgba_data = data.to_rgba8();
                             image::Handle::from_rgba(
@@ -257,11 +258,13 @@ impl ScreenCastBackend {
                 .collect();
         }
         let outputs = connection.get_all_outputs();
+
+        // NOTE: seems that when we shot the screen first time, it will influence the status later
         let outputs_iced: Vec<WlOutputInfo> = outputs
             .iter()
             .map(|output| {
                 let image = connection
-                    .screenshot_single_output(output, false)
+                    .screenshot_single_output(output, show_cursor)
                     .map(|data| {
                         let rgba_data = data.to_rgba8();
                         image::Handle::from_rgba(
@@ -288,16 +291,14 @@ impl ScreenCastBackend {
         let Some(select) = self.receiver.next().await else {
             return Ok(PortalResponse::Cancelled);
         };
-        let (target, source_type, show_cursor) = match select {
-            CopySelect::Screen { index, show_cursor } => (
+        let (target, source_type) = match select {
+            CopySelect::Screen { index, .. } => (
                 CastTarget::Screen(outputs[index].wl_output.clone()),
                 SourceType::Monitor,
-                show_cursor,
             ),
-            CopySelect::Window { index, show_cursor } => (
+            CopySelect::Window { index, .. } => (
                 CastTarget::TopLevel(top_levels[index].clone()),
                 SourceType::Window,
-                show_cursor,
             ),
             _ => {
                 return Ok(PortalResponse::Cancelled);
