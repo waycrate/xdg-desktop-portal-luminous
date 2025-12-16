@@ -240,7 +240,7 @@ impl ScreenCastBackend {
                 .iter()
                 .map(|top_level| {
                     let image = connection
-                        .screenshot_toplevel(top_level, show_cursor)
+                        .screenshot_toplevel(top_level, false)
                         .map(|data| {
                             let rgba_data = data.to_rgba8();
                             image::Handle::from_rgba(
@@ -264,7 +264,7 @@ impl ScreenCastBackend {
             .iter()
             .map(|output| {
                 let image = connection
-                    .screenshot_single_output(output, show_cursor)
+                    .screenshot_single_output(output, false)
                     .map(|data| {
                         let rgba_data = data.to_rgba8();
                         image::Handle::from_rgba(
