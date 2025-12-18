@@ -28,6 +28,15 @@ pub enum CastTarget {
     Screen(WlOutput),
 }
 
+impl CastTarget {
+    fn wayshot_target(&self) -> WayshotTarget {
+        match self {
+            CastTarget::Screen(screen) => WayshotTarget::Screen(screen.clone()),
+            CastTarget::TopLevel(toplevel) => WayshotTarget::Toplevel(toplevel.clone()),
+        }
+    }
+}
+
 impl From<&CastTarget> for WayshotTarget {
     fn from(value: &CastTarget) -> Self {
         match value {
@@ -86,6 +95,7 @@ struct StreamingData {
     embedded_region: Option<EmbeddedRegion>,
     size: libwayshot::Size,
     target: CastTarget,
+    gbm_support: bool,
 }
 
 impl StreamingData {
@@ -97,6 +107,7 @@ impl StreamingData {
         available_video_formats: Vec<VideoFormat>,
         embedded_region: Option<EmbeddedRegion>,
         target: CastTarget,
+        gbm_support: bool,
     ) -> Self {
         Self {
             chosen_format: None,
@@ -106,6 +117,7 @@ impl StreamingData {
             size: libwayshot::Size { width, height },
             embedded_region,
             target,
+            gbm_support,
         }
     }
 
@@ -117,7 +129,7 @@ impl StreamingData {
         let cast = unsafe {
             &mut *((*buffer).user_data as *mut libwayshot::screencast::WayshotScreenCast)
         };
-        match self.connection.capture_screen(cast) {
+        match self.connection.screencast(cast) {
             Err(libwayshot::Error::FramecopyFailedWithReason(WEnum::Value(
                 FailureReason::BufferConstraints,
             ))) => {
@@ -150,35 +162,70 @@ impl StreamingData {
     fn add_buffer(&self, buffer: *mut pipewire::sys::pw_buffer) {
         let libwayshot::Size { width, height } = self.size;
         let buf = unsafe { &mut *(*buffer).buffer };
+        let unit;
+
         let datas = unsafe { slice::from_raw_parts_mut(buf.datas, buf.n_datas as usize) };
-        assert_eq!(datas.len(), 1);
-        let data = &mut datas[0];
-        let name = c"pipewire-screencopy";
-        let fd = rustix::fs::memfd_create(name, rustix::fs::MemfdFlags::CLOEXEC).unwrap();
-        rustix::fs::ftruncate(&fd, (width * height * 4) as _).unwrap();
+        if (datas[0].type_ & (1 << spa::sys::SPA_DATA_DmaBuf) != 0) && self.gbm_support {
+            tracing::info!("Allocate dmabuf buffer");
+            unit = self
+                .connection
+                .create_screencast_with_dmabuf(
+                    self.embedded_region,
+                    self.target.wayshot_target(),
+                    self.overlay_cursor,
+                )
+                .unwrap();
+            let bo = unit.dmabuf_bo().unwrap();
+            let plane_len = bo.plane_count() as usize;
+            let data_len = datas.len();
+            let loop_len = plane_len.min(data_len);
+            for index in 0..loop_len {
+                let data = &mut datas[index];
+                let plane_fd = bo.fd_for_plane(index as i32).unwrap();
+                let plane_offset = bo.offset(index as i32);
+                let plane_stride = bo.stride();
+                data.type_ = spa::sys::SPA_DATA_DmaBuf;
+                data.flags = 0;
+                data.fd = plane_fd.into_raw_fd() as _;
+                data.data = std::ptr::null_mut();
+                data.maxsize = width * height * 4;
+                data.mapoffset = 0;
 
-        let unit = self
-            .connection
-            .create_screencast_with_format(
-                self.chosen_format.unwrap(),
-                self.embedded_region,
-                (&self.target).into(),
-                self.overlay_cursor,
-                &fd,
-            )
-            .unwrap();
+                let chunk = unsafe { &mut *data.chunk };
+                chunk.size = height * plane_stride;
+                chunk.offset = plane_offset;
+                chunk.stride = plane_stride as i32;
+            }
+        } else {
+            assert_eq!(datas.len(), 1);
+            let data = &mut datas[0];
+            let name = c"pipewire-screencopy";
+            let fd = rustix::fs::memfd_create(name, rustix::fs::MemfdFlags::CLOEXEC).unwrap();
+            rustix::fs::ftruncate(&fd, (width * height * 4) as _).unwrap();
 
-        data.type_ = libspa_sys::SPA_DATA_MemFd;
-        data.flags = 0;
-        data.fd = fd.into_raw_fd().into();
+            unit = self
+                .connection
+                .create_screencast_with_shm(
+                    self.chosen_format.unwrap(),
+                    self.embedded_region,
+                    (&self.target).into(),
+                    self.overlay_cursor,
+                    &fd,
+                )
+                .unwrap();
 
-        data.data = std::ptr::null_mut();
-        data.maxsize = width * height * 4;
-        data.mapoffset = 0;
-        let chunk = unsafe { &mut *data.chunk };
-        chunk.size = width * height * 4;
-        chunk.offset = 0;
-        chunk.stride = 4 * width as i32;
+            data.type_ = libspa_sys::SPA_DATA_MemFd;
+            data.flags = 0;
+            data.fd = fd.into_raw_fd().into();
+
+            data.data = std::ptr::null_mut();
+            data.maxsize = width * height * 4;
+            data.mapoffset = 0;
+            let chunk = unsafe { &mut *data.chunk };
+            chunk.size = width * height * 4;
+            chunk.offset = 0;
+            chunk.stride = 4 * width as i32;
+        }
         let user_data = Box::into_raw(Box::new(unit)) as *mut c_void;
         unsafe { (*buffer).user_data = user_data };
     }
@@ -316,7 +363,7 @@ pub fn try_cast(
 }
 
 fn start_stream(
-    connection: WayshotConnection,
+    mut connection: WayshotConnection,
     overlay_cursor: bool,
     embedded_region: Option<EmbeddedRegion>,
     target: CastTarget,
@@ -339,18 +386,23 @@ fn start_stream(
     let (node_id_tx, node_id_rx) = oneshot::channel();
     let mut node_id_tx = Some(node_id_tx);
 
-    let available_video_formats = match connection.get_available_frame_formats(&(&target).into()) {
-        Ok(frame_format_list) => frame_format_list
-            .iter()
-            .filter_map(|frame_format| wl_shm_format_to_spa(frame_format.format))
-            .collect(),
-        Err(e) => {
-            tracing::warn!("Could not get available video formats from libwayshot: {e}");
-            // Xrgb8888 and Argb8888 should be supported by all renderers
-            // https://smithay.github.io/wayland-rs/wayland_client/protocol/wl_shm/enum.Format.html
-            vec![VideoFormat::BGRx, VideoFormat::BGRA]
-        }
-    };
+    let gbm_support = connection
+        .try_init_dmabuf(target.wayshot_target())
+        .unwrap_or(false);
+
+    let available_video_formats =
+        match connection.get_available_frame_formats(&target.wayshot_target()) {
+            Ok(frame_format_list) => frame_format_list
+                .iter()
+                .filter_map(|frame_format| wl_shm_format_to_spa(frame_format.format))
+                .collect(),
+            Err(e) => {
+                tracing::warn!("Could not get available video formats from libwayshot: {e}");
+                // Xrgb8888 and Argb8888 should be supported by all renderers
+                // https://smithay.github.io/wayland-rs/wayland_client/protocol/wl_shm/enum.Format.html
+                vec![VideoFormat::BGRx, VideoFormat::BGRA]
+            }
+        };
     let libwayshot::Size { width, height } = try_cast(&target, &connection)?;
 
     let listener = stream
@@ -362,6 +414,7 @@ fn start_stream(
             available_video_formats.clone(),
             embedded_region,
             target,
+            gbm_support,
         ))
         .state_changed(move |stream, _, old, new| {
             tracing::info!("state-changed '{:?}' -> '{:?}'", old, new);

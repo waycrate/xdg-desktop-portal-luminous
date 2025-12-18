@@ -49,7 +49,7 @@ anyhow = "1.0.100"
 pipewire = "0.8.0"
 libspa-sys = "0.8.0"
 
-libwayshot = "0.5.0"
+libwayshot = "0.6.0"
 rustix = { version = "1.1.2", features = ["fs", "use-libc"] }
 
 # REMOTE
@@ -71,7 +71,7 @@ toml = "0.9.8"
 csscolorparser = "0.8.1"
 notify = "8.2.0"
 futures = "0.3.31"
-libwaysip = "0.5.0"
+libwaysip = "0.6.0"
 
 calloop = "0.14.3"
 calloop-wayland-source = "0.4.1"
