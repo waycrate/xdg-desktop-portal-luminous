@@ -99,6 +99,7 @@ struct StreamingData {
 }
 
 impl StreamingData {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         width: u32,
         height: u32,
@@ -179,6 +180,7 @@ impl StreamingData {
             let plane_len = bo.plane_count() as usize;
             let data_len = datas.len();
             let loop_len = plane_len.min(data_len);
+            #[allow(clippy::needless_range_loop)]
             for index in 0..loop_len {
                 let data = &mut datas[index];
                 let plane_fd = bo.fd_for_plane(index as i32).unwrap();
