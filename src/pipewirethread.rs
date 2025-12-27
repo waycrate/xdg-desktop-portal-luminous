@@ -152,6 +152,13 @@ impl StreamingData {
                     tracing::error!("failed to update pipewire params: {}", err);
                 }
             }
+            Err(libwayshot::Error::FramecopyFailedWithReason(WEnum::Value(
+                FailureReason::Stopped,
+            ))) => {
+                tracing::error!("Pipewire video capture failed capture is stopped");
+                // If the target is dead, we need to stop it
+                let _ = stream.set_active(false);
+            }
             Err(e) => {
                 tracing::error!("Pipewire video capture failed: {e}");
             }
