@@ -2,6 +2,7 @@ use libwayshot::reexport::FailureReason;
 use libwayshot::region::EmbeddedRegion;
 use libwayshot::{TopLevel, WayshotConnection, WayshotTarget, reexport::WlOutput};
 use pipewire::spa::pod::Pod;
+use pipewire::spa::sys as libspa_sys;
 use pipewire::{
     spa::{
         self,
@@ -122,7 +123,7 @@ impl StreamingData {
         }
     }
 
-    fn process(&mut self, stream: &pipewire::stream::StreamRef) {
+    fn process(&mut self, stream: &pipewire::stream::Stream) {
         let buffer = unsafe { stream.dequeue_raw_buffer() };
         if buffer.is_null() {
             return;
@@ -275,10 +276,10 @@ impl StreamingData {
 }
 
 type PipewireStreamResult = (
-    pipewire::main_loop::MainLoop,
+    pipewire::main_loop::MainLoopRc,
     pipewire::stream::StreamListener<StreamingData>,
-    pipewire::stream::Stream,
-    pipewire::context::Context,
+    pipewire::stream::StreamRc,
+    pipewire::context::ContextRc,
     oneshot::Receiver<anyhow::Result<u32>>,
 );
 use std::{
@@ -377,14 +378,14 @@ fn start_stream(
     embedded_region: Option<EmbeddedRegion>,
     target: CastTarget,
 ) -> anyhow::Result<PipewireStreamResult> {
-    let loop_ = pipewire::main_loop::MainLoop::new(None).unwrap();
-    let context = pipewire::context::Context::new(&loop_).unwrap();
-    let core = context.connect(None).unwrap();
+    let loop_ = pipewire::main_loop::MainLoopRc::new(None).unwrap();
+    let context = pipewire::context::ContextRc::new(&loop_, None).unwrap();
+    let core = context.connect_rc(None).unwrap();
 
     let name = "wayshot-screenshot"; // XXX randomize?
 
-    let stream = pipewire::stream::Stream::new(
-        &core,
+    let stream = pipewire::stream::StreamRc::new(
+        core,
         name,
         pipewire::properties::properties! {
             "media.class" => "Video/Source",
