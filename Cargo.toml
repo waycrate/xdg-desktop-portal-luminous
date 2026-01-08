@@ -18,7 +18,7 @@ zbus = { version = "5.12", default-features = false, features = [
 	"tokio",
 	"url",
 ] }
-tokio = { version = "1.48.0", features = ["full"] }
+tokio = { version = "1.49.0", features = ["full"] }
 iced = { features = [
 	"tokio",
 	"debug",
