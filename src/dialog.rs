@@ -403,13 +403,15 @@ impl AreaSelectorGUI {
 
         let bottom_button_list: Element<'_, Message> = container(row![
             Space::new().width(Length::Fill),
-            container(checkbox(self.use_cursor).label("use_cursor").on_toggle_maybe(
-                if self.gui_mode == GuiMode::ScreenShot {
-                    Some(Message::ToggleCursor)
-                } else {
-                    None
-                }
-            ))
+            container(
+                checkbox(self.use_cursor)
+                    .label("use_cursor")
+                    .on_toggle_maybe(if self.gui_mode == GuiMode::ScreenShot {
+                        Some(Message::ToggleCursor)
+                    } else {
+                        None
+                    })
+            )
             .center_y(Length::Fill),
             Space::new().width(Length::Fixed(2.)),
             button(text("Cancel")).on_press(Message::Selected {
