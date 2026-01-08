@@ -60,7 +60,7 @@ struct AreaSelectorGUI {
     sender_cast: Option<Sender<CopySelect>>,
     toplevels: Vec<TopLevelInfo>,
     screens: Vec<WlOutputInfo>,
-    use_curor: bool,
+    use_cursor: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -138,7 +138,7 @@ impl AreaSelectorGUI {
                 id,
                 select: CopySelect::Window {
                     index,
-                    show_cursor: self.use_curor,
+                    show_cursor: self.use_cursor,
                 },
             })
             .style(button::subtle)
@@ -163,7 +163,7 @@ impl AreaSelectorGUI {
                 id,
                 select: CopySelect::Screen {
                     index,
-                    show_cursor: self.use_curor,
+                    show_cursor: self.use_cursor,
                 },
             })
             .style(button::subtle)
@@ -228,7 +228,7 @@ impl AreaSelectorGUI {
             sender_cast: None,
             toplevels: Vec::new(),
             screens: Vec::new(),
-            use_curor: false,
+            use_cursor: false,
         }
     }
 
@@ -309,7 +309,7 @@ impl AreaSelectorGUI {
                 if self.gui_mode == GuiMode::ScreenShot {
                     self.mode = ViewMode::Screens;
                 }
-                self.use_curor = show_cursor;
+                self.use_cursor = show_cursor;
                 self.gui_mode = GuiMode::ScreenCast;
                 self.window_show = true;
                 self.toplevels = toplevels;
@@ -335,7 +335,7 @@ impl AreaSelectorGUI {
                 Task::none()
             }
             Message::ToggleCursor(cursor) => {
-                self.use_curor = cursor;
+                self.use_cursor = cursor;
                 Task::none()
             }
             _ => unreachable!(),
@@ -403,7 +403,7 @@ impl AreaSelectorGUI {
 
         let bottom_button_list: Element<'_, Message> = container(row![
             Space::new().width(Length::Fill),
-            container(checkbox(self.use_curor).label("use_curor").on_toggle_maybe(
+            container(checkbox(self.use_cursor).label("use_cursor").on_toggle_maybe(
                 if self.gui_mode == GuiMode::ScreenShot {
                     Some(Message::ToggleCursor)
                 } else {
