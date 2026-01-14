@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use stream_message::SERVER_SOCK;
 use zbus::interface;
 
 use zbus::zvariant::{
@@ -17,6 +18,7 @@ use futures::{
 };
 
 use crate::pipewirethread::CastTarget;
+use crate::utils::get_selection_from_socket;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
@@ -259,49 +261,58 @@ impl ScreenCastBackend {
         }
         let outputs = connection.get_all_outputs();
 
-        // NOTE: seems that when we shot the screen first time, it will influence the status later
-        let outputs_iced: Vec<WlOutputInfo> = outputs
-            .iter()
-            .map(|output| {
-                let image = connection
-                    .screenshot_single_output(output, show_cursor)
-                    .map(|data| {
-                        let rgba_data = data.to_rgba8();
-                        image::Handle::from_rgba(
-                            rgba_data.width(),
-                            rgba_data.height(),
-                            rgba_data.into_raw(),
-                        )
-                    })
-                    .ok();
-                WlOutputInfo {
-                    output: output.clone(),
-                    image,
-                }
-            })
-            .collect();
-        let _ = self
-            .sender
-            .send(Message::ScreenCastOpen {
-                top_levels: top_levels_iced,
-                screens: outputs_iced,
-                show_cursor,
-            })
-            .await;
-        let Some(select) = self.receiver.next().await else {
-            return Ok(PortalResponse::Cancelled);
-        };
-        let (target, source_type) = match select {
-            CopySelect::Screen { index, .. } => (
-                CastTarget::Screen(outputs[index].wl_output.clone()),
+        let (target, source_type) = if SERVER_SOCK.exists() {
+            let monitors: Vec<String> = outputs.iter().map(|output| output.name.clone()).collect();
+            let index = get_selection_from_socket(monitors)?;
+            (
+                CastTarget::Screen(outputs[index as usize].wl_output.clone()),
                 SourceType::Monitor,
-            ),
-            CopySelect::Window { index, .. } => (
-                CastTarget::TopLevel(top_levels[index].clone()),
-                SourceType::Window,
-            ),
-            _ => {
+            )
+        } else {
+            // NOTE: seems that when we shot the screen first time, it will influence the status later
+            let outputs_iced: Vec<WlOutputInfo> = outputs
+                .iter()
+                .map(|output| {
+                    let image = connection
+                        .screenshot_single_output(output, show_cursor)
+                        .map(|data| {
+                            let rgba_data = data.to_rgba8();
+                            image::Handle::from_rgba(
+                                rgba_data.width(),
+                                rgba_data.height(),
+                                rgba_data.into_raw(),
+                            )
+                        })
+                        .ok();
+                    WlOutputInfo {
+                        output: output.clone(),
+                        image,
+                    }
+                })
+                .collect();
+            let _ = self
+                .sender
+                .send(Message::ScreenCastOpen {
+                    top_levels: top_levels_iced,
+                    screens: outputs_iced,
+                    show_cursor,
+                })
+                .await;
+            let Some(select) = self.receiver.next().await else {
                 return Ok(PortalResponse::Cancelled);
+            };
+            match select {
+                CopySelect::Screen { index, .. } => (
+                    CastTarget::Screen(outputs[index].wl_output.clone()),
+                    SourceType::Monitor,
+                ),
+                CopySelect::Window { index, .. } => (
+                    CastTarget::TopLevel(top_levels[index].clone()),
+                    SourceType::Window,
+                ),
+                _ => {
+                    return Ok(PortalResponse::Cancelled);
+                }
             }
         };
 

@@ -2,8 +2,11 @@ mod dispatch;
 mod remote_thread;
 mod state;
 
+use libwayshot::WayshotConnection;
 use libwaysip::{SelectionType, WaySip};
 use remote_thread::RemoteControl;
+use stream_message::SERVER_SOCK;
+use wayland_client::protocol::wl_output;
 
 use std::collections::HashMap;
 
@@ -27,6 +30,7 @@ use crate::session::{
 };
 
 use crate::PortalResponse;
+use crate::utils::get_selection_from_socket;
 
 use self::remote_thread::InputRequest;
 use crate::pipewirethread::CastTarget;
@@ -253,24 +257,15 @@ impl RemoteDesktopBackend {
         let mut streams = vec![];
         let mut cast_thread = None;
         let connection = libwayshot::WayshotConnection::new().unwrap();
-        let info = match WaySip::new()
-            .with_connection(connection.conn.clone())
-            .with_selection_type(SelectionType::Screen)
-            .get()
-        {
-            Ok(Some(info)) => info,
-            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
-            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
-        };
-
-        use libwaysip::Size;
-        let screen_info = info.screen_info;
-
-        let Size { width, height } = screen_info.get_wloutput_size();
+        let RemoteInfo {
+            width,
+            height,
+            wl_output,
+        } = get_monitor_info_from_socket(&connection)?;
         if screen_share_enabled {
             let show_cursor = current_session.cursor_mode.show_cursor();
 
-            let output = screen_info.wl_output;
+            let output = wl_output;
 
             let cast_thread_target = ScreencastThread::start_cast(
                 show_cursor,
@@ -429,5 +424,47 @@ impl RemoteDesktopBackend {
         slot: u32,
     ) -> zbus::fdo::Result<()> {
         notify_input_event(session_handle, InputRequest::TouchUp { slot }).await
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RemoteInfo {
+    width: i32,
+    height: i32,
+    wl_output: wl_output::WlOutput,
+}
+
+fn get_monitor_info_from_socket(connection: &WayshotConnection) -> zbus::fdo::Result<RemoteInfo> {
+    if SERVER_SOCK.exists() {
+        let outputs = connection.get_all_outputs();
+        let monitors: Vec<String> = outputs.iter().map(|output| output.name.clone()).collect();
+        let index = get_selection_from_socket(monitors)?;
+        let output = &outputs[index as usize];
+        let libwayshot::Size { width, height } = output.physical_size;
+        Ok(RemoteInfo {
+            width: width as i32,
+            height: height as i32,
+            wl_output: output.wl_output.clone(),
+        })
+    } else {
+        let info = match WaySip::new()
+            .with_connection(connection.conn.clone())
+            .with_selection_type(SelectionType::Screen)
+            .get()
+        {
+            Ok(Some(info)) => info,
+            Ok(None) => return Err(zbus::Error::Failure("You cancel it".to_string()).into()),
+            Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
+        };
+
+        use libwaysip::Size;
+        let screen_info = info.screen_info;
+
+        let Size { width, height } = screen_info.get_wloutput_size();
+        Ok(RemoteInfo {
+            width,
+            height,
+            wl_output: screen_info.wl_output,
+        })
     }
 }
