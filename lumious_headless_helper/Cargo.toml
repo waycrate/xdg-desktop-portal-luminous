@@ -1,0 +1,9 @@
+[package]
+name = "lumious_headless_helper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dialoguer = { version = "0.12.0", features = ["fuzzy-select"] }
+signal-hook = "0.4.1"
+stream_message.workspace = true

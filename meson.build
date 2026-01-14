@@ -1,16 +1,18 @@
 project(
   'xdg-desktop-portal-luminous',
   'rust',
-  version: '0.1.12',
+  version: '0.1.14',
   meson_version: '>= 1.1.0',
 )
 
 cargo = find_program('cargo', version: '>= 1.85')
 
+helper_name = 'lumious_headless_helper'
+
 find_program('rustc', version: '>= 1.85')
 
 if get_option('debug')
-  command = [
+  command_main = [
     cargo,
     'build',
     '&&',
@@ -18,18 +20,30 @@ if get_option('debug')
     meson.global_source_root() / 'target' / 'debug' / meson.project_name(),
     '@OUTPUT@',
   ]
-else
-  command = [
+  command_helper = [
     cargo,
     'build',
+    '--package', 'lumious_headless_helper',
+    '&&',
+    'cp',
+    meson.global_source_root() / 'target' / 'debug' / helper_name,
+    '@OUTPUT@',
+  ]
+else
+  command_main = [
+    cargo,
+    'build',
+    '--package', 'lumious_headless_helper',
     '--release', '&&',
     'cp',
-    meson.global_source_root() / 'target' / 'release' / meson.project_name(),
+    meson.global_source_root() / 'target' / 'release' / helper_name,
     '@OUTPUT@',
   ]
 endif
 
 prefix = get_option('prefix')
+
+bindir = prefix / get_option('bindir')
 
 xdg_install_dir = prefix / get_option('libexecdir')
 
@@ -61,8 +75,18 @@ custom_target(
   install: true,
   install_dir: xdg_install_dir,
   console: true,
-  command: command,
+  command: command_main,
 )
+custom_target(
+  'lumious_headless_helper',
+  output: helper_name,
+  build_by_default: true,
+  install: true,
+  install_dir: bindir,
+  console: true,
+  command: command_helper,
+)
+
 
 install_data('misc/luminous.portal', install_dir: portal_dir)
 
