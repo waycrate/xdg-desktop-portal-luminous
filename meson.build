@@ -33,6 +33,14 @@ else
   command_main = [
     cargo,
     'build',
+    '--release', '&&',
+    'cp',
+    meson.global_source_root() / 'target' / 'debug' / meson.project_name(),
+    '@OUTPUT@',
+  ]
+  command_main = [
+    cargo,
+    'build',
     '--package', 'lumious_headless_helper',
     '--release', '&&',
     'cp',
@@ -86,7 +94,6 @@ custom_target(
   console: true,
   command: command_helper,
 )
-
 
 install_data('misc/luminous.portal', install_dir: portal_dir)
 
