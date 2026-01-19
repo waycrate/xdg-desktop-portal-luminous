@@ -38,7 +38,7 @@ else
     meson.global_source_root() / 'target' / 'debug' / meson.project_name(),
     '@OUTPUT@',
   ]
-  command_main = [
+  command_helper = [
     cargo,
     'build',
     '--package', 'lumious_headless_helper',
