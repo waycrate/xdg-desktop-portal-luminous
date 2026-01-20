@@ -1,6 +1,9 @@
 use libwayshot::reexport::FailureReason;
 use libwayshot::region::EmbeddedRegion;
-use libwayshot::{TopLevel, WayshotConnection, WayshotTarget, reexport::WlOutput};
+use libwayshot::{
+    WayshotConnection, WayshotTarget,
+    reexport::{ExtForeignToplevelHandleV1, WlOutput},
+};
 use pipewire::spa::pod::Pod;
 use pipewire::spa::sys as libspa_sys;
 use pipewire::{
@@ -25,7 +28,7 @@ pub struct ScreencastThread {
 
 #[derive(Debug, Clone)]
 pub enum CastTarget {
-    TopLevel(TopLevel),
+    TopLevel(ExtForeignToplevelHandleV1),
     Screen(WlOutput),
 }
 
@@ -179,11 +182,11 @@ impl StreamingData {
             unit = self
                 .connection
                 .create_screencast_with_dmabuf(
-                    self.embedded_region,
                     self.target.wayshot_target(),
                     self.overlay_cursor,
+                    self.embedded_region,
                 )
-                .unwrap();
+                .expect("We should make sure the protocol is existed");
             let bo = unit.dmabuf_bo().unwrap();
             let plane_len = bo.plane_count() as usize;
             let data_len = datas.len();
@@ -218,11 +221,11 @@ impl StreamingData {
                 .create_screencast_with_shm(
                     self.chosen_format.unwrap(),
                     self.embedded_region,
-                    (&self.target).into(),
+                    self.target.wayshot_target(),
                     self.overlay_cursor,
                     &fd,
                 )
-                .unwrap();
+                .expect("We should make sure the protocol is existed");
 
             data.type_ = libspa_sys::SPA_DATA_MemFd;
             data.flags = 0;
@@ -282,95 +285,6 @@ type PipewireStreamResult = (
     pipewire::context::ContextRc,
     oneshot::Receiver<anyhow::Result<u32>>,
 );
-use std::{
-    ffi::CString,
-    os::fd::OwnedFd,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-fn get_mem_file_handle() -> String {
-    format!(
-        "/luminous-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|time| time.subsec_nanos().to_string())
-            .unwrap_or("unknown".into())
-    )
-}
-
-pub fn create_shm_fd() -> std::io::Result<OwnedFd> {
-    use rustix::{
-        fs::{self, SealFlags},
-        io, shm,
-    };
-    // Only try memfd on linux and freebsd.
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    loop {
-        // Create a file that closes on successful execution and seal it's operations.
-        match fs::memfd_create(
-            CString::new("luminous")?.as_c_str(),
-            fs::MemfdFlags::CLOEXEC | fs::MemfdFlags::ALLOW_SEALING,
-        ) {
-            Ok(fd) => {
-                // This is only an optimization, so ignore errors.
-                // F_SEAL_SRHINK = File cannot be reduced in size.
-                // F_SEAL_SEAL = Prevent further calls to fcntl().
-                let _ = fs::fcntl_add_seals(&fd, fs::SealFlags::SHRINK | SealFlags::SEAL);
-                return Ok(fd);
-            }
-            Err(io::Errno::INTR) => continue,
-            Err(io::Errno::NOSYS) => break,
-            Err(errno) => return Err(std::io::Error::from(errno)),
-        }
-    }
-
-    // Fallback to using shm_open.
-    let mut mem_file_handle = get_mem_file_handle();
-    loop {
-        let open_result = shm::open(
-            mem_file_handle.as_str(),
-            shm::OFlags::CREATE | shm::OFlags::EXCL | shm::OFlags::RDWR,
-            fs::Mode::RUSR | fs::Mode::WUSR,
-        );
-        // O_CREAT = Create file if does not exist.
-        // O_EXCL = Error if create and file exists.
-        // O_RDWR = Open for reading and writing.
-        // O_CLOEXEC = Close on successful execution.
-        // S_IRUSR = Set user read permission bit .
-        // S_IWUSR = Set user write permission bit.
-        match open_result {
-            Ok(fd) => match shm::unlink(mem_file_handle.as_str()) {
-                Ok(_) => return Ok(fd),
-                Err(errno) => return Err(std::io::Error::from(errno)),
-            },
-            Err(io::Errno::EXIST) => {
-                // If a file with that handle exists then change the handle
-                mem_file_handle = get_mem_file_handle();
-                continue;
-            }
-            Err(io::Errno::INTR) => continue,
-            Err(errno) => return Err(std::io::Error::from(errno)),
-        }
-    }
-}
-
-pub fn try_cast(
-    target: &CastTarget,
-    connection: &WayshotConnection,
-) -> anyhow::Result<libwayshot::Size> {
-    let shm_file = create_shm_fd()?;
-
-    let (_, guard_test) = match &target {
-        CastTarget::Screen(output) => {
-            connection.capture_output_frame_shm_fd(0, output, shm_file, None)?
-        }
-        CastTarget::TopLevel(toplevel) => {
-            connection.capture_toplevel_frame_shm_fd(true, toplevel, shm_file)?
-        }
-    };
-
-    Ok(guard_test.size)
-}
 
 fn start_stream(
     mut connection: WayshotConnection,
@@ -396,24 +310,16 @@ fn start_stream(
     let (node_id_tx, node_id_rx) = oneshot::channel();
     let mut node_id_tx = Some(node_id_tx);
 
-    let gbm_support = connection
-        .try_init_dmabuf(target.wayshot_target())
-        .unwrap_or(false);
-
-    let available_video_formats =
-        match connection.get_available_frame_formats(&target.wayshot_target()) {
-            Ok(frame_format_list) => frame_format_list
-                .iter()
-                .filter_map(|frame_format| wl_shm_format_to_spa(frame_format.format))
-                .collect(),
-            Err(e) => {
-                tracing::warn!("Could not get available video formats from libwayshot: {e}");
-                // Xrgb8888 and Argb8888 should be supported by all renderers
-                // https://smithay.github.io/wayland-rs/wayland_client/protocol/wl_shm/enum.Format.html
-                vec![VideoFormat::BGRx, VideoFormat::BGRA]
-            }
-        };
-    let libwayshot::Size { width, height } = try_cast(&target, &connection)?;
+    let gbm_support = connection.try_init_dmabuf(target.wayshot_target()).is_ok();
+    let frame_format_list = connection.get_available_frame_formats(&target.wayshot_target())?;
+    if frame_format_list.is_empty() {
+        return Err(anyhow::anyhow!("We need at least one format"));
+    }
+    let libwayshot::Size { width, height } = frame_format_list[0].size;
+    let available_video_formats: Vec<VideoFormat> = frame_format_list
+        .iter()
+        .filter_map(|frame_format| wl_shm_format_to_spa(frame_format.format))
+        .collect();
 
     let listener = stream
         .add_local_listener_with_user_data(StreamingData::new(

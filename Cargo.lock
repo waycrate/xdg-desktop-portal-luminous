@@ -2579,16 +2579,16 @@ dependencies = [
 
 [[package]]
 name = "libwayshot"
-version = "0.6.0"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6ffa08807d9bc503e34eed767e80b01fd528b1bc193b0bfd604958f22887609"
+checksum = "9430b4f78cc5e31f01b9e96a548ea419b0f2e64af99338e5731f0b0e43b13e9d"
 dependencies = [
  "drm",
  "gbm",
  "gl",
  "image 0.25.9",
- "khronos-egl",
  "memmap2",
+ "r-egl-wayland",
  "rustix 1.1.3",
  "thiserror 2.0.17",
  "tracing",
@@ -2693,7 +2693,7 @@ checksum = "a1dc47f592c06f33f8e3aea9591776ec7c9f9e4124778ff8a3c3b87159f7e593"
 
 [[package]]
 name = "lumious_headless_helper"
-version = "0.1.0"
+version = "0.1.14"
 dependencies = [
  "dialoguer",
  "signal-hook",
@@ -3890,6 +3890,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
+name = "r-egl"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74c68c047fb54b1eb9a0e751d9b238ff41195a4fcdae90ddc6b43b5903e2b09b"
+dependencies = [
+ "libc",
+ "pkg-config",
+]
+
+[[package]]
+name = "r-egl-wayland"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9b502a04cf38d8ab73fded506bb3a84999fc6cfea9801d1b459402a79f963d4"
+dependencies = [
+ "r-egl",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+]
+
+[[package]]
 name = "rand"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4524,7 +4546,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stream_message"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "serde",
  "serde_json",
@@ -6094,7 +6116,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 
 [[package]]
 name = "xdg-desktop-portal-luminous"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "anyhow",
  "bitflags 2.10.0",

@@ -3,7 +3,7 @@ resolver = "2"
 members = [".", "./stream_message", "./lumious_headless_helper"]
 
 [workspace.package]
-version = "0.1.13"
+version = "0.1.14"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/waycrate/xdg-desktop-portal-luminous"
@@ -21,7 +21,7 @@ keywords = ["wayland"]
 serde = "1.0.228"
 serde_json = "1.0.149"
 thiserror = "2.0.17"
-stream_message = { path = "./stream_message", version = "0.1.0" }
+stream_message = { path = "./stream_message", version = "0.1.14" }
 
 [dependencies]
 zbus = { version = "5.13", default-features = false, features = [
@@ -62,7 +62,7 @@ anyhow = "1.0.100"
 # pipewire
 pipewire = "0.9.2"
 
-libwayshot = "0.6.0"
+libwayshot = "0.7.2"
 rustix = { version = "1.1.2", features = ["fs", "use-libc"] }
 
 # REMOTE

@@ -307,7 +307,7 @@ impl ScreenCastBackend {
                     SourceType::Monitor,
                 ),
                 CopySelect::Window { index, .. } => (
-                    CastTarget::TopLevel(top_levels[index].clone()),
+                    CastTarget::TopLevel(top_levels[index].handle.clone()),
                     SourceType::Window,
                 ),
                 _ => {
