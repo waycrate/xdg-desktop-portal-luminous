@@ -35,7 +35,7 @@ else
     'build',
     '--release', '&&',
     'cp',
-    meson.global_source_root() / 'target' / 'debug' / meson.project_name(),
+    meson.global_source_root() / 'target' / 'release' / meson.project_name(),
     '@OUTPUT@',
   ]
   command_helper = [
