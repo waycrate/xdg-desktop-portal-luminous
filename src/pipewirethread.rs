@@ -21,6 +21,8 @@ use wayland_client::protocol::wl_shm::Format;
 
 use tokio::sync::oneshot;
 
+use crate::utils::HEADLESS_START;
+
 pub struct ScreencastThread {
     node_id: u32,
     thread_stop_tx: pipewire::channel::Sender<()>,
@@ -310,7 +312,13 @@ fn start_stream(
     let (node_id_tx, node_id_rx) = oneshot::channel();
     let mut node_id_tx = Some(node_id_tx);
 
-    let gbm_support = connection.try_init_dmabuf(target.wayshot_target()).is_ok();
+    // HACK: it wm is started with headless mode,
+    // We won't use dmabuf when started with headless mode
+    let gbm_support = if *HEADLESS_START {
+        false
+    } else {
+        connection.try_init_dmabuf(target.wayshot_target()).is_ok()
+    };
     let frame_format_list = connection.get_available_frame_formats(&target.wayshot_target())?;
     if frame_format_list.is_empty() {
         return Err(anyhow::anyhow!("We need at least one format"));

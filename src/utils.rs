@@ -10,6 +10,15 @@ pub static USER_RUNNING_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(cache_dir)
 });
 
+pub static HEADLESS_START: LazyLock<bool> = LazyLock::new(|| {
+    if std::env::var("WLR_BACKENDS").is_ok_and(|v| v == "headless") {
+        return true;
+    }
+    std::env::var("LUMIOUS_HEADLESS")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+});
+
 pub fn get_selection_from_socket(monitors: Vec<String>) -> zbus::fdo::Result<u32> {
     let mut stream = UnixStream::connect(SERVER_SOCK.clone())
         .map_err(|_| zbus::fdo::Error::Failed("Cannot connect to socket".to_owned()))?;
