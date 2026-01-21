@@ -317,7 +317,20 @@ fn start_stream(
     let gbm_support = if *HEADLESS_START {
         false
     } else {
-        connection.try_init_dmabuf(target.wayshot_target()).is_ok()
+        let mut gbm_support = connection.try_init_dmabuf(target.wayshot_target()).is_ok();
+        if gbm_support {
+            // NOTE: try to run screencast once
+            // If succeeded, We can think that it has gbm_support
+            gbm_support = connection
+                .create_screencast_with_dmabuf(
+                    target.wayshot_target(),
+                    overlay_cursor,
+                    embedded_region,
+                )
+                .is_ok();
+        }
+
+        gbm_support
     };
     let frame_format_list = connection.get_available_frame_formats(&target.wayshot_target())?;
     if frame_format_list.is_empty() {
