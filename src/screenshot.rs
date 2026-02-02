@@ -90,7 +90,7 @@ impl ScreenShotBackend {
         _parent_window: String,
         options: ScreenshotOption,
     ) -> fdo::Result<PortalResponse<Screenshot>> {
-        if options.permission_store_checked != Some(true) {
+        if !options.permission_store_checked.unwrap_or(false) {
             self.sender
                 .send(Message::PermissionDialog(format!(
                     "Allow '{}' to take a screenshot?",
@@ -99,8 +99,7 @@ impl ScreenShotBackend {
                 .await
                 .map_err(|e| zbus::Error::Failure(e.to_string()))?;
 
-            if let Some(CopySelect::Permission(true)) = self.receiver.next().await {
-            } else {
+            if self.receiver.next().await != Some(CopySelect::Permission(true)) {
                 return Ok(PortalResponse::Cancelled);
             }
         }

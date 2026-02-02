@@ -65,7 +65,7 @@ struct AreaSelectorGUI {
     prompt_text: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CopySelect {
     Window { index: usize, show_cursor: bool },
     Screen { index: usize, show_cursor: bool },
