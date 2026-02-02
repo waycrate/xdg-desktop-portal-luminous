@@ -40,6 +40,7 @@ pub enum GuiMode {
     ScreenCast,
     #[default]
     ScreenShot,
+    PermissionPrompt,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -61,6 +62,7 @@ struct AreaSelectorGUI {
     toplevels: Vec<TopLevelInfo>,
     screens: Vec<WlOutputInfo>,
     use_cursor: bool,
+    prompt_text: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +72,7 @@ pub enum CopySelect {
     All,
     Slurp,
     Cancel,
+    Permission(bool),
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +114,7 @@ pub enum Message {
     ReadyShoot(Sender<CopySelect>),
     ReadyCast(Sender<CopySelect>),
     ToggleCursor(bool),
+    PermissionDialog(String),
 }
 
 impl AreaSelectorGUI {
@@ -229,6 +233,7 @@ impl AreaSelectorGUI {
             toplevels: Vec::new(),
             screens: Vec::new(),
             use_cursor: false,
+            prompt_text: None,
         }
     }
 
@@ -257,7 +262,7 @@ impl AreaSelectorGUI {
                     GuiMode::ScreenCast => {
                         let _ = self.sender_cast.as_mut().unwrap().try_send(select);
                     }
-                    GuiMode::ScreenShot => {
+                    GuiMode::ScreenShot | GuiMode::PermissionPrompt => {
                         let _ = self.sender.as_mut().unwrap().try_send(select);
                     }
                 }
@@ -338,96 +343,135 @@ impl AreaSelectorGUI {
                 self.use_cursor = cursor;
                 Task::none()
             }
+            Message::PermissionDialog(message) => {
+                if self.window_show {
+                    let _ = self.sender.as_mut().unwrap().try_send(CopySelect::Cancel);
+                    return Task::none();
+                }
+                self.window_show = true;
+                self.gui_mode = GuiMode::PermissionPrompt;
+                self.prompt_text = Some(message);
+                Task::done(Message::NewLayerShell {
+                    settings: NewLayerShellSettings {
+                        size: Some((256, 100)),
+                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                        output_option: OutputOption::None,
+                        ..Default::default()
+                    },
+                    id: iced::window::Id::unique(),
+                })
+            }
             _ => unreachable!(),
         }
     }
 
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
-        let selector = self.selector();
-
-        let content: Element<'_, Message> = match self.mode {
-            ViewMode::Screens => scrollable(
-                grid(
-                    self.screens
-                        .iter()
-                        .enumerate()
-                        .map(|(index, info)| self.output_preview(id, index, info)),
-                )
-                .columns(2)
-                .spacing(10),
-            )
-            .height(Length::Fill)
-            .into(),
-            ViewMode::Windows => scrollable(
-                grid(
-                    self.toplevels
-                        .iter()
-                        .enumerate()
-                        .map(|(index, info)| self.toplevel_preview(id, index, info)),
-                )
-                .columns(3)
-                .spacing(10),
-            )
-            .height(Length::Fill)
-            .into(),
-            ViewMode::Others => column![
-                button(
-                    container(text("Area Select"))
-                        .center_y(Length::Fill)
-                        .center_x(Length::Fill)
-                )
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .on_press(Message::Selected {
-                    id,
-                    select: CopySelect::Slurp
-                })
-                .style(button::subtle),
-                button(
-                    container(text("All"))
-                        .center_y(Length::Fill)
-                        .center_x(Length::Fill)
-                )
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .on_press(Message::Selected {
-                    id,
-                    select: CopySelect::All
-                })
-                .style(button::subtle),
-            ]
-            .spacing(10)
-            .height(Length::Fill)
-            .into(),
-        };
-
-        let bottom_button_list: Element<'_, Message> = container(row![
-            Space::new().width(Length::Fill),
-            container(
-                checkbox(self.use_cursor)
-                    .label("use_cursor")
-                    .on_toggle_maybe(if self.gui_mode == GuiMode::ScreenShot {
-                        Some(Message::ToggleCursor)
-                    } else {
-                        None
+        if self.gui_mode == GuiMode::PermissionPrompt {
+            column![
+                text(self.prompt_text.as_ref().unwrap()),
+                Space::new().height(Length::Fill),
+                row![
+                    Space::new().width(Length::Fill),
+                    button("No").on_press(Message::Selected {
+                        id,
+                        select: CopySelect::Permission(false)
+                    }),
+                    button("Yes").on_press(Message::Selected {
+                        id,
+                        select: CopySelect::Permission(true)
                     })
-            )
-            .center_y(Length::Fill),
-            Space::new().width(Length::Fixed(2.)),
-            button(text("Cancel")).on_press(Message::Selected {
-                id,
-                select: CopySelect::Cancel
-            })
-        ])
-        .center_y(Length::Fixed(30.0))
-        .into();
-
-        column![selector, content, bottom_button_list]
-            .padding(20)
-            .spacing(10)
+                ]
+            ]
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+        } else {
+            let selector = self.selector();
+
+            let content: Element<'_, Message> = match self.mode {
+                ViewMode::Screens => scrollable(
+                    grid(
+                        self.screens
+                            .iter()
+                            .enumerate()
+                            .map(|(index, info)| self.output_preview(id, index, info)),
+                    )
+                    .columns(2)
+                    .spacing(10),
+                )
+                .height(Length::Fill)
+                .into(),
+                ViewMode::Windows => scrollable(
+                    grid(
+                        self.toplevels
+                            .iter()
+                            .enumerate()
+                            .map(|(index, info)| self.toplevel_preview(id, index, info)),
+                    )
+                    .columns(3)
+                    .spacing(10),
+                )
+                .height(Length::Fill)
+                .into(),
+                ViewMode::Others => column![
+                    button(
+                        container(text("Area Select"))
+                            .center_y(Length::Fill)
+                            .center_x(Length::Fill)
+                    )
+                    .height(Length::Fill)
+                    .width(Length::Fill)
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::Slurp
+                    })
+                    .style(button::subtle),
+                    button(
+                        container(text("All"))
+                            .center_y(Length::Fill)
+                            .center_x(Length::Fill)
+                    )
+                    .height(Length::Fill)
+                    .width(Length::Fill)
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::All
+                    })
+                    .style(button::subtle),
+                ]
+                .spacing(10)
+                .height(Length::Fill)
+                .into(),
+            };
+
+            let bottom_button_list: Element<'_, Message> = container(row![
+                Space::new().width(Length::Fill),
+                container(
+                    checkbox(self.use_cursor)
+                        .label("use_cursor")
+                        .on_toggle_maybe(if self.gui_mode == GuiMode::ScreenShot {
+                            Some(Message::ToggleCursor)
+                        } else {
+                            None
+                        })
+                )
+                .center_y(Length::Fill),
+                Space::new().width(Length::Fixed(2.)),
+                button(text("Cancel")).on_press(Message::Selected {
+                    id,
+                    select: CopySelect::Cancel
+                })
+            ])
+            .center_y(Length::Fixed(30.0))
+            .into();
+
+            column![selector, content, bottom_button_list]
+                .padding(20)
+                .spacing(10)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        }
     }
 
     fn subscription(&self) -> iced::Subscription<Message> {

@@ -90,6 +90,20 @@ impl ScreenShotBackend {
         _parent_window: String,
         options: ScreenshotOption,
     ) -> fdo::Result<PortalResponse<Screenshot>> {
+        if options.permission_store_checked != Some(true) {
+            self.sender
+                .send(Message::PermissionDialog(format!(
+                    "Allow '{}' to take a screenshot?",
+                    app_id
+                )))
+                .await
+                .map_err(|e| zbus::Error::Failure(e.to_string()))?;
+
+            if let Some(CopySelect::Permission(true)) = self.receiver.next().await {
+            } else {
+                return Ok(PortalResponse::Cancelled);
+            }
+        }
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;
         tracing::info!("Start shot: path :{}, appid: {}", handle.as_str(), app_id);
@@ -153,7 +167,7 @@ impl ScreenShotBackend {
                             zbus::Error::Failure(format!("Wayland screencopy failed, {e}"))
                         })?
                 }
-                CopySelect::Cancel => {
+                CopySelect::Cancel | CopySelect::Permission(_) => {
                     return Ok(PortalResponse::Cancelled);
                 }
             }
