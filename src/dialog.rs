@@ -354,6 +354,7 @@ impl AreaSelectorGUI {
                 Task::done(Message::NewLayerShell {
                     settings: NewLayerShellSettings {
                         size: Some((256, 100)),
+                        anchor: Anchor::Top,
                         keyboard_interactivity: KeyboardInteractivity::OnDemand,
                         output_option: OutputOption::None,
                         ..Default::default()
