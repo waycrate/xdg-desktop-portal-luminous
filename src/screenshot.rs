@@ -46,8 +46,8 @@ pub struct ScreenshotOption {
     interactive: bool,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     modal: Option<bool>,
-    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
-    permission_store_checked: Option<bool>,
+    #[serde(default)]
+    permission_store_checked: bool,
 }
 
 #[derive(Debug)]
@@ -92,7 +92,7 @@ impl ScreenShotBackend {
         options: ScreenshotOption,
     ) -> fdo::Result<PortalResponse<Screenshot>> {
         if SETTING_CONFIG.lock().await.screenshot_permission_check
-            && !options.permission_store_checked.unwrap_or(false)
+            && !options.permission_store_checked
         {
             self.sender
                 .send(Message::PermissionDialog(format!(
@@ -138,6 +138,7 @@ impl ScreenShotBackend {
             let Some(select) = self.receiver.next().await else {
                 return Ok(PortalResponse::Cancelled);
             };
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             match select {
                 CopySelect::Screen { index, show_cursor } => wayshot_connection
                     .screenshot_single_output(&screens[index], show_cursor)
@@ -148,29 +149,22 @@ impl ScreenShotBackend {
                 CopySelect::All => wayshot_connection
                     .screenshot_all(false)
                     .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
-                CopySelect::Slurp => {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    wayshot_connection
-                        .screenshot_freeze(
-                            |w_conn| {
-                                let info = WaySip::new()
-                                    .with_connection(w_conn.conn.clone())
-                                    .with_selection_type(libwaysip::SelectionType::Area)
-                                    .get()
-                                    .map_err(|e| {
-                                        libwayshot::Error::FreezeCallbackError(e.to_string())
-                                    })?
-                                    .ok_or(libwayshot::Error::FreezeCallbackError(
-                                        "Failed to capture the area".to_string(),
-                                    ))?;
-                                waysip_to_region(info.size(), info.left_top_point())
-                            },
-                            false,
-                        )
-                        .map_err(|e| {
-                            zbus::Error::Failure(format!("Wayland screencopy failed, {e}"))
-                        })?
-                }
+                CopySelect::Slurp => wayshot_connection
+                    .screenshot_freeze(
+                        |w_conn| {
+                            let info = WaySip::new()
+                                .with_connection(w_conn.conn.clone())
+                                .with_selection_type(libwaysip::SelectionType::Area)
+                                .get()
+                                .map_err(|e| libwayshot::Error::FreezeCallbackError(e.to_string()))?
+                                .ok_or(libwayshot::Error::FreezeCallbackError(
+                                    "Failed to capture the area".to_string(),
+                                ))?;
+                            waysip_to_region(info.size(), info.left_top_point())
+                        },
+                        false,
+                    )
+                    .map_err(|e| zbus::Error::Failure(format!("Wayland screencopy failed, {e}")))?,
                 CopySelect::Cancel => {
                     return Ok(PortalResponse::Cancelled);
                 }
