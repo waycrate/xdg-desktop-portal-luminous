@@ -262,9 +262,10 @@ impl AreaSelectorGUI {
                     GuiMode::ScreenCast => {
                         let _ = self.sender_cast.as_mut().unwrap().try_send(select);
                     }
-                    GuiMode::ScreenShot | GuiMode::PermissionPrompt => {
+                    GuiMode::ScreenShot => {
                         let _ = self.sender.as_mut().unwrap().try_send(select);
                     }
+                    GuiMode::PermissionPrompt => unreachable!(),
                 }
 
                 self.window_show = false;

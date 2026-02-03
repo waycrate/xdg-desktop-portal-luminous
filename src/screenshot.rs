@@ -166,9 +166,10 @@ impl ScreenShotBackend {
                             zbus::Error::Failure(format!("Wayland screencopy failed, {e}"))
                         })?
                 }
-                CopySelect::Cancel | CopySelect::Permission(_) => {
+                CopySelect::Cancel => {
                     return Ok(PortalResponse::Cancelled);
                 }
+                CopySelect::Permission(_) => unreachable!(),
             }
         } else {
             wayshot_connection
