@@ -31,6 +31,7 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Err
         ..Default::default()
     })
     .subscription(AreaSelectorGUI::subscription)
+    .theme(AreaSelectorGUI::theme)
     .run()
 }
 
@@ -238,7 +239,7 @@ impl AreaSelectorGUI {
     }
 
     fn namespace() -> String {
-        String::from("xdg-desktop-protal-luminous")
+        String::from("osk")
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -262,10 +263,9 @@ impl AreaSelectorGUI {
                     GuiMode::ScreenCast => {
                         let _ = self.sender_cast.as_mut().unwrap().try_send(select);
                     }
-                    GuiMode::ScreenShot => {
+                    GuiMode::ScreenShot | GuiMode::PermissionPrompt => {
                         let _ = self.sender.as_mut().unwrap().try_send(select);
                     }
-                    GuiMode::PermissionPrompt => unreachable!(),
                 }
 
                 self.window_show = false;
@@ -355,7 +355,7 @@ impl AreaSelectorGUI {
                 Task::done(Message::NewLayerShell {
                     settings: NewLayerShellSettings {
                         size: Some((256, 100)),
-                        anchor: Anchor::Top,
+                        anchor: Anchor::Top | Anchor::Bottom,
                         keyboard_interactivity: KeyboardInteractivity::OnDemand,
                         output_option: OutputOption::None,
                         ..Default::default()
@@ -369,19 +369,29 @@ impl AreaSelectorGUI {
 
     fn view_permission_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
         column![
-            text(self.prompt_text.as_ref().unwrap()),
+            container(text(self.prompt_text.as_ref().unwrap()))
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .height(Length::Fill),
             Space::new().height(Length::Fill),
             row![
-                Space::new().width(Length::Fill),
-                button("No").on_press(Message::Selected {
-                    id,
-                    select: CopySelect::Permission(false)
-                }),
-                button("Yes").on_press(Message::Selected {
-                    id,
-                    select: CopySelect::Permission(true)
-                })
+                button("No")
+                    .style(button::text)
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::Permission(false)
+                    })
+                    .width(Length::Fill),
+                button("Yes")
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::Permission(true)
+                    })
+                    .width(Length::Fill)
             ]
+            .padding(2.)
+            .spacing(5.)
+            .width(Length::Fill)
         ]
         .width(Length::Fill)
         .height(Length::Fill)
@@ -493,5 +503,11 @@ impl AreaSelectorGUI {
                 let _ = crate::backend::backend(output, receiver, receiver_cast).await;
             })
         })
+    }
+    fn theme(&self, _id: iced::window::Id) -> Option<iced::Theme> {
+        if self.gui_mode == GuiMode::PermissionPrompt {
+            return Some(iced::Theme::TokyoNight);
+        }
+        None
     }
 }
