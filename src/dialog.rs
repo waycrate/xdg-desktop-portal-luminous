@@ -31,6 +31,7 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Err
         ..Default::default()
     })
     .subscription(AreaSelectorGUI::subscription)
+    .theme(AreaSelectorGUI::theme)
     .run()
 }
 
@@ -40,6 +41,7 @@ pub enum GuiMode {
     ScreenCast,
     #[default]
     ScreenShot,
+    PermissionPrompt,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -61,15 +63,17 @@ struct AreaSelectorGUI {
     toplevels: Vec<TopLevelInfo>,
     screens: Vec<WlOutputInfo>,
     use_cursor: bool,
+    prompt_text: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CopySelect {
     Window { index: usize, show_cursor: bool },
     Screen { index: usize, show_cursor: bool },
     All,
     Slurp,
     Cancel,
+    Permission(bool),
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +115,7 @@ pub enum Message {
     ReadyShoot(Sender<CopySelect>),
     ReadyCast(Sender<CopySelect>),
     ToggleCursor(bool),
+    PermissionDialog(String),
 }
 
 impl AreaSelectorGUI {
@@ -229,11 +234,12 @@ impl AreaSelectorGUI {
             toplevels: Vec::new(),
             screens: Vec::new(),
             use_cursor: false,
+            prompt_text: None,
         }
     }
 
     fn namespace() -> String {
-        String::from("xdg-desktop-protal-luminous")
+        String::from("osk")
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -257,7 +263,7 @@ impl AreaSelectorGUI {
                     GuiMode::ScreenCast => {
                         let _ = self.sender_cast.as_mut().unwrap().try_send(select);
                     }
-                    GuiMode::ScreenShot => {
+                    GuiMode::ScreenShot | GuiMode::PermissionPrompt => {
                         let _ = self.sender.as_mut().unwrap().try_send(select);
                     }
                 }
@@ -338,11 +344,65 @@ impl AreaSelectorGUI {
                 self.use_cursor = cursor;
                 Task::none()
             }
+            Message::PermissionDialog(message) => {
+                if self.window_show {
+                    let _ = self.sender.as_mut().unwrap().try_send(CopySelect::Cancel);
+                    return Task::none();
+                }
+                self.window_show = true;
+                self.gui_mode = GuiMode::PermissionPrompt;
+                self.prompt_text = Some(message);
+                Task::done(Message::NewLayerShell {
+                    settings: NewLayerShellSettings {
+                        size: Some((256, 100)),
+                        anchor: Anchor::Top | Anchor::Bottom,
+                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                        output_option: OutputOption::None,
+                        ..Default::default()
+                    },
+                    id: iced::window::Id::unique(),
+                })
+            }
             _ => unreachable!(),
         }
     }
 
+    fn view_permission_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
+        column![
+            container(text(self.prompt_text.as_ref().unwrap()))
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .height(Length::Fill),
+            Space::new().height(Length::Fill),
+            row![
+                button("No")
+                    .style(button::text)
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::Permission(false)
+                    })
+                    .width(Length::Fill),
+                button("Yes")
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::Permission(true)
+                    })
+                    .width(Length::Fill)
+            ]
+            .padding(2.)
+            .spacing(5.)
+            .width(Length::Fill)
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+    }
+
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
+        if self.gui_mode == GuiMode::PermissionPrompt {
+            return self.view_permission_prompt(id);
+        }
+
         let selector = self.selector();
 
         let content: Element<'_, Message> = match self.mode {
@@ -443,5 +503,11 @@ impl AreaSelectorGUI {
                 let _ = crate::backend::backend(output, receiver, receiver_cast).await;
             })
         })
+    }
+    fn theme(&self, _id: iced::window::Id) -> Option<iced::Theme> {
+        if self.gui_mode == GuiMode::PermissionPrompt {
+            return Some(iced::Theme::TokyoNight);
+        }
+        None
     }
 }
