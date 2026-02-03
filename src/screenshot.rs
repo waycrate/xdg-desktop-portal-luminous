@@ -16,6 +16,7 @@ use zbus::{
 
 use crate::PortalResponse;
 use crate::dialog::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
+use crate::settings::SETTING_CONFIG;
 use crate::utils::USER_RUNNING_DIR;
 use futures::{
     SinkExt, StreamExt,
@@ -90,7 +91,9 @@ impl ScreenShotBackend {
         _parent_window: String,
         options: ScreenshotOption,
     ) -> fdo::Result<PortalResponse<Screenshot>> {
-        if !options.permission_store_checked.unwrap_or(false) {
+        if SETTING_CONFIG.lock().await.screenshot_permission_check
+            && !options.permission_store_checked.unwrap_or(false)
+        {
             self.sender
                 .send(Message::PermissionDialog(format!(
                     "Allow '{}' to take a screenshot?",
@@ -102,6 +105,8 @@ impl ScreenShotBackend {
             if self.receiver.next().await != Some(CopySelect::Permission(true)) {
                 return Ok(PortalResponse::Cancelled);
             }
+            // reserve time to let dialog disappear
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;

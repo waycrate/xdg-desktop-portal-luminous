@@ -18,6 +18,7 @@ pub struct SettingsConfig {
     pub accent_color: String,
     pub contrast: String,
     pub reduced_motion: String,
+    pub screenshot_permission_check: bool,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Debug)]
@@ -26,6 +27,7 @@ struct SettingsConfigRead {
     pub accent_color: Option<String>,
     pub contrast: Option<String>,
     pub reduced_motion: Option<String>,
+    pub screenshot_permission_check: Option<bool>,
 }
 
 impl From<SettingsConfigRead> for SettingsConfig {
@@ -39,6 +41,7 @@ impl From<SettingsConfigRead> for SettingsConfig {
             reduced_motion: value
                 .reduced_motion
                 .unwrap_or(DEFAULT_REDUCED_MOTION.to_string()),
+            screenshot_permission_check: value.screenshot_permission_check.unwrap_or(true),
         }
     }
 }
@@ -89,6 +92,7 @@ impl Default for SettingsConfig {
             accent_color: DEFAULT_ACCENT_COLLOR.to_string(),
             contrast: DEFAULT_CONTRAST.to_string(),
             reduced_motion: DEFAULT_REDUCED_MOTION.to_string(),
+            screenshot_permission_check: true,
         }
     }
 }
