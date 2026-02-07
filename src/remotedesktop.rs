@@ -1,4 +1,5 @@
 mod dispatch;
+mod eis_server;
 mod remote_thread;
 mod state;
 
@@ -9,31 +10,45 @@ use stream_message::SERVER_SOCK;
 use wayland_client::protocol::wl_output;
 
 use std::collections::HashMap;
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, LazyLock, Mutex as StdMutex};
 
+use calloop::channel::Sender;
 use enumflags2::BitFlags;
+use reis::eis;
+use rustix::fd::AsFd;
+use rustix::io;
+use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use zbus::interface;
-
 use zbus::zvariant::{
-    ObjectPath, OwnedValue, Type, Value,
+    Fd, ObjectPath, OwnedValue, Type, Value,
     as_value::{self, optional},
 };
 
-use serde::{Deserialize, Serialize};
-
-use std::sync::{Arc, LazyLock};
-use tokio::sync::Mutex;
-
+use crate::PortalResponse;
+use crate::pipewirethread::CastTarget;
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
 use crate::session::{
     DeviceType, PersistMode, SESSIONS, Session, SessionType, SourceType, append_session,
 };
-
-use crate::PortalResponse;
 use crate::utils::get_selection_from_socket;
 
+use self::eis_server::{EisServerMsg, InputEvent};
 use self::remote_thread::InputRequest;
-use crate::pipewirethread::CastTarget;
+
+type EisServerSender = Sender<EisServerMsg>;
+type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
+
+static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
+    let (tx, rx) = eis_server::start();
+    (tx, Arc::new(StdMutex::new(rx)))
+});
+
+pub fn get_input_receiver() -> InputEventReceiver {
+    EIS_SERVER.1.clone()
+}
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::create_session`] request.
@@ -149,6 +164,70 @@ async fn notify_input_event(
         .send(event)
         .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
     Ok(())
+}
+
+pub async fn handle_input_event(event: InputEvent) {
+    let (session_handle, request) = match event {
+        InputEvent::PointerMotion {
+            session_handle,
+            dx,
+            dy,
+        } => (session_handle, InputRequest::PointerMotion { dx, dy }),
+        InputEvent::PointerMotionAbsolute {
+            session_handle,
+            x,
+            y,
+        } => (session_handle, InputRequest::PointerMotionAbsolute { x, y }),
+        InputEvent::PointerButton {
+            session_handle,
+            button,
+            state,
+        } => (
+            session_handle,
+            InputRequest::PointerButton { button, state },
+        ),
+        InputEvent::PointerAxis {
+            session_handle,
+            dx,
+            dy,
+        } => (session_handle, InputRequest::PointerAxis { dx, dy }),
+        InputEvent::PointerAxisDiscrate {
+            session_handle,
+            axis,
+            steps,
+        } => (
+            session_handle,
+            InputRequest::PointerAxisDiscrate { axis, steps },
+        ),
+        InputEvent::KeyboardKeycode {
+            session_handle,
+            keycode,
+            state,
+        } => (
+            session_handle,
+            InputRequest::KeyboardKeycode { keycode, state },
+        ),
+        InputEvent::TouchDown {
+            session_handle,
+            slot,
+            x,
+            y,
+        } => (session_handle, InputRequest::TouchDown { slot, x, y }),
+        InputEvent::TouchMotion {
+            session_handle,
+            slot,
+            x,
+            y,
+        } => (session_handle, InputRequest::TouchMotion { slot, x, y }),
+        InputEvent::TouchUp {
+            session_handle,
+            slot,
+        } => (session_handle, InputRequest::TouchUp { slot }),
+    };
+
+    if let Ok(path) = ObjectPath::try_from(session_handle) {
+        let _ = notify_input_event(path, request).await;
+    }
 }
 
 pub struct RemoteDesktopBackend;
@@ -381,19 +460,19 @@ impl RemoteDesktopBackend {
         .await
     }
 
-    async fn notify_keyboard_keysym(
-        &self,
-        session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
-        keysym: i32,
-        state: u32,
-    ) -> zbus::fdo::Result<()> {
-        notify_input_event(
-            session_handle,
-            InputRequest::KeyboardKeysym { keysym, state },
-        )
-        .await
-    }
+    // async fn notify_keyboard_keysym(
+    //     &self,
+    //     session_handle: ObjectPath<'_>,
+    //     _options: HashMap<String, Value<'_>>,
+    //     keysym: i32,
+    //     state: u32,
+    // ) -> zbus::fdo::Result<()> {
+    //     notify_input_event(
+    //         session_handle,
+    //         InputRequest::KeyboardKeysym { keysym, state },
+    //     )
+    //     .await
+    // }
 
     async fn notify_touch_down(
         &self,
@@ -426,6 +505,28 @@ impl RemoteDesktopBackend {
         slot: u32,
     ) -> zbus::fdo::Result<()> {
         notify_input_event(session_handle, InputRequest::TouchUp { slot }).await
+    }
+
+    #[zbus(name = "ConnectToEIS")]
+    async fn connect_to_eis(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+    ) -> zbus::fdo::Result<Fd<'_>> {
+        let listener = eis::Listener::bind_auto()
+            .map_err(|e| zbus::Error::Failure(format!("Failed to create EIS listener: {}", e)))?
+            .ok_or_else(|| zbus::Error::Failure("Failed to create EIS listener".to_string()))?;
+
+        let fd = io::dup(listener.as_fd()).map_err(|e| zbus::Error::Failure(e.to_string()))?;
+        EIS_SERVER
+            .0
+            .send(EisServerMsg::NewListener(
+                listener,
+                session_handle.to_string(),
+            ))
+            .unwrap();
+
+        Ok(Fd::from(fd))
     }
 }
 

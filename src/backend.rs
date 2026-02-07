@@ -112,6 +112,8 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
     Ok(())
 }
 
+use crate::remotedesktop;
+
 pub async fn backend(
     sender: Sender<Message>,
     receiver: Receiver<CopySelect>,
@@ -153,6 +155,14 @@ pub async fn backend(
             .join("xdg-desktop-portal-luminous");
         if let Err(e) = async_watch(config_path).await {
             tracing::info!("Maybe file is not exist, error: {e}");
+        }
+    });
+
+    let receiver = remotedesktop::get_input_receiver();
+    tokio::task::spawn_blocking(move || {
+        loop {
+            let event = receiver.lock().unwrap().recv().unwrap();
+            tokio::spawn(remotedesktop::handle_input_event(event));
         }
     });
 
