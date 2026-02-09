@@ -10,15 +10,13 @@ use crate::remotedesktop::dispatch::init_xkb_objects;
 use super::dispatch::get_keymap_as_file;
 use super::state::AppData;
 use super::state::KeyPointerError;
-use std::sync::Mutex;
-use std::sync::atomic::Ordering;
 
 use std::os::fd::AsFd;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::{self, Receiver, Sender};
 
-use calloop::EventLoop;
+use calloop::{
+    EventLoop,
+    channel::{self, Channel, Sender},
+};
 use calloop_wayland_source::WaylandSource;
 
 #[derive(Debug)]
@@ -43,7 +41,7 @@ pub struct RemoteControl {
 
 impl RemoteControl {
     pub fn init(output_width: u32, output_height: u32) -> Self {
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = channel::channel();
         std::thread::spawn(move || {
             let _ = remote_loop(receiver, output_width, output_height);
         });
@@ -56,7 +54,7 @@ impl RemoteControl {
 }
 
 pub fn remote_loop(
-    receiver: Receiver<InputRequest>,
+    receiver: Channel<InputRequest>,
     output_width: u32,
     output_height: u32,
 ) -> Result<(), KeyPointerError> {
@@ -114,88 +112,53 @@ pub fn remote_loop(
         .insert(event_loop.handle())
         .expect("Failed to init wayland source");
 
-    let to_exit = Arc::new(AtomicBool::new(false));
-
-    let events: Arc<Mutex<Vec<InputRequest>>> = Arc::new(Mutex::new(Vec::new()));
-
-    let to_exit2 = to_exit.clone();
-    let to_exit3 = to_exit.clone();
-    let events_2 = events.clone();
-    let thread = std::thread::spawn(move || {
-        let to_exit = to_exit2;
-        let events = events_2;
-
-        for message in receiver.iter() {
-            if to_exit.load(Ordering::Relaxed) {
-                break;
-            }
-            let mut events_local = events.lock().unwrap();
-            events_local.push(message);
-        }
-        to_exit.store(true, Ordering::Relaxed);
-    });
-
+    let signal = event_loop.get_signal();
     // At this point everything is ready, and we just need to wait to receive the events
     // from the wl_registry, our callback will print the advertized globals.
 
-    let signal = event_loop.get_signal();
     event_loop
-        .run(
-            std::time::Duration::from_millis(20),
-            &mut data,
-            move |data| {
-                if to_exit3.load(Ordering::Relaxed) {
+        .handle()
+        .insert_source(receiver, move |event, _, app_state| {
+            let channel::Event::Msg(message) = event else {
+                return;
+            };
+            match message {
+                InputRequest::PointerMotion { dx, dy } => app_state.notify_pointer_motion(dx, dy),
+                InputRequest::PointerMotionAbsolute { x, y } => {
+                    app_state.notify_pointer_motion_absolute(x, y)
+                }
+                InputRequest::PointerButton { button, state } => {
+                    app_state.notify_pointer_button(button, state)
+                }
+                InputRequest::PointerAxis { dx, dy } => app_state.notify_pointer_axis(dx, dy),
+                InputRequest::PointerAxisDiscrate { axis, steps } => {
+                    app_state.notify_pointer_axis_discrete(axis, steps)
+                }
+                InputRequest::KeyboardKeycode { keycode, state } => {
+                    app_state.notify_keyboard_keycode(keycode, state)
+                }
+                InputRequest::KeyboardKeysym { keysym, state } => {
+                    app_state.notify_keyboard_keysym(keysym, state)
+                }
+                InputRequest::TouchDown { slot, x, y } => {
+                    app_state.notify_touch_down(slot, x, y);
+                }
+                InputRequest::TouchMotion { slot, x, y } => {
+                    app_state.notify_touch_motion(slot, x, y);
+                }
+                InputRequest::TouchUp { slot } => {
+                    app_state.notify_touch_up(slot);
+                }
+                InputRequest::Exit => {
                     signal.stop();
-                    return;
                 }
-                let mut local_events = events.lock().expect(
-                    "This events only used in this callback, so it should always can be unlocked",
-                );
-                let mut swapped_events = vec![];
-                std::mem::swap(&mut *local_events, &mut swapped_events);
-                drop(local_events);
-                for message in swapped_events {
-                    match message {
-                        InputRequest::PointerMotion { dx, dy } => {
-                            data.notify_pointer_motion(dx, dy)
-                        }
-                        InputRequest::PointerMotionAbsolute { x, y } => {
-                            data.notify_pointer_motion_absolute(x, y)
-                        }
-                        InputRequest::PointerButton { button, state } => {
-                            data.notify_pointer_button(button, state)
-                        }
-                        InputRequest::PointerAxis { dx, dy } => data.notify_pointer_axis(dx, dy),
-                        InputRequest::PointerAxisDiscrate { axis, steps } => {
-                            data.notify_pointer_axis_discrete(axis, steps)
-                        }
-                        InputRequest::KeyboardKeycode { keycode, state } => {
-                            data.notify_keyboard_keycode(keycode, state)
-                        }
-                        InputRequest::KeyboardKeysym { keysym, state } => {
-                            data.notify_keyboard_keysym(keysym, state)
-                        }
-                        InputRequest::TouchDown { slot, x, y } => {
-                            data.notify_touch_down(slot, x, y);
-                        }
-                        InputRequest::TouchMotion { slot, x, y } => {
-                            data.notify_touch_motion(slot, x, y);
-                        }
-                        InputRequest::TouchUp { slot } => {
-                            data.notify_touch_up(slot);
-                        }
-                        InputRequest::Exit => {
-                            signal.stop();
-                            break;
-                        }
-                    }
-                }
-            },
-        )
+            }
+        })
         .expect("Error during event loop");
 
-    to_exit.store(true, Ordering::Relaxed);
-    let _ = thread.join();
+    event_loop
+        .run(std::time::Duration::from_millis(20), &mut data, |_data| {})
+        .expect("Error during event loop");
 
     Ok(())
 }
