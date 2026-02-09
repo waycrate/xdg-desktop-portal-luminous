@@ -29,6 +29,7 @@ pub struct AppData {
 }
 
 impl AppData {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         virtual_keyboard: ZwpVirtualKeyboardV1,
         virtual_pointer: ZwlrVirtualPointerV1,
