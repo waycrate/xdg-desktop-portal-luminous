@@ -40,10 +40,10 @@ pub struct RemoteControl {
 }
 
 impl RemoteControl {
-    pub fn init(output_width: u32, output_height: u32) -> Self {
+    pub fn init(x: u32, y: u32, space_width: u32, space_height: u32) -> Self {
         let (sender, receiver) = channel::channel();
         std::thread::spawn(move || {
-            let _ = remote_loop(receiver, output_width, output_height);
+            let _ = remote_loop(receiver, x, y, space_width, space_height);
         });
         Self { sender }
     }
@@ -55,6 +55,8 @@ impl RemoteControl {
 
 pub fn remote_loop(
     receiver: Channel<InputRequest>,
+    x: u32,
+    y: u32,
     output_width: u32,
     output_height: u32,
 ) -> Result<(), KeyPointerError> {
@@ -99,6 +101,8 @@ pub fn remote_loop(
         xkb_context,
         xkb_keymap,
         xkb_state,
+        x,
+        y,
         output_width,
         output_height,
     );

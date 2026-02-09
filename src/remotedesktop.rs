@@ -260,6 +260,8 @@ impl RemoteDesktopBackend {
         let RemoteInfo {
             width,
             height,
+            x,
+            y,
             wl_output,
         } = get_monitor_info_from_socket(&connection)?;
         if screen_share_enabled {
@@ -289,7 +291,7 @@ impl RemoteDesktopBackend {
             ));
             cast_thread = Some(cast_thread_target);
         }
-        let remote_control = RemoteControl::init(width as u32, height as u32);
+        let remote_control = RemoteControl::init(x as u32, y as u32, width as u32, height as u32);
 
         append_remote_session(RemoteSessionData {
             session_handle: session_handle.to_string(),
@@ -429,21 +431,45 @@ impl RemoteDesktopBackend {
 
 #[derive(Debug, Clone)]
 struct RemoteInfo {
+    x: i32,
+    y: i32,
     width: i32,
     height: i32,
     wl_output: wl_output::WlOutput,
 }
 
+fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
+    let mut space_width = 0;
+    let mut space_height = 0;
+
+    let outputs = connection.get_all_outputs();
+    for output in outputs {
+        let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
+        let libwayshot::Size { width, height } = output.physical_size;
+        space_width = space_width.max(width as i32 + x);
+        space_height = space_height.max(height as i32 + y)
+    }
+
+    libwayshot::Size {
+        width: space_width,
+        height: space_height,
+    }
+}
+
 fn get_monitor_info_from_socket(connection: &WayshotConnection) -> zbus::fdo::Result<RemoteInfo> {
+    let libwayshot::Size { width, height } = space_size(connection);
     if SERVER_SOCK.exists() {
         let outputs = connection.get_all_outputs();
         let monitors: Vec<String> = outputs.iter().map(|output| output.name.clone()).collect();
         let index = get_selection_from_socket(monitors)?;
         let output = &outputs[index as usize];
-        let libwayshot::Size { width, height } = output.physical_size;
+        let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
+        //let libwayshot::Size { width, height } = output.physical_size;
         Ok(RemoteInfo {
-            width: width as i32,
-            height: height as i32,
+            x,
+            y,
+            width,
+            height,
             wl_output: output.wl_output.clone(),
         })
     } else {
@@ -457,11 +483,13 @@ fn get_monitor_info_from_socket(connection: &WayshotConnection) -> zbus::fdo::Re
             Err(e) => return Err(zbus::Error::Failure(format!("wayland error, {e}")).into()),
         };
 
-        use libwaysip::Size;
         let screen_info = info.screen_info;
 
-        let Size { width, height } = screen_info.get_wloutput_size();
+        let libwaysip::Position { x, y } = screen_info.get_position();
+        //let Size { width, height } = screen_info.get_wloutput_size();
         Ok(RemoteInfo {
+            x,
+            y,
             width,
             height,
             wl_output: screen_info.wl_output,

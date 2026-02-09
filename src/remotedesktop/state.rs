@@ -22,6 +22,8 @@ pub struct AppData {
     pub(crate) xkb_context: Context,
     pub(crate) xkb_keymap: Keymap,
     pub(crate) xkb_state: State,
+    x: u32,
+    y: u32,
     output_width: u32,
     output_height: u32,
 }
@@ -33,6 +35,8 @@ impl AppData {
         xkb_context: Context,
         xkb_keymap: Keymap,
         xkb_state: State,
+        x: u32,
+        y: u32,
         output_width: u32,
         output_height: u32,
     ) -> Self {
@@ -43,6 +47,8 @@ impl AppData {
             xkb_context,
             xkb_keymap,
             xkb_state,
+            x,
+            y,
             output_width,
             output_height,
         }
@@ -121,13 +127,10 @@ impl AppData {
     }
 
     pub fn notify_pointer_motion_absolute(&self, x: f64, y: f64) {
-        self.virtual_pointer.motion_absolute(
-            10,
-            x as u32,
-            y as u32,
-            self.output_width,
-            self.output_height,
-        );
+        let x = x as u32 + self.x;
+        let y = y as u32 + self.y;
+        self.virtual_pointer
+            .motion_absolute(10, x, y, self.output_width, self.output_height);
     }
 
     pub fn notify_pointer_button(&self, button: i32, state: u32) {
