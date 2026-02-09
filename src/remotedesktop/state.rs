@@ -24,8 +24,8 @@ pub struct AppData {
     pub(crate) xkb_state: State,
     x: u32,
     y: u32,
-    output_width: u32,
-    output_height: u32,
+    space_width: u32,
+    space_height: u32,
 }
 
 impl AppData {
@@ -37,8 +37,8 @@ impl AppData {
         xkb_state: State,
         x: u32,
         y: u32,
-        output_width: u32,
-        output_height: u32,
+        space_width: u32,
+        space_height: u32,
     ) -> Self {
         Self {
             virtual_keyboard,
@@ -49,8 +49,8 @@ impl AppData {
             xkb_state,
             x,
             y,
-            output_width,
-            output_height,
+            space_width,
+            space_height,
         }
     }
 }
@@ -130,7 +130,7 @@ impl AppData {
         let x = x as u32 + self.x;
         let y = y as u32 + self.y;
         self.virtual_pointer
-            .motion_absolute(10, x, y, self.output_width, self.output_height);
+            .motion_absolute(10, x, y, self.space_width, self.space_height);
     }
 
     pub fn notify_pointer_button(&self, button: i32, state: u32) {
