@@ -141,9 +141,9 @@ pub fn remote_loop(
                 InputRequest::KeyboardKeycode { keycode, state } => {
                     app_state.notify_keyboard_keycode(keycode, state)
                 }
-                InputRequest::KeyboardKeysym { keysym, state } => {
-                    app_state.notify_keyboard_keysym(keysym, state)
-                }
+                // InputRequest::KeyboardKeysym { keysym, state } => {
+                //     app_state.notify_keyboard_keysym(keysym, state)
+                // }
                 InputRequest::TouchDown { slot, x, y } => {
                     app_state.notify_touch_down(slot, x, y);
                 }
