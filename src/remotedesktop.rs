@@ -460,19 +460,19 @@ impl RemoteDesktopBackend {
         .await
     }
 
-    // async fn notify_keyboard_keysym(
-    //     &self,
-    //     session_handle: ObjectPath<'_>,
-    //     _options: HashMap<String, Value<'_>>,
-    //     keysym: i32,
-    //     state: u32,
-    // ) -> zbus::fdo::Result<()> {
-    //     notify_input_event(
-    //         session_handle,
-    //         InputRequest::KeyboardKeysym { keysym, state },
-    //     )
-    //     .await
-    // }
+    async fn notify_keyboard_keysym(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _options: HashMap<String, Value<'_>>,
+        keysym: i32,
+        state: u32,
+    ) -> zbus::fdo::Result<()> {
+        notify_input_event(
+            session_handle,
+            InputRequest::KeyboardKeysym { keysym, state },
+        )
+        .await
+    }
 
     async fn notify_touch_down(
         &self,

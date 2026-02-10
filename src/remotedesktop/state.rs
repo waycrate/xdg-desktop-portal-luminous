@@ -9,7 +9,7 @@ use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_v1:
 
 use enumflags2::{BitFlag, BitFlags, bitflags};
 use thiserror::Error;
-use xkbcommon::xkb::{Context, Keymap, State};
+use xkbcommon::xkb::{Context, Keycode, Keymap, Keysym, STATE_LAYOUT_EFFECTIVE, State};
 
 const LEFT_SHIFT: i32 = 42;
 const ALTGR: i32 = 100;
@@ -102,25 +102,25 @@ impl AppData {
             _ => None,
         }
     }
-    // fn get_keycode_from_keysym(&self, keysym: Keysym) -> Option<(u32, u32)> {
-    //     const EVDEV_OFFSET: u32 = 8;
-    //     let layout = self.xkb_state.serialize_layout(STATE_LAYOUT_EFFECTIVE);
-    //     let max_keycode = self.xkb_keymap.max_keycode();
-    //     for keycode in (self.xkb_keymap.min_keycode().raw()..max_keycode.raw()).map(Keycode::new) {
-    //         let n_levels = self.xkb_keymap.num_levels_for_key(keycode, layout);
-    //         for level in 0..n_levels {
-    //             let syms = self
-    //                 .xkb_keymap
-    //                 .key_get_syms_by_level(keycode, layout, level);
-    //             for sym in syms {
-    //                 if *sym == keysym {
-    //                     return Some((u32::from(keycode) - EVDEV_OFFSET, level));
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     None
-    // }
+    fn get_keycode_from_keysym(&self, keysym: Keysym) -> Option<(u32, u32)> {
+        const EVDEV_OFFSET: u32 = 8;
+        let layout = self.xkb_state.serialize_layout(STATE_LAYOUT_EFFECTIVE);
+        let max_keycode = self.xkb_keymap.max_keycode();
+        for keycode in (self.xkb_keymap.min_keycode().raw()..max_keycode.raw()).map(Keycode::new) {
+            let n_levels = self.xkb_keymap.num_levels_for_key(keycode, layout);
+            for level in 0..n_levels {
+                let syms = self
+                    .xkb_keymap
+                    .key_get_syms_by_level(keycode, layout, level);
+                for sym in syms {
+                    if *sym == keysym {
+                        return Some((u32::from(keycode) - EVDEV_OFFSET, level));
+                    }
+                }
+            }
+        }
+        None
+    }
 
     pub fn notify_pointer_motion(&self, dx: f64, dy: f64) {
         self.virtual_pointer.motion(10, dx, dy);
@@ -189,22 +189,22 @@ impl AppData {
             _ => self.virtual_keyboard.key(100, keycode as u32, state),
         }
     }
-    // pub fn notify_keyboard_keysym(&mut self, keysym: i32, state: u32) {
-    //     if let Some((keycode, level)) = self.get_keycode_from_keysym(Keysym::new(keysym as u32)) {
-    //         match level {
-    //             0 => {}
-    //             1 => self.notify_keyboard_keycode(LEFT_SHIFT, state),
-    //             2 => self.notify_keyboard_keycode(ALTGR, state),
-    //             _ => tracing::warn!(
-    //                 "Received unsupported key level during keysym conversion: {}",
-    //                 level
-    //             ),
-    //         }
-    //         self.notify_keyboard_keycode(keycode as i32, state);
-    //     } else {
-    //         tracing::warn!("Could not find keycode for keysym: {}", keysym);
-    //     }
-    // }
+    pub fn notify_keyboard_keysym(&mut self, keysym: i32, state: u32) {
+        if let Some((keycode, level)) = self.get_keycode_from_keysym(Keysym::new(keysym as u32)) {
+            match level {
+                0 => {}
+                1 => self.notify_keyboard_keycode(LEFT_SHIFT, state),
+                2 => self.notify_keyboard_keycode(ALTGR, state),
+                _ => tracing::warn!(
+                    "Received unsupported key level during keysym conversion: {}",
+                    level
+                ),
+            }
+            self.notify_keyboard_keycode(keycode as i32, state);
+        } else {
+            tracing::warn!("Could not find keycode for keysym: {}", keysym);
+        }
+    }
 
     pub fn notify_touch_down(&mut self, _slot: u32, _x: f64, _y: f64) {
         tracing::debug!("NotifyTouchDown: touch events are currently unsupported");

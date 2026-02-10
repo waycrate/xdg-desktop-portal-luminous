@@ -27,7 +27,7 @@ pub enum InputRequest {
     PointerAxis { dx: f64, dy: f64 },
     PointerAxisDiscrate { axis: u32, steps: i32 },
     KeyboardKeycode { keycode: i32, state: u32 },
-    // KeyboardKeysym { keysym: i32, state: u32 },
+    KeyboardKeysym { keysym: i32, state: u32 },
     TouchMotion { slot: u32, x: f64, y: f64 },
     TouchDown { slot: u32, x: f64, y: f64 },
     TouchUp { slot: u32 },
@@ -141,9 +141,9 @@ pub fn remote_loop(
                 InputRequest::KeyboardKeycode { keycode, state } => {
                     app_state.notify_keyboard_keycode(keycode, state)
                 }
-                // InputRequest::KeyboardKeysym { keysym, state } => {
-                //     app_state.notify_keyboard_keysym(keysym, state)
-                // }
+                InputRequest::KeyboardKeysym { keysym, state } => {
+                    app_state.notify_keyboard_keysym(keysym, state)
+                }
                 InputRequest::TouchDown { slot, x, y } => {
                     app_state.notify_touch_down(slot, x, y);
                 }
