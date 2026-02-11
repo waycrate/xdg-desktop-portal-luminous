@@ -27,6 +27,7 @@ use zbus::zvariant::{
 };
 
 use crate::PortalResponse;
+use crate::input_capture::BarrierInfo;
 use crate::pipewirethread::CastTarget;
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
@@ -65,6 +66,9 @@ impl ZoneId {
     /// Creates a new unique window [`Id`].
     pub fn unique() -> ZoneId {
         ZoneId(COUNT.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+    pub fn value(&self) -> u32 {
+        self.0
     }
 }
 
@@ -122,12 +126,62 @@ pub struct SelectDevicesOptions {
     pub persist_mode: Option<PersistMode>,
 }
 
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, Type)]
+pub struct CursorPosition {
+    x: f64,
+    y: f64,
+}
+
 pub struct RemoteSessionData {
     pub session_handle: String,
     pub cast_thread: Option<ScreencastThread>,
     pub remote_control: RemoteControl,
     pub zones: Vec<Zone>,
     pub zone_id: ZoneId,
+    pub barriers: Vec<BarrierInfo>,
+    cursor: CursorPosition,
+    activation_id: u32,
+}
+
+impl RemoteSessionData {
+    pub fn new(
+        session_handle: String,
+        cast_thread: Option<ScreencastThread>,
+        remote_control: RemoteControl,
+        zones: Vec<Zone>,
+    ) -> Self {
+        Self {
+            session_handle,
+            cast_thread,
+            remote_control,
+            zones,
+            zone_id: ZoneId::unique(),
+            cursor: CursorPosition::default(),
+            barriers: Vec::new(),
+            activation_id: 0,
+        }
+    }
+    pub fn step(&mut self) {
+        self.activation_id += 1;
+    }
+    pub fn activation_id(&self) -> u32 {
+        self.activation_id
+    }
+    pub fn cursor_position(&self) -> CursorPosition {
+        self.cursor
+    }
+    pub fn update_cursor(&mut self, event: InputRequest) {
+        match event {
+            InputRequest::PointerMotionAbsolute { x, y } => {
+                self.cursor = CursorPosition { x, y };
+            }
+            InputRequest::PointerMotion { dx, dy } => {
+                self.cursor.x += dx;
+                self.cursor.y += dy;
+            }
+            _ => {}
+        }
+    }
 }
 
 #[derive(Debug, Type, Serialize, Deserialize, Clone, Copy)]
@@ -179,14 +233,6 @@ pub async fn remove_remote_session(path: &str) {
     sessions.remove(index);
 }
 
-pub async fn remote_zones(session_handle: ObjectPath<'_>) -> Option<(u32, Vec<Zone>)> {
-    let remote_sessions = REMOTE_SESSIONS.lock().await;
-    let session = remote_sessions
-        .iter()
-        .find(|session| session.session_handle == session_handle.to_string())?;
-    Some((session.zone_id.0, session.zones.clone()))
-}
-
 pub async fn enable_eis_listener(session_handle: ObjectPath<'_>) {
     EIS_SERVER
         .0
@@ -204,13 +250,14 @@ async fn notify_input_event(
     session_handle: ObjectPath<'_>,
     event: InputRequest,
 ) -> zbus::fdo::Result<()> {
-    let remote_sessions = REMOTE_SESSIONS.lock().await;
+    let mut remote_sessions = REMOTE_SESSIONS.lock().await;
     let Some(session) = remote_sessions
-        .iter()
+        .iter_mut()
         .find(|session| session.session_handle == session_handle.to_string())
     else {
         return Ok(());
     };
+    session.update_cursor(event);
     let remote_control = &session.remote_control;
     remote_control
         .sender
@@ -425,18 +472,17 @@ impl RemoteDesktopBackend {
         }
         let remote_control = RemoteControl::init(x as u32, y as u32, width as u32, height as u32);
 
-        append_remote_session(RemoteSessionData {
-            session_handle: session_handle.to_string(),
+        append_remote_session(RemoteSessionData::new(
+            session_handle.to_string(),
             cast_thread,
             remote_control,
-            zones: vec![Zone {
+            vec![Zone {
                 x_offset: x,
                 y_offset: y,
                 width: width as u32,
                 height: height as u32,
             }],
-            zone_id: ZoneId::unique(),
-        })
+        ))
         .await;
         Ok(PortalResponse::Success(RemoteStartReturnValue {
             streams,

@@ -19,7 +19,7 @@ use calloop::{
 };
 use calloop_wayland_source::WaylandSource;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum InputRequest {
     PointerMotion { dx: f64, dy: f64 },
     PointerMotionAbsolute { x: f64, y: f64 },
