@@ -102,7 +102,6 @@ impl AppData {
             _ => None,
         }
     }
-
     fn get_keycode_from_keysym(&self, keysym: Keysym) -> Option<(u32, u32)> {
         const EVDEV_OFFSET: u32 = 8;
         let layout = self.xkb_state.serialize_layout(STATE_LAYOUT_EFFECTIVE);
@@ -190,7 +189,6 @@ impl AppData {
             _ => self.virtual_keyboard.key(100, keycode as u32, state),
         }
     }
-
     pub fn notify_keyboard_keysym(&mut self, keysym: i32, state: u32) {
         if let Some((keycode, level)) = self.get_keycode_from_keysym(Keysym::new(keysym as u32)) {
             match level {
