@@ -5,7 +5,7 @@ mod state;
 
 use libwayshot::WayshotConnection;
 use libwaysip::{SelectionType, WaySip};
-use remote_thread::RemoteControl;
+pub use remote_thread::RemoteControl;
 use stream_message::SERVER_SOCK;
 use wayland_client::protocol::wl_output;
 
@@ -35,13 +35,13 @@ use crate::session::{
 };
 use crate::utils::get_selection_from_socket;
 
-use self::eis_server::{EisServerMsg, InputEvent};
-use self::remote_thread::InputRequest;
+pub use self::eis_server::{EisServerMsg, InputEvent};
+pub use self::remote_thread::InputRequest;
 
 type EisServerSender = Sender<EisServerMsg>;
 type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
 
-static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
+pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
     let (tx, rx) = eis_server::start();
     (tx, Arc::new(StdMutex::new(rx)))
 });
@@ -105,9 +105,18 @@ pub struct SelectDevicesOptions {
 }
 
 pub struct RemoteSessionData {
-    session_handle: String,
-    cast_thread: Option<ScreencastThread>,
-    remote_control: RemoteControl,
+    pub session_handle: String,
+    pub cast_thread: Option<ScreencastThread>,
+    pub remote_control: RemoteControl,
+    pub zones: Vec<Zone>,
+}
+
+#[derive(Debug, Type, Serialize, Deserialize, Clone, Copy)]
+pub struct Zone {
+    pub width: u32,
+    pub height: u32,
+    pub x_offset: i32,
+    pub y_offset: i32,
 }
 
 impl RemoteSessionData {
@@ -116,6 +125,10 @@ impl RemoteSessionData {
         if let Some(cast_thread) = &self.cast_thread {
             cast_thread.stop();
         }
+        EIS_SERVER
+            .0
+            .send(EisServerMsg::RemoveListener(self.session_handle.clone()))
+            .unwrap();
     }
 
     fn streams(&self) -> Vec<Stream> {
@@ -145,6 +158,30 @@ pub async fn remove_remote_session(path: &str) {
     sessions[index].stop();
     tracing::info!("session {} is stopped", sessions[index].session_handle);
     sessions.remove(index);
+}
+
+pub async fn remote_zones(session_handle: ObjectPath<'_>) -> Option<Vec<Zone>> {
+    let remote_sessions = REMOTE_SESSIONS.lock().await;
+    let Some(session) = remote_sessions
+        .iter()
+        .find(|session| session.session_handle == session_handle.to_string())
+    else {
+        return None;
+    };
+    Some(session.zones.clone())
+}
+
+pub async fn enable_eis_listener(session_handle: ObjectPath<'_>) {
+    EIS_SERVER
+        .0
+        .send(EisServerMsg::ActiveListener(session_handle.to_string()))
+        .unwrap();
+}
+pub async fn disable_eis_listener(session_handle: ObjectPath<'_>) {
+    EIS_SERVER
+        .0
+        .send(EisServerMsg::StopListener(session_handle.to_string()))
+        .unwrap();
 }
 
 async fn notify_input_event(
@@ -376,6 +413,12 @@ impl RemoteDesktopBackend {
             session_handle: session_handle.to_string(),
             cast_thread,
             remote_control,
+            zones: vec![Zone {
+                x_offset: x,
+                y_offset: y,
+                width: width as u32,
+                height: height as u32,
+            }],
         })
         .await;
         Ok(PortalResponse::Success(RemoteStartReturnValue {
@@ -508,7 +551,7 @@ impl RemoteDesktopBackend {
     }
 
     #[zbus(name = "ConnectToEIS")]
-    async fn connect_to_eis(
+    fn connect_to_eis(
         &self,
         session_handle: ObjectPath<'_>,
         _options: HashMap<String, Value<'_>>,
@@ -531,11 +574,11 @@ impl RemoteDesktopBackend {
 }
 
 #[derive(Debug, Clone)]
-struct RemoteInfo {
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
+pub struct RemoteInfo {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     wl_output: wl_output::WlOutput,
 }
 
@@ -557,7 +600,9 @@ fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
     }
 }
 
-fn get_monitor_info_from_socket(connection: &WayshotConnection) -> zbus::fdo::Result<RemoteInfo> {
+pub fn get_monitor_info_from_socket(
+    connection: &WayshotConnection,
+) -> zbus::fdo::Result<RemoteInfo> {
     let libwayshot::Size { width, height } = space_size(connection);
     if SERVER_SOCK.exists() {
         let outputs = connection.get_all_outputs();
@@ -587,7 +632,6 @@ fn get_monitor_info_from_socket(connection: &WayshotConnection) -> zbus::fdo::Re
         let screen_info = info.screen_info;
 
         let libwaysip::Position { x, y } = screen_info.get_position();
-        //let Size { width, height } = screen_info.get_wloutput_size();
         Ok(RemoteInfo {
             x,
             y,
