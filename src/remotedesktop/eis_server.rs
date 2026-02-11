@@ -134,7 +134,7 @@ impl State {
         context: eis::Context,
         session_handle: String,
     ) -> io::Result<calloop::PostAction> {
-        println!(
+        tracing::info!(
             "New connection for session {}: {:?}",
             session_handle, context
         );
@@ -153,7 +153,7 @@ impl State {
                         &session_handle_clone,
                     ),
                     Err(err) => {
-                        eprintln!("Error communicating with client: {err}");
+                        tracing::error!("Error communicating with client: {err}");
                         calloop::PostAction::Remove
                     }
                 })
