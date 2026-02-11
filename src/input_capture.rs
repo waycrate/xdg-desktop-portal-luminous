@@ -3,7 +3,7 @@ use std::{collections::HashMap, os::fd::AsFd};
 use crate::{
     PortalResponse,
     remotedesktop::{
-        ZoneId, EIS_SERVER, EisServerMsg, RemoteControl, RemoteInfo, RemoteSessionData, Zone,
+        EIS_SERVER, EisServerMsg, RemoteControl, RemoteInfo, RemoteSessionData, Zone, ZoneId,
         append_remote_session, disable_eis_listener, enable_eis_listener,
         get_monitor_info_from_socket, remote_zones,
     },
