@@ -37,6 +37,9 @@ use crate::utils::get_selection_from_socket;
 
 pub use self::eis_server::{EisServerMsg, InputEvent};
 pub use self::remote_thread::InputRequest;
+use std::hash::Hash;
+
+use std::sync::atomic::{self, AtomicU32};
 
 type EisServerSender = Sender<EisServerMsg>;
 type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
@@ -48,6 +51,21 @@ pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLoc
 
 pub fn get_input_receiver() -> InputEventReceiver {
     EIS_SERVER.1.clone()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+/// The id of the window.
+///
+/// Internally Iced reserves `window::Id::MAIN` for the first window spawned.
+pub struct ZoneId(u32);
+
+static COUNT: AtomicU32 = AtomicU32::new(0);
+
+impl ZoneId {
+    /// Creates a new unique window [`Id`].
+    pub fn unique() -> ZoneId {
+        ZoneId(COUNT.fetch_add(1, atomic::Ordering::Relaxed))
+    }
 }
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
@@ -109,6 +127,7 @@ pub struct RemoteSessionData {
     pub cast_thread: Option<ScreencastThread>,
     pub remote_control: RemoteControl,
     pub zones: Vec<Zone>,
+    pub zone_id: ZoneId,
 }
 
 #[derive(Debug, Type, Serialize, Deserialize, Clone, Copy)]
@@ -160,15 +179,12 @@ pub async fn remove_remote_session(path: &str) {
     sessions.remove(index);
 }
 
-pub async fn remote_zones(session_handle: ObjectPath<'_>) -> Option<Vec<Zone>> {
+pub async fn remote_zones(session_handle: ObjectPath<'_>) -> Option<(u32, Vec<Zone>)> {
     let remote_sessions = REMOTE_SESSIONS.lock().await;
-    let Some(session) = remote_sessions
+    let session = remote_sessions
         .iter()
-        .find(|session| session.session_handle == session_handle.to_string())
-    else {
-        return None;
-    };
-    Some(session.zones.clone())
+        .find(|session| session.session_handle == session_handle.to_string())?;
+    Some((session.zone_id.0, session.zones.clone()))
 }
 
 pub async fn enable_eis_listener(session_handle: ObjectPath<'_>) {
@@ -419,6 +435,7 @@ impl RemoteDesktopBackend {
                 width: width as u32,
                 height: height as u32,
             }],
+            zone_id: ZoneId::unique(),
         })
         .await;
         Ok(PortalResponse::Success(RemoteStartReturnValue {

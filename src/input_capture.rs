@@ -3,7 +3,7 @@ use std::{collections::HashMap, os::fd::AsFd};
 use crate::{
     PortalResponse,
     remotedesktop::{
-        EIS_SERVER, EisServerMsg, RemoteControl, RemoteInfo, RemoteSessionData, Zone,
+        ZoneId, EIS_SERVER, EisServerMsg, RemoteControl, RemoteInfo, RemoteSessionData, Zone,
         append_remote_session, disable_eis_listener, enable_eis_listener,
         get_monitor_info_from_socket, remote_zones,
     },
@@ -127,6 +127,7 @@ impl InputCapture {
                 width: width as u32,
                 height: height as u32,
             }],
+            zone_id: ZoneId::unique(),
         })
         .await;
         Ok(PortalResponse::Success(CreateSessionRet {
@@ -142,10 +143,10 @@ impl InputCapture {
         _app_id: &str,
         _options: HashMap<String, Value<'_>>,
     ) -> zbus::fdo::Result<PortalResponse<GetZonesRet>> {
-        let zones = remote_zones(session_handle)
+        let (zone_set, zones) = remote_zones(session_handle)
             .await
-            .ok_or(zbus::Error::Failure("No such handle".to_owned().into()))?;
-        Ok(PortalResponse::Success(GetZonesRet { zones, zone_set: 0 }))
+            .ok_or(zbus::Error::Failure("No such handle".to_owned()))?;
+        Ok(PortalResponse::Success(GetZonesRet { zones, zone_set }))
     }
 
     #[zbus(name = "ConnectToEIS")]

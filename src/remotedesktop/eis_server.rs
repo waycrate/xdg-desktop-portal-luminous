@@ -284,6 +284,7 @@ impl State {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 pub enum EisServerMsg {
     NewListener(eis::Listener, String),
     StopListener(String),
@@ -386,7 +387,7 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
                         let Some(token) = state.clients.remove(&session) else {
                             return;
                         };
-                        let _ = state.handle.remove(token);
+                        state.handle.remove(token);
                     }
                 }
             }
