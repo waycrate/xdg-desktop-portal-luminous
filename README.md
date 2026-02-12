@@ -11,6 +11,7 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 1. org.freedesktop.impl.portal.ScreenCast
 1. org.freedesktop.impl.portal.ScreenShot
 1. org.freedesktop.impl.portal.Settings
+1. org.freedesktop.impl.portal.InputCapture
 
 # Settings:
 
@@ -21,6 +22,7 @@ color_scheme = "dark" # can also be "light"
 accent_color = "#880022"
 contrast = "higher" # enable higher contrast
 reduced_motion = "reduced" # enable reduced motion
+screenshot_permission_check = false # disable the permission check dialog
 ```
 
 # How to set priority of portal backend:
