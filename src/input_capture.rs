@@ -123,7 +123,9 @@ pub struct InputCapture;
 
 impl InputCapture {
     fn capabilities(&self) -> BitFlags<SupportedCapabilities> {
-        SupportedCapabilities::Pointer | SupportedCapabilities::Keyboard
+        SupportedCapabilities::Pointer
+            | SupportedCapabilities::Keyboard
+            | SupportedCapabilities::TouchScreen
     }
 }
 

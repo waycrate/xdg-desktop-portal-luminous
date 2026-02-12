@@ -341,7 +341,7 @@ impl RemoteDesktopBackend {
 
     #[zbus(property)]
     fn available_device_types(&self) -> u32 {
-        (DeviceType::Keyboard | DeviceType::Pointer).bits()
+        (DeviceType::Keyboard | DeviceType::Pointer | DeviceType::TouchScreen).bits()
     }
 
     async fn create_session(

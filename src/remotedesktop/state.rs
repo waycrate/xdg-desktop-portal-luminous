@@ -15,6 +15,13 @@ use xkbcommon::xkb::{Context, Keycode, Keymap, Keysym, STATE_LAYOUT_EFFECTIVE, S
 
 const LEFT_SHIFT: i32 = 42;
 const ALTGR: i32 = 100;
+
+// NOTE: always read https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
+const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
+//const PAD_LEFT: u32 = 0x222;
+const PAD_RIGHT: u32 = 0x223;
+
 // This struct represents the state of our app. This simple app does not
 // need any state, by this type still supports the `Dispatch` implementations.
 pub struct AppData {
@@ -220,15 +227,34 @@ impl AppData {
         }
     }
 
-    pub fn notify_touch_down(&mut self, _slot: u32, _x: f64, _y: f64) {
-        tracing::debug!("NotifyTouchDown: touch events are currently unsupported");
+    pub fn notify_touch_down(&mut self, slot: u32, x: f64, y: f64) {
+        let time = self.duration_u32();
+        let x = x as u32 + self.x;
+        let y = y as u32 + self.y;
+        let button = if slot == PAD_RIGHT {
+            BTN_RIGHT
+        } else {
+            BTN_LEFT
+        };
+        self.virtual_pointer
+            .motion_absolute(time, x, y, self.space_width, self.space_height);
+        self.virtual_pointer
+            .button(time, button, wl_pointer::ButtonState::Pressed);
     }
 
-    pub fn notify_touch_motion(&mut self, _slot: u32, _x: f64, _y: f64) {
-        tracing::debug!("NotifyTouchMotion: touch events are currently unsupported");
+    pub fn notify_touch_motion(&mut self, _slot: u32, dx: f64, dy: f64) {
+        let time = self.duration_u32();
+        self.virtual_pointer.motion(time, dx, dy);
     }
 
-    pub fn notify_touch_up(&mut self, _slot: u32) {
-        tracing::debug!("NotifyTouchUp: touch events are currently unsupported");
+    pub fn notify_touch_up(&mut self, slot: u32) {
+        let time = self.duration_u32();
+        let button = if slot == PAD_RIGHT {
+            BTN_RIGHT
+        } else {
+            BTN_LEFT
+        };
+        self.virtual_pointer
+            .button(time, button, wl_pointer::ButtonState::Released);
     }
 }
