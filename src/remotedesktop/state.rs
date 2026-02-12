@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1;
 
 use wayland_client::{
@@ -26,6 +28,7 @@ pub struct AppData {
     y: u32,
     space_width: u32,
     space_height: u32,
+    time: Instant,
 }
 
 impl AppData {
@@ -52,7 +55,12 @@ impl AppData {
             y,
             space_width,
             space_height,
+            time: Instant::now(),
         }
+    }
+
+    fn duration_u32(&self) -> u32 {
+        (Instant::now() - self.time).as_millis() as u32
     }
 }
 
@@ -123,19 +131,22 @@ impl AppData {
     }
 
     pub fn notify_pointer_motion(&self, dx: f64, dy: f64) {
-        self.virtual_pointer.motion(10, dx, dy);
+        let time = self.duration_u32();
+        self.virtual_pointer.motion(time, dx, dy);
     }
 
     pub fn notify_pointer_motion_absolute(&self, x: f64, y: f64) {
+        let time = self.duration_u32();
         let x = x as u32 + self.x;
         let y = y as u32 + self.y;
         self.virtual_pointer
-            .motion_absolute(10, x, y, self.space_width, self.space_height);
+            .motion_absolute(time, x, y, self.space_width, self.space_height);
     }
 
     pub fn notify_pointer_button(&self, button: i32, state: u32) {
+        let time = self.duration_u32();
         self.virtual_pointer.button(
-            100,
+            time,
             button as u32,
             if state == 0 {
                 wl_pointer::ButtonState::Released
@@ -146,15 +157,17 @@ impl AppData {
     }
 
     pub fn notify_pointer_axis(&self, dx: f64, dy: f64) {
+        let time = self.duration_u32();
         self.virtual_pointer
-            .axis(100, wl_pointer::Axis::HorizontalScroll, dx);
+            .axis(time, wl_pointer::Axis::HorizontalScroll, dx);
         self.virtual_pointer
-            .axis(100, wl_pointer::Axis::VerticalScroll, dy);
+            .axis(time, wl_pointer::Axis::VerticalScroll, dy);
     }
 
     pub fn notify_pointer_axis_discrete(&self, axis: u32, steps: i32) {
+        let time = self.duration_u32();
         self.virtual_pointer.axis_discrete(
-            100,
+            time,
             if axis == 0 {
                 wl_pointer::Axis::VerticalScroll
             } else {
@@ -166,6 +179,7 @@ impl AppData {
     }
 
     pub fn notify_keyboard_keycode(&mut self, keycode: i32, state: u32) {
+        let time = self.duration_u32();
         let pressed_key: u32 = KeyState::Pressed.into();
         match self.get_modifier_from_keycode(keycode) {
             // Caps lock is managed differently as it's the only
@@ -186,7 +200,7 @@ impl AppData {
                 self.virtual_keyboard.modifiers(self.mods, 0, 0, 0)
             }
             // non-modifier key
-            _ => self.virtual_keyboard.key(100, keycode as u32, state),
+            _ => self.virtual_keyboard.key(time, keycode as u32, state),
         }
     }
     pub fn notify_keyboard_keysym(&mut self, keysym: i32, state: u32) {
