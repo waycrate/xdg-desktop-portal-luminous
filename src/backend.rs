@@ -1,4 +1,5 @@
 use crate::access::AccessBackend;
+use crate::input_capture::InputCapture;
 use crate::remotedesktop::RemoteDesktopBackend;
 use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
@@ -142,6 +143,7 @@ pub async fn backend(
         )?
         .serve_at("/org/freedesktop/portal/desktop", RemoteDesktopBackend)?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
+        .serve_at("/org/freedesktop/portal/desktop", InputCapture)?
         .build()
         .await?;
 

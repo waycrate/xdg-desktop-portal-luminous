@@ -5,7 +5,7 @@ mod state;
 
 use libwayshot::WayshotConnection;
 use libwaysip::{SelectionType, WaySip};
-use remote_thread::RemoteControl;
+pub use remote_thread::RemoteControl;
 use stream_message::SERVER_SOCK;
 use wayland_client::protocol::wl_output;
 
@@ -27,6 +27,7 @@ use zbus::zvariant::{
 };
 
 use crate::PortalResponse;
+use crate::input_capture::BarrierInfo;
 use crate::pipewirethread::CastTarget;
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
@@ -35,19 +36,40 @@ use crate::session::{
 };
 use crate::utils::get_selection_from_socket;
 
-use self::eis_server::{EisServerMsg, InputEvent};
-use self::remote_thread::InputRequest;
+pub use self::eis_server::{EisServerMsg, InputEvent};
+pub use self::remote_thread::InputRequest;
+use std::hash::Hash;
+
+use std::sync::atomic::{self, AtomicU32};
 
 type EisServerSender = Sender<EisServerMsg>;
 type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
 
-static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
+pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
     let (tx, rx) = eis_server::start();
     (tx, Arc::new(StdMutex::new(rx)))
 });
 
 pub fn get_input_receiver() -> InputEventReceiver {
     EIS_SERVER.1.clone()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+/// The id of the window.
+///
+/// Internally Iced reserves `window::Id::MAIN` for the first window spawned.
+pub struct ZoneId(u32);
+
+static COUNT: AtomicU32 = AtomicU32::new(0);
+
+impl ZoneId {
+    /// Creates a new unique window [`Id`].
+    pub fn unique() -> ZoneId {
+        ZoneId(COUNT.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+    pub fn value(&self) -> u32 {
+        self.0
+    }
 }
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
@@ -104,10 +126,70 @@ pub struct SelectDevicesOptions {
     pub persist_mode: Option<PersistMode>,
 }
 
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, Type)]
+pub struct CursorPosition {
+    x: f64,
+    y: f64,
+}
+
 pub struct RemoteSessionData {
-    session_handle: String,
-    cast_thread: Option<ScreencastThread>,
-    remote_control: RemoteControl,
+    pub session_handle: String,
+    pub cast_thread: Option<ScreencastThread>,
+    pub remote_control: RemoteControl,
+    pub zones: Vec<Zone>,
+    pub zone_id: ZoneId,
+    pub barriers: Vec<BarrierInfo>,
+    cursor: CursorPosition,
+    activation_id: u32,
+}
+
+impl RemoteSessionData {
+    pub fn new(
+        session_handle: String,
+        cast_thread: Option<ScreencastThread>,
+        remote_control: RemoteControl,
+        zones: Vec<Zone>,
+    ) -> Self {
+        Self {
+            session_handle,
+            cast_thread,
+            remote_control,
+            zones,
+            zone_id: ZoneId::unique(),
+            cursor: CursorPosition::default(),
+            barriers: Vec::new(),
+            activation_id: 0,
+        }
+    }
+    pub fn step(&mut self) {
+        self.activation_id += 1;
+    }
+    pub fn activation_id(&self) -> u32 {
+        self.activation_id
+    }
+    pub fn cursor_position(&self) -> CursorPosition {
+        self.cursor
+    }
+    pub fn update_cursor(&mut self, event: InputRequest) {
+        match event {
+            InputRequest::PointerMotionAbsolute { x, y } => {
+                self.cursor = CursorPosition { x, y };
+            }
+            InputRequest::PointerMotion { dx, dy } => {
+                self.cursor.x += dx;
+                self.cursor.y += dy;
+            }
+            _ => {}
+        }
+    }
+}
+
+#[derive(Debug, Type, Serialize, Deserialize, Clone, Copy)]
+pub struct Zone {
+    pub width: u32,
+    pub height: u32,
+    pub x_offset: i32,
+    pub y_offset: i32,
 }
 
 impl RemoteSessionData {
@@ -116,6 +198,10 @@ impl RemoteSessionData {
         if let Some(cast_thread) = &self.cast_thread {
             cast_thread.stop();
         }
+        EIS_SERVER
+            .0
+            .send(EisServerMsg::RemoveListener(self.session_handle.clone()))
+            .unwrap();
     }
 
     fn streams(&self) -> Vec<Stream> {
@@ -147,17 +233,31 @@ pub async fn remove_remote_session(path: &str) {
     sessions.remove(index);
 }
 
+pub async fn enable_eis_listener(session_handle: ObjectPath<'_>) {
+    EIS_SERVER
+        .0
+        .send(EisServerMsg::ActiveListener(session_handle.to_string()))
+        .unwrap();
+}
+pub async fn disable_eis_listener(session_handle: ObjectPath<'_>) {
+    EIS_SERVER
+        .0
+        .send(EisServerMsg::StopListener(session_handle.to_string()))
+        .unwrap();
+}
+
 async fn notify_input_event(
     session_handle: ObjectPath<'_>,
     event: InputRequest,
 ) -> zbus::fdo::Result<()> {
-    let remote_sessions = REMOTE_SESSIONS.lock().await;
+    let mut remote_sessions = REMOTE_SESSIONS.lock().await;
     let Some(session) = remote_sessions
-        .iter()
+        .iter_mut()
         .find(|session| session.session_handle == session_handle.to_string())
     else {
         return Ok(());
     };
+    session.update_cursor(event);
     let remote_control = &session.remote_control;
     remote_control
         .sender
@@ -241,7 +341,7 @@ impl RemoteDesktopBackend {
 
     #[zbus(property)]
     fn available_device_types(&self) -> u32 {
-        (DeviceType::Keyboard | DeviceType::Pointer).bits()
+        (DeviceType::Keyboard | DeviceType::Pointer | DeviceType::TouchScreen).bits()
     }
 
     async fn create_session(
@@ -372,11 +472,17 @@ impl RemoteDesktopBackend {
         }
         let remote_control = RemoteControl::init(x as u32, y as u32, width as u32, height as u32);
 
-        append_remote_session(RemoteSessionData {
-            session_handle: session_handle.to_string(),
+        append_remote_session(RemoteSessionData::new(
+            session_handle.to_string(),
             cast_thread,
             remote_control,
-        })
+            vec![Zone {
+                x_offset: x,
+                y_offset: y,
+                width: width as u32,
+                height: height as u32,
+            }],
+        ))
         .await;
         Ok(PortalResponse::Success(RemoteStartReturnValue {
             streams,
@@ -508,7 +614,7 @@ impl RemoteDesktopBackend {
     }
 
     #[zbus(name = "ConnectToEIS")]
-    async fn connect_to_eis(
+    fn connect_to_eis(
         &self,
         session_handle: ObjectPath<'_>,
         _options: HashMap<String, Value<'_>>,
@@ -531,11 +637,11 @@ impl RemoteDesktopBackend {
 }
 
 #[derive(Debug, Clone)]
-struct RemoteInfo {
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
+pub struct RemoteInfo {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     wl_output: wl_output::WlOutput,
 }
 
@@ -557,7 +663,9 @@ fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
     }
 }
 
-fn get_monitor_info_from_socket(connection: &WayshotConnection) -> zbus::fdo::Result<RemoteInfo> {
+pub fn get_monitor_info_from_socket(
+    connection: &WayshotConnection,
+) -> zbus::fdo::Result<RemoteInfo> {
     let libwayshot::Size { width, height } = space_size(connection);
     if SERVER_SOCK.exists() {
         let outputs = connection.get_all_outputs();
@@ -587,7 +695,6 @@ fn get_monitor_info_from_socket(connection: &WayshotConnection) -> zbus::fdo::Re
         let screen_info = info.screen_info;
 
         let libwaysip::Position { x, y } = screen_info.get_position();
-        //let Size { width, height } = screen_info.get_wloutput_size();
         Ok(RemoteInfo {
             x,
             y,

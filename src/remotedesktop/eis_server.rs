@@ -1,10 +1,14 @@
-use calloop::channel::{Sender, channel};
+use calloop::{
+    RegistrationToken,
+    channel::{Sender, channel},
+};
 use reis::{
     calloop::{EisListenerSource, EisRequestSource, EisRequestSourceEvent},
     eis::{self, device::DeviceType},
     request::{Connection, DeviceCapability, EisRequest},
 };
 use std::{
+    collections::HashMap,
     io,
     sync::mpsc::{self, Receiver},
     thread,
@@ -126,6 +130,7 @@ fn add_device(
 struct State {
     handle: calloop::LoopHandle<'static, Self>,
     sender: mpsc::Sender<InputEvent>,
+    clients: HashMap<String, RegistrationToken>,
 }
 
 impl State {
@@ -136,7 +141,8 @@ impl State {
     ) -> io::Result<calloop::PostAction> {
         tracing::info!(
             "New connection for session {}: {:?}",
-            session_handle, context
+            session_handle,
+            context
         );
 
         let source = EisRequestSource::new(context, 1);
@@ -278,8 +284,12 @@ impl State {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 pub enum EisServerMsg {
     NewListener(eis::Listener, String),
+    StopListener(String),
+    ActiveListener(String),
+    RemoveListener(String),
 }
 
 pub enum InputEvent {
@@ -341,6 +351,7 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
         let mut state = State {
             handle: handle.clone(),
             sender: input_tx,
+            clients: HashMap::new(),
         };
 
         let _ = handle.insert_source(msg_channel, |event, _, state| {
@@ -348,7 +359,8 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
                 match msg {
                     EisServerMsg::NewListener(listener, session_handle) => {
                         let listener_source = EisListenerSource::new(listener);
-                        state
+                        let session_handle_2 = session_handle.clone();
+                        let token = state
                             .handle
                             .insert_source(
                                 listener_source,
@@ -357,6 +369,25 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
                                 },
                             )
                             .unwrap();
+                        state.clients.insert(session_handle_2, token);
+                    }
+                    EisServerMsg::StopListener(session) => {
+                        let Some(token) = state.clients.get(&session) else {
+                            return;
+                        };
+                        let _ = state.handle.disable(token);
+                    }
+                    EisServerMsg::ActiveListener(session) => {
+                        let Some(token) = state.clients.get(&session) else {
+                            return;
+                        };
+                        let _ = state.handle.enable(token);
+                    }
+                    EisServerMsg::RemoveListener(session) => {
+                        let Some(token) = state.clients.remove(&session) else {
+                            return;
+                        };
+                        state.handle.remove(token);
                     }
                 }
             }

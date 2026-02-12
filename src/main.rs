@@ -1,6 +1,7 @@
 mod access;
 mod backend;
 mod dialog;
+mod input_capture;
 mod remotedesktop;
 mod request;
 mod screencast;

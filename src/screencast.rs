@@ -39,7 +39,7 @@ use crate::dialog::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
 #[zvariant(signature = "dict")]
 struct SessionCreateResult {
     #[serde(with = "as_value")]
-    handle_token: String,
+    session_id: String,
 }
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
@@ -169,7 +169,7 @@ impl ScreenCastBackend {
         append_session(current_session.clone()).await;
         server.at(session_handle.clone(), current_session).await?;
         Ok(PortalResponse::Success(SessionCreateResult {
-            handle_token: session_handle.to_string(),
+            session_id: session_handle.to_string(),
         }))
     }
 
