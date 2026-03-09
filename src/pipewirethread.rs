@@ -221,10 +221,10 @@ impl StreamingData {
             unit = self
                 .connection
                 .create_screencast_with_shm(
-                    self.chosen_format.unwrap(),
-                    self.embedded_region,
                     self.target.wayshot_target(),
                     self.overlay_cursor,
+                    self.chosen_format.unwrap(),
+                    self.embedded_region,
                     &fd,
                 )
                 .expect("We should make sure the protocol is existed");
