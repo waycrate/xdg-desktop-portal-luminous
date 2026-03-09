@@ -494,7 +494,9 @@ fn format(width: u32, height: u32, available_video_formats: Vec<VideoFormat>) ->
         pod::Value::Choice(pod::ChoiceValue::Id(spa::utils::Choice::<spa::utils::Id>(
             spa::utils::ChoiceFlags::empty(),
             spa::utils::ChoiceEnum::<spa::utils::Id>::Enum {
-                default: spa::utils::Id(VideoFormat::BGRA.as_raw()),
+                // not use RGBA as default
+                // because there maybe none
+                default: spa::utils::Id(available_video_formats[0].as_raw()),
                 alternatives: available_video_formats
                     .iter()
                     .map(|f| spa::utils::Id(f.as_raw()))
