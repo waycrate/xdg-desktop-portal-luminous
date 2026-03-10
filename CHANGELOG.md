@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.15] - 2026-03-10
 
-### Fixed
+### Changed
 - Fix the problem xdg-desktop-portal-luminous cannot start screencast on niri
 - Support org.freedesktop.impl.portal.InputCapture
 - bump deps for libwayshot
