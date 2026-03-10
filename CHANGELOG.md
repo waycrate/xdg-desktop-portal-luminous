@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Upgrade the deps
+- bump reis
 
 [0.1.16]: https://github.com/waycrate/xdg-desktop-portal-luminous/compare/v0.1.16-v0.1.15
 

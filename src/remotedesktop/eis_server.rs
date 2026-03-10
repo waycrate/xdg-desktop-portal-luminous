@@ -2,6 +2,7 @@ use calloop::{
     RegistrationToken,
     channel::{Sender, channel},
 };
+use enumflags2::BitFlags;
 use reis::{
     calloop::{EisListenerSource, EisRequestSource, EisRequestSourceEvent},
     eis::{self, device::DeviceType},
@@ -39,11 +40,11 @@ impl ContextState {
                 let capabilities = request.capabilities;
 
                 if self.device_keyboard.is_none()
-                    && (capabilities & (DeviceCapability::Keyboard as u64)) != 0
+                    && (capabilities & DeviceCapability::Keyboard).bits() != 0
                 {
                     self.device_keyboard = Some(add_device(
                         "keyboard",
-                        &[DeviceCapability::Keyboard],
+                        BitFlags::from_flag(DeviceCapability::Keyboard),
                         |_| {},
                         &request.seat,
                         connection,
@@ -52,15 +53,13 @@ impl ContextState {
                 }
 
                 if self.device_pointer.is_none()
-                    && (capabilities & (DeviceCapability::Pointer as u64)) != 0
+                    && (capabilities & DeviceCapability::Pointer).bits() != 0
                 {
                     self.device_pointer = Some(add_device(
                         "pointer",
-                        &[
-                            DeviceCapability::Pointer,
-                            DeviceCapability::Button,
-                            DeviceCapability::Scroll,
-                        ],
+                        DeviceCapability::Pointer
+                            | DeviceCapability::Button
+                            | DeviceCapability::Scroll,
                         |_| {},
                         &request.seat,
                         connection,
@@ -69,11 +68,11 @@ impl ContextState {
                 }
 
                 if self.device_touch.is_none()
-                    && (capabilities & (DeviceCapability::Touch as u64)) != 0
+                    && (capabilities & DeviceCapability::Touch).bits() != 0
                 {
                     self.device_touch = Some(add_device(
                         "touch",
-                        &[DeviceCapability::Touch],
+                        BitFlags::from_flag(DeviceCapability::Touch),
                         |_| {},
                         &request.seat,
                         connection,
@@ -82,15 +81,13 @@ impl ContextState {
                 }
 
                 if self.device_pointer_absolute.is_none()
-                    && (capabilities & (DeviceCapability::PointerAbsolute as u64)) != 0
+                    && (capabilities & DeviceCapability::PointerAbsolute).bits() != 0
                 {
                     self.device_pointer_absolute = Some(add_device(
                         "pointer-abs",
-                        &[
-                            DeviceCapability::PointerAbsolute,
-                            DeviceCapability::Button,
-                            DeviceCapability::Scroll,
-                        ],
+                        DeviceCapability::PointerAbsolute
+                            | DeviceCapability::Button
+                            | DeviceCapability::Scroll,
                         |_| {},
                         &request.seat,
                         connection,
@@ -107,7 +104,7 @@ impl ContextState {
 
 fn add_device(
     name: &str,
-    capabilities: &[DeviceCapability],
+    capabilities: BitFlags<DeviceCapability>,
     before_done_cb: impl for<'a> FnOnce(&'a reis::request::Device),
     seat: &reis::request::Seat,
     connection: &Connection,
@@ -180,14 +177,12 @@ impl State {
             EisRequestSourceEvent::Connected => {
                 let seat = connection.add_seat(
                     Some("default"),
-                    &[
-                        DeviceCapability::Pointer,
-                        DeviceCapability::PointerAbsolute,
-                        DeviceCapability::Keyboard,
-                        DeviceCapability::Touch,
-                        DeviceCapability::Scroll,
-                        DeviceCapability::Button,
-                    ],
+                    DeviceCapability::Pointer
+                        | DeviceCapability::PointerAbsolute
+                        | DeviceCapability::Keyboard
+                        | DeviceCapability::Touch
+                        | DeviceCapability::Scroll
+                        | DeviceCapability::Button,
                 );
 
                 context_state.seat = Some(seat);
@@ -275,7 +270,6 @@ impl State {
                     return res;
                 }
             }
-            EisRequestSourceEvent::InvalidObject(_) => {}
         }
 
         let _ = connection.flush();

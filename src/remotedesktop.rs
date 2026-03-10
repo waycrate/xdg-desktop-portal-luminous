@@ -620,8 +620,7 @@ impl RemoteDesktopBackend {
         _options: HashMap<String, Value<'_>>,
     ) -> zbus::fdo::Result<Fd<'_>> {
         let listener = eis::Listener::bind_auto()
-            .map_err(|e| zbus::Error::Failure(format!("Failed to create EIS listener: {}", e)))?
-            .ok_or_else(|| zbus::Error::Failure("Failed to create EIS listener".to_string()))?;
+            .map_err(|e| zbus::Error::Failure(format!("Failed to create EIS listener: {}", e)))?;
 
         let fd = io::dup(listener.as_fd()).map_err(|e| zbus::Error::Failure(e.to_string()))?;
         EIS_SERVER
