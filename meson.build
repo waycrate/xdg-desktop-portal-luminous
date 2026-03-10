@@ -1,7 +1,7 @@
 project(
   'xdg-desktop-portal-luminous',
   'rust',
-  version: '0.1.14',
+  version: '0.1.15',
   meson_version: '>= 1.1.0',
 )
 
