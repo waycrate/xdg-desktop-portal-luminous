@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 dialoguer = { version = "0.12.0", features = ["fuzzy-select"] }
-signal-hook = "0.4.1"
+signal-hook = "0.4.3"
 stream_message.workspace = true
