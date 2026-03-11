@@ -1874,7 +1874,7 @@ dependencies = [
  "iced_runtime",
  "iced_widget",
  "iced_winit",
- "image 0.25.9",
+ "image 0.25.10",
  "thiserror 2.0.18",
 ]
 
@@ -1939,9 +1939,9 @@ dependencies = [
 
 [[package]]
 name = "iced_exdevtools"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3f96ce2c41edc7be7b15e5d6304168ca2bf14b7b199ee204c29e4999f3628aa"
+checksum = "fd37abad853d711ca1197a01a1fac657dd225826faf68d23595ab0380aba25ed"
 dependencies = [
  "iced_debug",
  "iced_devtools",
@@ -1977,7 +1977,7 @@ dependencies = [
  "half",
  "iced_core",
  "iced_futures",
- "image 0.25.9",
+ "image 0.25.10",
  "kamadak-exif",
  "log",
  "raw-window-handle",
@@ -1988,9 +1988,9 @@ dependencies = [
 
 [[package]]
 name = "iced_layershell"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acb74b980f69886a174e442375f645e83b9f9494a316a87f912c3e9c764ab3b8"
+checksum = "7b93788b3b04289379ab3ada875dd93139d9c871a1fbb99286355d2b517b02c7"
 dependencies = [
  "enumflags2",
  "futures",
@@ -2014,9 +2014,9 @@ dependencies = [
 
 [[package]]
 name = "iced_layershell_macros"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81208dff05e771e2454f7c5df0adf5b4b983da5c3d7a85a906438f22a1959d4f"
+checksum = "de12a0d2d2faabd9d6b49cd1621ae1b6d7e0f1365332c18673d810116e89675e"
 dependencies = [
  "darling",
  "manyhow",
@@ -2265,9 +2265,9 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.25.9"
+version = "0.25.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6506c6c10786659413faa717ceebcb8f70731c0a60cbae39795fdf114519c1a"
+checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
@@ -2493,9 +2493,9 @@ dependencies = [
 
 [[package]]
 name = "layershellev"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c117440b5f96fbe8cb7ec16279f34b319d36dba2551af1cc01d36ea8aff886f"
+checksum = "a90cbea1375f775abb76c9f2fc7b475dd17d740936dfbeeb0026bd2f09ad5624"
 dependencies = [
  "bitflags 2.11.0",
  "calloop 0.14.4",
@@ -2612,7 +2612,7 @@ dependencies = [
  "drm",
  "gbm",
  "gl",
- "image 0.25.9",
+ "image 0.25.10",
  "memmap2",
  "r-egl-wayland",
  "rustix 1.1.4",
@@ -2838,9 +2838,9 @@ dependencies = [
 
 [[package]]
 name = "moxcms"
-version = "0.7.11"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac9557c559cd6fc9867e122e20d2cbefc9ca29d80d027a8e39310920ed2f0a97"
+checksum = "bb85c154ba489f01b25c0d36ae69a87e4a1c73a72631fc6c0eb6dde34a73e44b"
 dependencies = [
  "num-traits",
  "pxfm",
@@ -4027,9 +4027,9 @@ dependencies = [
 
 [[package]]
 name = "ravif"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef69c1990ceef18a116855938e74793a5f7496ee907562bd0857b6ac734ab285"
+checksum = "e52310197d971b0f5be7fe6b57530dcd27beb35c1b013f29d66c1ad73fbbcc45"
 dependencies = [
  "avif-serialize",
  "imgref",
@@ -4699,9 +4699,9 @@ checksum = "df7f62577c25e07834649fc3b39fafdc597c0a3527dc1c60129201ccfcbaa50c"
 
 [[package]]
 name = "tempfile"
-version = "3.26.0"
+version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82a72c767771b47409d2345987fda8628641887d5466101319899796367354a0"
+checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
  "getrandom 0.4.2",
@@ -4770,16 +4770,16 @@ dependencies = [
 
 [[package]]
 name = "tiff"
-version = "0.10.3"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af9605de7fee8d9551863fd692cce7637f548dbd9db9180fcc07ccc6d26c336f"
+checksum = "b63feaf3343d35b6ca4d50483f94843803b0f51634937cc2ec519fc32232bc52"
 dependencies = [
  "fax",
  "flate2",
  "half",
  "quick-error",
  "weezl",
- "zune-jpeg 0.4.21",
+ "zune-jpeg 0.5.12",
 ]
 
 [[package]]
@@ -5338,9 +5338,9 @@ dependencies = [
 
 [[package]]
 name = "waycrate_xkbkeycode"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbc946555d08115a5fa78e5ea29c01256507b8208f0da5f2f440cd792af7944d"
+checksum = "e4865c30460c0d213dac0ea8a5eadb0d3b620e6154bd95ca058377e4c1873515"
 dependencies = [
  "bitflags 2.11.0",
  "calloop 0.14.4",

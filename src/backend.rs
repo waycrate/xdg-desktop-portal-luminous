@@ -161,7 +161,7 @@ pub async fn backend(
     });
 
     let receiver = remotedesktop::get_input_receiver();
-    tokio::task::spawn_blocking(move || {
+    std::thread::spawn(move || {
         loop {
             let event = receiver.lock().unwrap().recv().unwrap();
             tokio::spawn(remotedesktop::handle_input_event(event));
