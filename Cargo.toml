@@ -1,9 +1,9 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [".", "./stream_message", "./lumious_headless_helper"]
 
 [workspace.package]
-version = "0.1.16"
+version = "0.1.17"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/waycrate/xdg-desktop-portal-luminous"
