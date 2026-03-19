@@ -89,4 +89,4 @@ reis = { version = "0.6.1", features = ["tokio", "calloop"] }
 
 calloop = "0.14.4"
 calloop-wayland-source = "0.4.1"
-iced_layershell = "0.15.1"
+iced_layershell = "0.16.0"
