@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.18] - 2026-03-20
+
+### Changed
+- Fix xdg-desktop-portal-luminous did not serlalize and deserialize the sourceType in the right way
+
+[0.1.18]: https://github.com/waycrate/xdg-desktop-portal-luminous/compare/v0.1.18-v0.1.17
+
 ## [0.1.17] - 2026-03-11
 
 ### Changed
