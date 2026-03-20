@@ -35,7 +35,7 @@ pub async fn remove_session(session: &Session) {
 }
 
 #[bitflags]
-#[derive(Serialize, Default, Deserialize, PartialEq, Eq, Copy, Clone, Debug, Type)]
+#[derive(Serialize_repr, Default, Deserialize_repr, PartialEq, Eq, Copy, Clone, Debug, Type)]
 #[repr(u32)]
 /// A bit flag for the available sources to record.
 pub enum SourceType {
