@@ -490,6 +490,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "borsh"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfd1e3f8955a5d7de9fab72fc8373fade9fb8a703968cb200ae3dc6cf08e185a"
+dependencies = [
+ "bytes",
+ "cfg_aliases",
+]
+
+[[package]]
 name = "built"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -870,7 +880,7 @@ dependencies = [
  "rustc-hash 1.1.0",
  "self_cell",
  "skrifa",
- "smol_str",
+ "smol_str 0.2.2",
  "swash",
  "sys-locale",
  "unicode-bidi",
@@ -1908,7 +1918,7 @@ dependencies = [
  "num-traits",
  "rustc-hash 2.1.1",
  "serde",
- "smol_str",
+ "smol_str 0.2.2",
  "thiserror 2.0.18",
  "web-time",
 ]
@@ -1939,9 +1949,9 @@ dependencies = [
 
 [[package]]
 name = "iced_exdevtools"
-version = "0.16.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79aa630d54ce3fd340bd2cf64faee63aa614f5fb19cf8158f98ecb289d5a7608"
+checksum = "5ebaacc2aec75f830d8a9f74baceb24653f3c495f6b99547c310344ee70b10d5"
 dependencies = [
  "iced_debug",
  "iced_devtools",
@@ -1988,9 +1998,9 @@ dependencies = [
 
 [[package]]
 name = "iced_layershell"
-version = "0.16.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22a8e513ce86c82210538861618b3e948bad9b82abc0d7e127f061371c989269"
+checksum = "b629288e1381245534c30d0841ea19137782010906d1150d003efe1d006736e0"
 dependencies = [
  "enumflags2",
  "futures",
@@ -2007,6 +2017,7 @@ dependencies = [
  "layershellev",
  "log",
  "mundy",
+ "smol_str 0.2.2",
  "thiserror 2.0.18",
  "tracing",
  "window_clipboard",
@@ -2014,9 +2025,9 @@ dependencies = [
 
 [[package]]
 name = "iced_layershell_macros"
-version = "0.16.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8625bb576fdb0438e85d8e57ac7229868dde8e410cf32c004fffd588a2777bee"
+checksum = "13df0adbff33e30e56c0aa8603a653425ef1b11ddcad042233730abb85548d87"
 dependencies = [
  "darling",
  "manyhow",
@@ -2434,6 +2445,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyboard-types"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fbe853b403ae61a04233030ae8a79d94975281ed9770a1f9e246732b534b28d"
+dependencies = [
+ "bitflags 2.11.0",
+ "serde",
+]
+
+[[package]]
 name = "khronos-egl"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2493,11 +2514,10 @@ dependencies = [
 
 [[package]]
 name = "layershellev"
-version = "0.16.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66e9699736661513c75de0cbc887aa4656823b8c22c4ac4a955cd2ddea63e1b1"
+checksum = "faa42859f072bea324343a6495368ec7a78d4aed5705b33b6d3d0096d618b3ae"
 dependencies = [
- "bitflags 2.11.0",
  "calloop 0.14.4",
  "calloop-wayland-source 0.4.1",
  "log",
@@ -4535,6 +4555,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "smol_str"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4aaa7368fcf4852a4c2dd92df0cace6a71f2091ca0a23391ce7f3a31833f1523"
+dependencies = [
+ "borsh",
+ "serde_core",
+]
+
+[[package]]
 name = "socket2"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5338,17 +5368,18 @@ dependencies = [
 
 [[package]]
 name = "waycrate_xkbkeycode"
-version = "0.16.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "caa5bc93c1dfce7c8d9b4a864028c2d5f64625f249b08900805acdbe8619561d"
+checksum = "9967bea119d19cb19112a4d25b5d6fea7d8252193d37864492e4c6777ab44474"
 dependencies = [
- "bitflags 2.11.0",
  "calloop 0.14.4",
  "log",
  "memmap2",
- "smol_str",
+ "smol_str 0.2.2",
  "wayland-backend",
  "wayland-client",
+ "winit-common",
+ "winit-core",
  "xkbcommon-dl",
 ]
 
@@ -6142,7 +6173,7 @@ dependencies = [
  "rustix 0.38.44",
  "sctk-adwaita",
  "smithay-client-toolkit 0.19.2",
- "smol_str",
+ "smol_str 0.2.2",
  "tracing",
  "unicode-segmentation",
  "wasm-bindgen",
@@ -6157,6 +6188,34 @@ dependencies = [
  "x11-dl",
  "x11rb",
  "xkbcommon-dl",
+]
+
+[[package]]
+name = "winit-common"
+version = "0.31.0-beta.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45375fbac4cbb77260d83a30b1f9d8105880dbac99a9ae97f56656694680ff69"
+dependencies = [
+ "memmap2",
+ "smol_str 0.3.6",
+ "tracing",
+ "winit-core",
+ "xkbcommon-dl",
+]
+
+[[package]]
+name = "winit-core"
+version = "0.31.0-beta.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4f0ccd7abb43740e2c6124ac7cae7d865ecec74eec63783e8922577ac232583"
+dependencies = [
+ "bitflags 2.11.0",
+ "cursor-icon",
+ "dpi",
+ "keyboard-types",
+ "raw-window-handle",
+ "smol_str 0.3.6",
+ "web-time",
 ]
 
 [[package]]
