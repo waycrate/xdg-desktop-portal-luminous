@@ -24,7 +24,7 @@ thiserror = "2.0.18"
 stream_message = { path = "./stream_message", version = "0.1.18" }
 
 [dependencies]
-zbus = { version = "5.14", default-features = false, features = [
+zbus = { version = "5.15", default-features = false, features = [
 	"tokio",
 	"url",
 ] }
@@ -89,4 +89,4 @@ reis = { version = "0.6.1", features = ["tokio", "calloop"] }
 
 calloop = "0.14.4"
 calloop-wayland-source = "0.4.1"
-iced_layershell = "0.17.1"
+iced_layershell = "0.18.0"
