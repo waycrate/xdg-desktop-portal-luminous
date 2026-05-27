@@ -24,8 +24,8 @@ pub enum InputRequest {
     PointerMotion { dx: f64, dy: f64 },
     PointerMotionAbsolute { x: f64, y: f64 },
     PointerButton { button: i32, state: u32 },
-    PointerAxis { dx: f64, dy: f64 },
-    PointerAxisDiscrate { axis: u32, steps: i32 },
+    PointerAxis { dx: f64, dy: f64, finish: bool },
+    PointerAxisDiscrete { axis: u32, steps: i32 },
     KeyboardKeycode { keycode: i32, state: u32 },
     KeyboardKeysym { keysym: i32, state: u32 },
     TouchMotion { slot: u32, x: f64, y: f64 },
@@ -134,8 +134,10 @@ pub fn remote_loop(
                 InputRequest::PointerButton { button, state } => {
                     app_state.notify_pointer_button(button, state)
                 }
-                InputRequest::PointerAxis { dx, dy } => app_state.notify_pointer_axis(dx, dy),
-                InputRequest::PointerAxisDiscrate { axis, steps } => {
+                InputRequest::PointerAxis { dx, dy, finish } => {
+                    app_state.notify_pointer_axis(dx, dy, finish)
+                }
+                InputRequest::PointerAxisDiscrete { axis, steps } => {
                     app_state.notify_pointer_axis_discrete(axis, steps)
                 }
                 InputRequest::KeyboardKeycode { keycode, state } => {

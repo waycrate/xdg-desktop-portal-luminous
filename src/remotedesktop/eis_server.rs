@@ -219,14 +219,14 @@ impl State {
                     }
                     EisRequest::ScrollDiscrete(e) => {
                         if e.discrete_dx != 0 {
-                            let _ = sender.send(InputEvent::PointerAxisDiscrate {
+                            let _ = sender.send(InputEvent::PointerAxisDiscrete {
                                 session_handle: session_handle.to_string(),
                                 axis: 1, // Horizontal
                                 steps: e.discrete_dx,
                             });
                         }
                         if e.discrete_dy != 0 {
-                            let _ = sender.send(InputEvent::PointerAxisDiscrate {
+                            let _ = sender.send(InputEvent::PointerAxisDiscrete {
                                 session_handle: session_handle.to_string(),
                                 axis: 0, // Vertical
                                 steps: e.discrete_dy,
@@ -307,7 +307,7 @@ pub enum InputEvent {
         dx: f64,
         dy: f64,
     },
-    PointerAxisDiscrate {
+    PointerAxisDiscrete {
         session_handle: String,
         axis: u32,
         steps: i32,

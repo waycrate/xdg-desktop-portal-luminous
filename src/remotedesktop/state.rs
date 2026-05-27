@@ -35,6 +35,8 @@ pub struct AppData {
     y: u32,
     space_width: u32,
     space_height: u32,
+    pointer_axis_horizontal_active: bool,
+    pointer_axis_vertical_active: bool,
     time: Instant,
 }
 
@@ -62,12 +64,22 @@ impl AppData {
             y,
             space_width,
             space_height,
+            pointer_axis_horizontal_active: false,
+            pointer_axis_vertical_active: false,
             time: Instant::now(),
         }
     }
 
     fn duration_u32(&self) -> u32 {
         (Instant::now() - self.time).as_millis() as u32
+    }
+
+    fn portal_axis(axis: u32) -> wl_pointer::Axis {
+        if axis == 0 {
+            wl_pointer::Axis::VerticalScroll
+        } else {
+            wl_pointer::Axis::HorizontalScroll
+        }
     }
 }
 
@@ -140,6 +152,7 @@ impl AppData {
     pub fn notify_pointer_motion(&self, dx: f64, dy: f64) {
         let time = self.duration_u32();
         self.virtual_pointer.motion(time, dx, dy);
+        self.virtual_pointer.frame();
     }
 
     pub fn notify_pointer_motion_absolute(&self, x: f64, y: f64) {
@@ -148,6 +161,7 @@ impl AppData {
         let y = y as u32 + self.y;
         self.virtual_pointer
             .motion_absolute(time, x, y, self.space_width, self.space_height);
+        self.virtual_pointer.frame();
     }
 
     pub fn notify_pointer_button(&self, button: i32, state: u32) {
@@ -161,28 +175,53 @@ impl AppData {
                 wl_pointer::ButtonState::Pressed
             },
         );
+        self.virtual_pointer.frame();
     }
 
-    pub fn notify_pointer_axis(&self, dx: f64, dy: f64) {
+    pub fn notify_pointer_axis(&mut self, dx: f64, dy: f64, finish: bool) {
         let time = self.duration_u32();
-        self.virtual_pointer
-            .axis(time, wl_pointer::Axis::HorizontalScroll, dx);
-        self.virtual_pointer
-            .axis(time, wl_pointer::Axis::VerticalScroll, dy);
+        let mut needs_frame = false;
+
+        if dx != 0.0 {
+            self.virtual_pointer
+                .axis(time, wl_pointer::Axis::HorizontalScroll, dx);
+            self.pointer_axis_horizontal_active = true;
+            needs_frame = true;
+        }
+        if dy != 0.0 {
+            self.virtual_pointer
+                .axis(time, wl_pointer::Axis::VerticalScroll, dy);
+            self.pointer_axis_vertical_active = true;
+            needs_frame = true;
+        }
+        if finish {
+            if self.pointer_axis_horizontal_active {
+                self.virtual_pointer
+                    .axis_stop(time, wl_pointer::Axis::HorizontalScroll);
+                self.pointer_axis_horizontal_active = false;
+                needs_frame = true;
+            }
+            if self.pointer_axis_vertical_active {
+                self.virtual_pointer
+                    .axis_stop(time, wl_pointer::Axis::VerticalScroll);
+                self.pointer_axis_vertical_active = false;
+                needs_frame = true;
+            }
+        }
+        if needs_frame {
+            self.virtual_pointer.frame();
+        }
     }
 
     pub fn notify_pointer_axis_discrete(&self, axis: u32, steps: i32) {
         let time = self.duration_u32();
         self.virtual_pointer.axis_discrete(
             time,
-            if axis == 0 {
-                wl_pointer::Axis::VerticalScroll
-            } else {
-                wl_pointer::Axis::HorizontalScroll
-            },
-            10.0,
+            Self::portal_axis(axis),
+            steps as f64 * 10.0,
             steps,
         );
+        self.virtual_pointer.frame();
     }
 
     pub fn notify_keyboard_keycode(&mut self, keycode: i32, state: u32) {
@@ -240,11 +279,13 @@ impl AppData {
             .motion_absolute(time, x, y, self.space_width, self.space_height);
         self.virtual_pointer
             .button(time, button, wl_pointer::ButtonState::Pressed);
+        self.virtual_pointer.frame();
     }
 
     pub fn notify_touch_motion(&mut self, _slot: u32, dx: f64, dy: f64) {
         let time = self.duration_u32();
         self.virtual_pointer.motion(time, dx, dy);
+        self.virtual_pointer.frame();
     }
 
     pub fn notify_touch_up(&mut self, slot: u32) {
@@ -256,5 +297,6 @@ impl AppData {
         };
         self.virtual_pointer
             .button(time, button, wl_pointer::ButtonState::Released);
+        self.virtual_pointer.frame();
     }
 }
