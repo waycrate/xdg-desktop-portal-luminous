@@ -37,8 +37,9 @@
               pkg-config
             ];
 
-            cargoDeps = pkgs.rustPlatform.importCargoLock {
-              lockFile = ./Cargo.lock;
+            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+              inherit src;
+              hash = "sha256-mUQGwLnjmZCnYNMscLIC8Gyh/ahZ5OWF9DyBlVvwYU0=";
             };
 
             buildInputs = with pkgs; [
@@ -46,6 +47,8 @@
               libxkbcommon
               pango
               cairo
+              libglvnd
+              libgbm
             ];
 
             meta = with nixpkgs.lib; {
