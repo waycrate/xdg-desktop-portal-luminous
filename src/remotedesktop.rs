@@ -266,6 +266,13 @@ async fn notify_input_event(
     Ok(())
 }
 
+fn option_bool(options: &HashMap<String, Value<'_>>, key: &str) -> bool {
+    options
+        .get(key)
+        .and_then(|value| value.downcast_ref::<bool>().ok())
+        .unwrap_or(false)
+}
+
 pub async fn handle_input_event(event: InputEvent) {
     let (session_handle, request) = match event {
         InputEvent::PointerMotion {
@@ -290,14 +297,21 @@ pub async fn handle_input_event(event: InputEvent) {
             session_handle,
             dx,
             dy,
-        } => (session_handle, InputRequest::PointerAxis { dx, dy }),
-        InputEvent::PointerAxisDiscrate {
+        } => (
+            session_handle,
+            InputRequest::PointerAxis {
+                dx,
+                dy,
+                finish: false,
+            },
+        ),
+        InputEvent::PointerAxisDiscrete {
             session_handle,
             axis,
             steps,
         } => (
             session_handle,
-            InputRequest::PointerAxisDiscrate { axis, steps },
+            InputRequest::PointerAxisDiscrete { axis, steps },
         ),
         InputEvent::KeyboardKeycode {
             session_handle,
@@ -531,14 +545,22 @@ impl RemoteDesktopBackend {
     async fn notify_pointer_axis(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        options: HashMap<String, Value<'_>>,
         dx: f64,
         dy: f64,
     ) -> zbus::fdo::Result<()> {
-        notify_input_event(session_handle, InputRequest::PointerAxis { dx, dy }).await
+        notify_input_event(
+            session_handle,
+            InputRequest::PointerAxis {
+                dx,
+                dy,
+                finish: option_bool(&options, "finish"),
+            },
+        )
+        .await
     }
 
-    async fn notify_pointer_axis_discrate(
+    async fn notify_pointer_axis_discrete(
         &self,
         session_handle: ObjectPath<'_>,
         _options: HashMap<String, Value<'_>>,
@@ -547,7 +569,7 @@ impl RemoteDesktopBackend {
     ) -> zbus::fdo::Result<()> {
         notify_input_event(
             session_handle,
-            InputRequest::PointerAxisDiscrate { axis, steps },
+            InputRequest::PointerAxisDiscrete { axis, steps },
         )
         .await
     }
