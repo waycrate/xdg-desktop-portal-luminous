@@ -38,6 +38,8 @@ pub struct AppData {
     pointer_axis_horizontal_active: bool,
     pointer_axis_vertical_active: bool,
     time: Instant,
+    // If alread is in the pressed status, we need to release first
+    is_pressed: bool,
 }
 
 impl AppData {
@@ -67,6 +69,7 @@ impl AppData {
             pointer_axis_horizontal_active: false,
             pointer_axis_vertical_active: false,
             time: Instant::now(),
+            is_pressed: false,
         }
     }
 
@@ -164,7 +167,17 @@ impl AppData {
         self.virtual_pointer.frame();
     }
 
-    pub fn notify_pointer_button(&self, button: i32, state: u32) {
+    pub fn notify_pointer_button(&mut self, button: i32, state: u32) {
+        if state == 1 && self.is_pressed {
+            let time = self.duration_u32();
+            self.virtual_pointer
+                .button(time, button as u32, wl_pointer::ButtonState::Released);
+            self.virtual_pointer.frame();
+        } else if state == 1 {
+            self.is_pressed = true;
+        } else {
+            self.is_pressed = false;
+        }
         let time = self.duration_u32();
         self.virtual_pointer.button(
             time,
