@@ -173,7 +173,9 @@ impl AppData {
             self.virtual_pointer
                 .button(time, button as u32, wl_pointer::ButtonState::Released);
             self.virtual_pointer.frame();
-        } else { self.is_pressed = state == 1; }
+        } else {
+            self.is_pressed = state == 1;
+        }
         let time = self.duration_u32();
         self.virtual_pointer.button(
             time,
