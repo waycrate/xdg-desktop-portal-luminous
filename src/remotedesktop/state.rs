@@ -38,7 +38,7 @@ pub struct AppData {
     pointer_axis_horizontal_active: bool,
     pointer_axis_vertical_active: bool,
     time: Instant,
-    // If alread is in the pressed status, we need to release first
+    // If already is in the pressed status, we need to release first
     is_pressed: bool,
 }
 
