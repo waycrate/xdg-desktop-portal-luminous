@@ -2775,7 +2775,7 @@ checksum = "7f66e8d5d03f609abc3a39e6f08e4164ebf1447a732906d39eb9b99b7919ef39"
 
 [[package]]
 name = "lumious_headless_helper"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "dialoguer",
  "signal-hook",
@@ -4706,7 +4706,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stream_message"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "serde",
  "serde_json",
@@ -6350,7 +6350,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 
 [[package]]
 name = "xdg-desktop-portal-luminous"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "anyhow",
  "bitflags 2.12.1",
