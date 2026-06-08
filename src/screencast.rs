@@ -153,7 +153,7 @@ impl ScreenCastBackend {
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<PortalResponse<SessionCreateResult>> {
         tracing::info!(
-            "Start shot: path :{}, appid: {}",
+            "Start casting: path :{}, appid: {}",
             request_handle.as_str(),
             app_id
         );

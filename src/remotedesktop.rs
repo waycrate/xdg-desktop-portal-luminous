@@ -367,7 +367,7 @@ impl RemoteDesktopBackend {
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<PortalResponse<SessionCreateResult>> {
         tracing::info!(
-            "Start shot: path :{}, appid: {}",
+            "Start remoting: path :{}, appid: {}",
             request_handle.as_str(),
             app_id
         );
