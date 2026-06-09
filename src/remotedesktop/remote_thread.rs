@@ -156,6 +156,7 @@ pub fn remote_loop(
                     app_state.notify_touch_up(slot);
                 }
                 InputRequest::Exit => {
+                    app_state.notify_pointer_button_clear();
                     signal.stop();
                 }
             }

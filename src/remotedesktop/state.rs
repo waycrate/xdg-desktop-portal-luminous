@@ -39,7 +39,7 @@ pub struct AppData {
     pointer_axis_vertical_active: bool,
     time: Instant,
     // If already is in the pressed status, we need to release first
-    is_pressed: bool,
+    pressed_buttons: Vec<i32>,
 }
 
 impl AppData {
@@ -69,7 +69,7 @@ impl AppData {
             pointer_axis_horizontal_active: false,
             pointer_axis_vertical_active: false,
             time: Instant::now(),
-            is_pressed: false,
+            pressed_buttons: vec![],
         }
     }
 
@@ -168,13 +168,15 @@ impl AppData {
     }
 
     pub fn notify_pointer_button(&mut self, button: i32, state: u32) {
-        if state == 1 && self.is_pressed {
+        if state == 1 && self.pressed_buttons.contains(&button) {
             let time = self.duration_u32();
             self.virtual_pointer
                 .button(time, button as u32, wl_pointer::ButtonState::Released);
             self.virtual_pointer.frame();
+        } else if state == 1 {
+            self.pressed_buttons.push(button);
         } else {
-            self.is_pressed = state == 1;
+            self.pressed_buttons.retain(|pbutton| *pbutton != button);
         }
         let time = self.duration_u32();
         self.virtual_pointer.button(
@@ -187,6 +189,17 @@ impl AppData {
             },
         );
         self.virtual_pointer.frame();
+    }
+
+    pub fn notify_pointer_button_clear(&mut self) {
+        let mut pressed_buttons = vec![];
+        std::mem::swap(&mut self.pressed_buttons, &mut pressed_buttons);
+        for button in pressed_buttons {
+            let time = self.duration_u32();
+            self.virtual_pointer
+                .button(time, button as u32, wl_pointer::ButtonState::Released);
+            self.virtual_pointer.frame();
+        }
     }
 
     pub fn notify_pointer_axis(&mut self, dx: f64, dy: f64, finish: bool) {
@@ -260,6 +273,7 @@ impl AppData {
             _ => self.virtual_keyboard.key(time, keycode as u32, state),
         }
     }
+
     pub fn notify_keyboard_keysym(&mut self, keysym: i32, state: u32) {
         if let Some((keycode, level)) = self.get_keycode_from_keysym(Keysym::new(keysym as u32)) {
             match level {
