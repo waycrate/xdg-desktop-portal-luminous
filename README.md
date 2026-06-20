@@ -15,7 +15,9 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 
 # Settings:
 
-Luminous is configured through the following auto hot-reloaded file: `~/.config/xdg-desktop-portal-luminous/config.toml`.
+Luminous is configured through the following auto hot-reloaded file: `$XDG_CONFIG_FILE/xdg-desktop-portal-luminous/config.toml`.
+
+And under `/etc/xdg/xdg-desktop-portal-luminous/config.toml`
 
 ```toml
 color_scheme = "dark" # can also be "light"

@@ -1,5 +1,8 @@
 use serde::Deserialize;
 use std::io::Read;
+use std::path::PathBuf;
+use std::sync::LazyLock;
+
 const DEFAULT_COLOR_NAME: &str = "default";
 const DARK_COLOR_NAME: &str = "dark";
 const LIGHT_COLOR_NAME: &str = "light";
@@ -97,16 +100,46 @@ impl Default for SettingsConfig {
     }
 }
 
+const PORTAL_CONFIG_FILE_NAME: &str = "config.toml";
+const PORTAL_CONFIG_DIR_NAME: &str = "xdg-desktop-portal-luminous";
+
+pub static XDG_CONFIG_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+    if let Ok(xdg_config_home) = std::env::var("XDG_CONFIG_HOME") {
+        return Some(PathBuf::from(&xdg_config_home));
+    }
+    let home = std::env::var("HOME").ok()?;
+    Some(PathBuf::from(&home).join(".config"))
+});
+
+pub static XDG_CONFIG_HOME_FILE: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+    Some(
+        XDG_CONFIG_HOME
+            .clone()?
+            .join(PORTAL_CONFIG_DIR_NAME)
+            .join(PORTAL_CONFIG_FILE_NAME),
+    )
+});
+
+pub static PORTAL_ETC_CONFIG_FILE: LazyLock<PathBuf> = LazyLock::new(|| {
+    PathBuf::from("/etc")
+        .join("xdg")
+        .join(PORTAL_CONFIG_DIR_NAME)
+        .join(PORTAL_CONFIG_FILE_NAME)
+});
+
+pub static PORTAL_CONFIG_FILE: LazyLock<PathBuf> = LazyLock::new(|| {
+    if let Some(config_file) = XDG_CONFIG_HOME_FILE.clone() {
+        return config_file;
+    }
+    PORTAL_ETC_CONFIG_FILE.clone()
+});
+
 impl SettingsConfig {
     pub fn config_from_file() -> Self {
-        let Ok(home) = std::env::var("HOME") else {
-            return Self::default();
-        };
-        let config_path = std::path::Path::new(home.as_str())
-            .join(".config")
-            .join("xdg-desktop-portal-luminous")
-            .join("config.toml");
-        let Ok(mut file) = std::fs::OpenOptions::new().read(true).open(config_path) else {
+        let Ok(mut file) = std::fs::OpenOptions::new()
+            .read(true)
+            .open(&*PORTAL_CONFIG_FILE)
+        else {
             return Self::default();
         };
         let mut buf = String::new();

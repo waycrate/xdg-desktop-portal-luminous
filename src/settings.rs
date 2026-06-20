@@ -26,6 +26,8 @@ use std::sync::LazyLock;
 
 pub use self::config::SettingsConfig;
 
+pub use self::config::XDG_CONFIG_HOME_FILE;
+
 pub static SETTING_CONFIG: LazyLock<Arc<Mutex<SettingsConfig>>> =
     LazyLock::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));
 

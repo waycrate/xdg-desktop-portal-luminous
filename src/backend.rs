@@ -6,6 +6,7 @@ use crate::screenshot::ScreenShotBackend;
 use crate::settings::{AccentColor, SETTING_CONFIG, SettingsBackend, SettingsConfig};
 
 use crate::dialog::{CopySelect, Message};
+use crate::settings::XDG_CONFIG_HOME_FILE;
 use futures::{
     SinkExt, StreamExt,
     channel::mpsc::{Receiver, Sender, channel},
@@ -149,12 +150,10 @@ pub async fn backend(
 
     set_connection(conn).await;
     tokio::spawn(async {
-        let Ok(home) = std::env::var("HOME") else {
+        let Some(config_path) = XDG_CONFIG_HOME_FILE.clone() else {
+            tracing::info!("File not exist under $XDG_CONFIG_HOME/xdg-desktop-portal-luminous");
             return;
         };
-        let config_path = std::path::Path::new(home.as_str())
-            .join(".config")
-            .join("xdg-desktop-portal-luminous");
         if let Err(e) = async_watch(config_path).await {
             tracing::info!("Maybe file is not exist, error: {e}");
         }
