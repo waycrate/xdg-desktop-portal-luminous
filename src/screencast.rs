@@ -162,6 +162,7 @@ impl ScreenCastBackend {
                 request_handle.clone(),
                 RequestInterface {
                     handle_path: request_handle.clone().into(),
+                    close_action: None,
                 },
             )
             .await?;

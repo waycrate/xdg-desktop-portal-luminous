@@ -166,6 +166,7 @@ impl InputCapture {
                 handle.clone(),
                 RequestInterface {
                     handle_path: handle.clone().into(),
+                    close_action: None,
                 },
             )
             .await?;

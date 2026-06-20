@@ -1,5 +1,6 @@
 mod access;
 mod backend;
+mod background;
 mod dialog;
 mod input_capture;
 mod remotedesktop;
@@ -8,6 +9,7 @@ mod screencast;
 mod screenshot;
 mod session;
 mod settings;
+mod systemd;
 mod utils;
 
 use std::collections::HashMap;
