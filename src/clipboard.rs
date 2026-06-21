@@ -63,7 +63,11 @@ impl Clipboard {
         Ok(())
     }
 
-    async fn set_selection(&self, options: SelectionOpt) -> zbus::fdo::Result<()> {
+    async fn set_selection(
+        &self,
+        session_handle: ObjectPath<'_>,
+        options: SelectionOpt,
+    ) -> zbus::fdo::Result<()> {
         todo!()
     }
 
