@@ -41,14 +41,13 @@ pub fn get_selection_from_socket(monitors: Vec<String>) -> zbus::fdo::Result<u32
 pub static XDG_CONFIG_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
     if let Ok(xdg_config_home_env) = std::env::var("XDG_CONFIG_HOME")
         && let xdg_config_home = PathBuf::from(xdg_config_home_env)
+        && xdg_config_home.is_absolute()
     {
-        if xdg_config_home.is_absolute() {
-            tracing::warn!(
-                "Ignoring relative XDG_CONFIG_HOME for Background autostart: {}",
-                xdg_config_home.display()
-            );
-            return Some(xdg_config_home);
-        }
+        tracing::warn!(
+            "Ignoring relative XDG_CONFIG_HOME for Background autostart: {}",
+            xdg_config_home.display()
+        );
+        return Some(xdg_config_home);
     }
     let home = std::env::var("HOME").ok()?;
     Some(PathBuf::from(&home).join(".config"))
