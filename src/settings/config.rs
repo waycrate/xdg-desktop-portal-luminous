@@ -1,8 +1,8 @@
+use crate::utils::XDG_CONFIG_HOME;
 use serde::Deserialize;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use crate::utils::XDG_CONFIG_HOME;
 
 const DEFAULT_COLOR_NAME: &str = "default";
 const DARK_COLOR_NAME: &str = "dark";
