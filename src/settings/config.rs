@@ -14,6 +14,7 @@ const HIGHER_CONTRAST: &str = "higher";
 
 const DEFAULT_REDUCED_MOTION: &str = "default";
 const REDUCED_REDUCED_MOTION: &str = "reduced";
+const DEFAULT_BACKGROUND_PERMISSION: &str = "ask";
 
 #[derive(Deserialize, PartialEq, Eq, Debug)]
 pub struct SettingsConfig {
@@ -22,6 +23,7 @@ pub struct SettingsConfig {
     pub contrast: String,
     pub reduced_motion: String,
     pub screenshot_permission_check: bool,
+    pub background_permission_default: String,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Debug)]
@@ -31,6 +33,7 @@ struct SettingsConfigRead {
     pub contrast: Option<String>,
     pub reduced_motion: Option<String>,
     pub screenshot_permission_check: Option<bool>,
+    pub background_permission_default: Option<String>,
 }
 
 impl From<SettingsConfigRead> for SettingsConfig {
@@ -45,6 +48,15 @@ impl From<SettingsConfigRead> for SettingsConfig {
                 .reduced_motion
                 .unwrap_or(DEFAULT_REDUCED_MOTION.to_string()),
             screenshot_permission_check: value.screenshot_permission_check.unwrap_or(true),
+            background_permission_default: match value
+                .background_permission_default
+                .unwrap_or(DEFAULT_BACKGROUND_PERMISSION.to_string())
+                .as_str()
+            {
+                "allow" => "allow".to_string(),
+                "deny" => "deny".to_string(),
+                _ => DEFAULT_BACKGROUND_PERMISSION.to_string(),
+            },
         }
     }
 }
@@ -96,6 +108,7 @@ impl Default for SettingsConfig {
             contrast: DEFAULT_CONTRAST.to_string(),
             reduced_motion: DEFAULT_REDUCED_MOTION.to_string(),
             screenshot_permission_check: true,
+            background_permission_default: DEFAULT_BACKGROUND_PERMISSION.to_string(),
         }
     }
 }

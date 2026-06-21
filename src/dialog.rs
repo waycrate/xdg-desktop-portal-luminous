@@ -1,4 +1,6 @@
-use iced::futures::channel::mpsc::Sender;
+use std::collections::VecDeque;
+
+use iced::futures::channel::mpsc::{Sender, UnboundedSender};
 use iced::widget::{
     Row, Space, button, checkbox, column, container, grid, image, row, scrollable, text,
 };
@@ -12,6 +14,9 @@ use iced_layershell::to_layer_message;
 
 use libwayshot::output::OutputInfo;
 use libwayshot::region::TopLevel;
+
+const BACKGROUND_PROMPT_QUEUE_CAPACITY: usize = 8;
+const BACKGROUND_PROMPT_TOMBSTONE_CAPACITY: usize = 64;
 
 pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Error> {
     unsafe { std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info") }
@@ -35,13 +40,13 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Err
     .run()
 }
 
-#[allow(unused)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum GuiMode {
     ScreenCast,
     #[default]
     ScreenShot,
     PermissionPrompt,
+    BackgroundPrompt,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -57,13 +62,25 @@ struct AreaSelectorGUI {
     gui_mode: GuiMode,
     mode: ViewMode,
     window_show: bool,
+    window_id: Option<iced::window::Id>,
     toplevel_capture_support: bool,
     sender: Option<Sender<CopySelect>>,
     sender_cast: Option<Sender<CopySelect>>,
+    sender_background: Option<UnboundedSender<CopySelect>>,
     toplevels: Vec<TopLevelInfo>,
     screens: Vec<WlOutputInfo>,
     use_cursor: bool,
     prompt_text: Option<String>,
+    active_background_handle: Option<String>,
+    background_queue: VecDeque<BackgroundPromptRequest>,
+    tombstoned_background_handles: VecDeque<String>,
+}
+
+#[derive(Debug, Clone)]
+struct BackgroundPromptRequest {
+    handle: String,
+    app_id: String,
+    name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,6 +91,7 @@ pub enum CopySelect {
     Slurp,
     Cancel,
     Permission(bool),
+    BackgroundPermission { handle: String, result: u32 },
 }
 
 #[derive(Debug, Clone)]
@@ -114,8 +132,17 @@ pub enum Message {
     ShowModeChange(ShowMode),
     ReadyShoot(Sender<CopySelect>),
     ReadyCast(Sender<CopySelect>),
+    ReadyBackground(UnboundedSender<CopySelect>),
     ToggleCursor(bool),
     PermissionDialog(String),
+    BackgroundPrompt {
+        handle: String,
+        app_id: String,
+        name: String,
+    },
+    CloseBackgroundPrompt {
+        handle: String,
+    },
 }
 
 impl AreaSelectorGUI {
@@ -228,18 +255,124 @@ impl AreaSelectorGUI {
             gui_mode: GuiMode::ScreenShot,
             mode: ViewMode::Others,
             window_show: false,
+            window_id: None,
             toplevel_capture_support,
             sender: None,
             sender_cast: None,
+            sender_background: None,
             toplevels: Vec::new(),
             screens: Vec::new(),
             use_cursor: false,
             prompt_text: None,
+            active_background_handle: None,
+            background_queue: VecDeque::new(),
+            tombstoned_background_handles: VecDeque::new(),
         }
     }
 
     fn namespace() -> String {
         String::from("osk")
+    }
+
+    fn open_background_prompt(
+        &mut self,
+        handle: String,
+        app_id: String,
+        name: String,
+    ) -> Task<Message> {
+        self.window_show = true;
+        self.gui_mode = GuiMode::BackgroundPrompt;
+        self.active_background_handle = Some(handle);
+        let app_name = if name.is_empty() { app_id } else { name };
+        self.prompt_text = Some(format!(
+            "Allow '{}' to keep running in the background?",
+            app_name
+        ));
+        let id = iced::window::Id::unique();
+        self.window_id = Some(id);
+        Task::done(Message::NewLayerShell {
+            settings: NewLayerShellSettings {
+                size: Some((360, 128)),
+                anchor: Anchor::Top | Anchor::Bottom,
+                keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                output_option: OutputOption::None,
+                ..Default::default()
+            },
+            id,
+        })
+    }
+
+    fn show_next_background_prompt(&mut self) -> Task<Message> {
+        if self.window_show {
+            return Task::none();
+        }
+
+        let Some(request) = self.background_queue.pop_front() else {
+            return Task::none();
+        };
+
+        self.open_background_prompt(request.handle, request.app_id, request.name)
+    }
+
+    fn send_background_response(&self, select: CopySelect) {
+        let CopySelect::BackgroundPermission { handle, result } = &select else {
+            return;
+        };
+        let handle = handle.clone();
+        let result = *result;
+
+        let Some(sender) = &self.sender_background else {
+            tracing::warn!(
+                "Cannot deliver background permission result {result} for {handle}: response channel is not ready"
+            );
+            return;
+        };
+
+        if let Err(e) = sender.unbounded_send(select) {
+            tracing::warn!(
+                "Cannot deliver background permission result {result} for {handle}: receiver is gone: {e}"
+            );
+        }
+    }
+
+    fn tombstone_background_handle(&mut self, handle: String) {
+        if self
+            .tombstoned_background_handles
+            .iter()
+            .any(|tombstone| tombstone == &handle)
+        {
+            return;
+        }
+
+        if self.tombstoned_background_handles.len() >= BACKGROUND_PROMPT_TOMBSTONE_CAPACITY {
+            self.tombstoned_background_handles.pop_front();
+        }
+        self.tombstoned_background_handles.push_back(handle);
+    }
+
+    fn consume_background_tombstone(&mut self, handle: &str) -> bool {
+        let Some(index) = self
+            .tombstoned_background_handles
+            .iter()
+            .position(|tombstone| tombstone == handle)
+        else {
+            return false;
+        };
+
+        self.tombstoned_background_handles.remove(index);
+        true
+    }
+
+    fn close_window_and_show_next_background_prompt(
+        &mut self,
+        id: iced::window::Id,
+    ) -> Task<Message> {
+        use iced_runtime::Action;
+        use iced_runtime::window::Action as WindowAction;
+
+        let close_task = iced_runtime::task::effect(Action::Window(WindowAction::Close(id)));
+        let next_prompt_task = self.show_next_background_prompt();
+        Task::batch([close_task, next_prompt_task])
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -257,19 +390,38 @@ impl AreaSelectorGUI {
                 Task::none()
             }
             Message::Selected { id, select } => {
-                use iced_runtime::Action;
-                use iced_runtime::window::Action as WindowAction;
+                if self.window_id != Some(id) {
+                    return Task::none();
+                }
+
                 match self.gui_mode {
                     GuiMode::ScreenCast => {
                         let _ = self.sender_cast.as_mut().unwrap().try_send(select);
                     }
+                    GuiMode::BackgroundPrompt => match &select {
+                        CopySelect::BackgroundPermission { handle, .. }
+                            if self.active_background_handle.as_ref() == Some(handle) =>
+                        {
+                            self.send_background_response(select);
+                        }
+                        _ => return Task::none(),
+                    },
                     GuiMode::ScreenShot | GuiMode::PermissionPrompt => {
+                        if matches!(select, CopySelect::BackgroundPermission { .. }) {
+                            return Task::none();
+                        }
                         let _ = self.sender.as_mut().unwrap().try_send(select);
                     }
                 }
 
                 self.window_show = false;
-                iced_runtime::task::effect(Action::Window(WindowAction::Close(id)))
+                self.window_id = None;
+                if self.gui_mode == GuiMode::BackgroundPrompt {
+                    self.gui_mode = GuiMode::ScreenShot;
+                    self.prompt_text = None;
+                    self.active_background_handle = None;
+                }
+                self.close_window_and_show_next_background_prompt(id)
             }
 
             Message::ImageCopyOpen {
@@ -287,6 +439,8 @@ impl AreaSelectorGUI {
                 self.window_show = true;
                 self.toplevels = toplevels;
                 self.screens = screens;
+                let id = iced::window::Id::unique();
+                self.window_id = Some(id);
                 Task::done(Message::NewLayerShell {
                     settings: NewLayerShellSettings {
                         exclusive_zone: None,
@@ -296,7 +450,7 @@ impl AreaSelectorGUI {
                         output_option: OutputOption::None,
                         ..Default::default()
                     },
-                    id: iced::window::Id::unique(),
+                    id,
                 })
             }
             Message::ScreenCastOpen {
@@ -320,6 +474,8 @@ impl AreaSelectorGUI {
                 self.window_show = true;
                 self.toplevels = toplevels;
                 self.screens = screens;
+                let id = iced::window::Id::unique();
+                self.window_id = Some(id);
                 Task::done(Message::NewLayerShell {
                     settings: NewLayerShellSettings {
                         exclusive_zone: None,
@@ -329,7 +485,7 @@ impl AreaSelectorGUI {
                         output_option: OutputOption::None,
                         ..Default::default()
                     },
-                    id: iced::window::Id::unique(),
+                    id,
                 })
             }
             Message::ReadyShoot(sender) => {
@@ -338,6 +494,10 @@ impl AreaSelectorGUI {
             }
             Message::ReadyCast(sender) => {
                 self.sender_cast = Some(sender);
+                Task::none()
+            }
+            Message::ReadyBackground(sender) => {
+                self.sender_background = Some(sender);
                 Task::none()
             }
             Message::ToggleCursor(cursor) => {
@@ -352,6 +512,8 @@ impl AreaSelectorGUI {
                 self.window_show = true;
                 self.gui_mode = GuiMode::PermissionPrompt;
                 self.prompt_text = Some(message);
+                let id = iced::window::Id::unique();
+                self.window_id = Some(id);
                 Task::done(Message::NewLayerShell {
                     settings: NewLayerShellSettings {
                         size: Some((256, 100)),
@@ -360,8 +522,58 @@ impl AreaSelectorGUI {
                         output_option: OutputOption::None,
                         ..Default::default()
                     },
-                    id: iced::window::Id::unique(),
+                    id,
                 })
+            }
+            Message::BackgroundPrompt {
+                handle,
+                app_id,
+                name,
+            } => {
+                if self.consume_background_tombstone(&handle) {
+                    return Task::none();
+                }
+
+                if self.window_show {
+                    if self.background_queue.len() >= BACKGROUND_PROMPT_QUEUE_CAPACITY {
+                        self.send_background_response(CopySelect::BackgroundPermission {
+                            handle,
+                            result: 2,
+                        });
+                    } else {
+                        self.background_queue.push_back(BackgroundPromptRequest {
+                            handle,
+                            app_id,
+                            name,
+                        });
+                    }
+                    return Task::none();
+                }
+                self.open_background_prompt(handle, app_id, name)
+            }
+            Message::CloseBackgroundPrompt { handle } => {
+                if self.gui_mode != GuiMode::BackgroundPrompt
+                    || self.active_background_handle.as_ref() != Some(&handle)
+                {
+                    let previous_queue_len = self.background_queue.len();
+                    self.background_queue
+                        .retain(|request| request.handle != handle);
+                    if self.background_queue.len() == previous_queue_len {
+                        self.tombstone_background_handle(handle);
+                    }
+                    return Task::none();
+                }
+
+                self.window_show = false;
+                self.gui_mode = GuiMode::ScreenShot;
+                self.prompt_text = None;
+                self.active_background_handle = None;
+
+                if let Some(id) = self.window_id.take() {
+                    self.close_window_and_show_next_background_prompt(id)
+                } else {
+                    self.show_next_background_prompt()
+                }
             }
             _ => unreachable!(),
         }
@@ -398,9 +610,57 @@ impl AreaSelectorGUI {
         .into()
     }
 
+    fn view_background_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
+        let handle = self.active_background_handle.clone().unwrap_or_default();
+
+        column![
+            container(text(self.prompt_text.as_ref().unwrap()))
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .height(Length::Fill),
+            Space::new().height(Length::Fill),
+            row![
+                button("Allow")
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::BackgroundPermission {
+                            handle: handle.clone(),
+                            result: 1
+                        }
+                    })
+                    .width(Length::Fill),
+                button("Allow once")
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::BackgroundPermission {
+                            handle: handle.clone(),
+                            result: 2
+                        }
+                    })
+                    .width(Length::Fill),
+                button("Deny")
+                    .style(button::text)
+                    .on_press(Message::Selected {
+                        id,
+                        select: CopySelect::BackgroundPermission { handle, result: 0 }
+                    })
+                    .width(Length::Fill),
+            ]
+            .padding(2.)
+            .spacing(5.)
+            .width(Length::Fill)
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+    }
+
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
         if self.gui_mode == GuiMode::PermissionPrompt {
             return self.view_permission_prompt(id);
+        }
+        if self.gui_mode == GuiMode::BackgroundPrompt {
+            return self.view_background_prompt(id);
         }
 
         let selector = self.selector();
@@ -493,19 +753,26 @@ impl AreaSelectorGUI {
     fn subscription(&self) -> iced::Subscription<Message> {
         iced::Subscription::run(|| {
             iced::stream::channel(100, |mut output: Sender<Message>| async move {
-                use iced::futures::channel::mpsc::channel;
+                use iced::futures::channel::mpsc::{channel, unbounded};
                 use iced::futures::sink::SinkExt;
                 let (sender, receiver) = channel(100);
                 let (sender_cast, receiver_cast) = channel(100);
+                let (sender_background, receiver_background) = unbounded();
                 let _ = output.send(Message::ReadyShoot(sender)).await;
                 let _ = output.send(Message::ReadyCast(sender_cast)).await;
+                let _ = output
+                    .send(Message::ReadyBackground(sender_background))
+                    .await;
 
-                let _ = crate::backend::backend(output, receiver, receiver_cast).await;
+                let _ =
+                    crate::backend::backend(output, receiver, receiver_cast, receiver_background)
+                        .await;
             })
         })
     }
     fn theme(&self, _id: iced::window::Id) -> Option<iced::Theme> {
-        if self.gui_mode == GuiMode::PermissionPrompt {
+        if self.gui_mode == GuiMode::PermissionPrompt || self.gui_mode == GuiMode::BackgroundPrompt
+        {
             return Some(iced::Theme::TokyoNight);
         }
         None

@@ -168,7 +168,9 @@ impl ScreenShotBackend {
                 CopySelect::Cancel => {
                     return Ok(PortalResponse::Cancelled);
                 }
-                CopySelect::Permission(_) => unreachable!(),
+                CopySelect::Permission(_) | CopySelect::BackgroundPermission { .. } => {
+                    unreachable!()
+                }
             }
         } else {
             wayshot_connection
