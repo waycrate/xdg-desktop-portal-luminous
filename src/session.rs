@@ -89,6 +89,7 @@ impl CursorMode {
 pub enum SessionType {
     ScreenCast,
     Remote,
+    Clipboard,
 }
 
 #[derive(Default, Serialize, Deserialize, PartialEq, Eq, Debug, Copy, Clone, Type)]

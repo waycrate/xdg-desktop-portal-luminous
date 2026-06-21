@@ -6384,6 +6384,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
+ "smithay-client-toolkit 0.20.0",
  "stream_message",
  "tempfile",
  "thiserror 2.0.18",

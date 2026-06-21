@@ -7,6 +7,12 @@ use zbus::{
     object_server::SignalEmitter,
     zvariant::{Fd, ObjectPath, OwnedObjectPath, OwnedValue, Type, Value, as_value},
 };
+
+use crate::{
+    request::RequestInterface,
+    session::{Session, SessionType, append_session},
+};
+
 #[derive(Debug, Serialize, Type, Deserialize)]
 #[zvariant(signature = "dict")]
 struct SelectionOpt {
@@ -40,11 +46,24 @@ impl Clipboard {
         &self,
         session_handle: ObjectPath<'_>,
         _options: HashMap<&'_ str, Value<'_>>,
+        #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<()> {
-        todo!()
+        tracing::info!("Start clipboard: path :{}", session_handle.as_str(),);
+        server
+            .at(
+                session_handle.clone(),
+                RequestInterface {
+                    handle_path: session_handle.clone().into(),
+                    close_action: None,
+                },
+            )
+            .await?;
+        let current_session = Session::new(session_handle.clone(), SessionType::Clipboard);
+        append_session(current_session.clone()).await;
+        Ok(())
     }
 
-    async fn set_selection(&self, _options: SelectionOpt) -> zbus::fdo::Result<()> {
+    async fn set_selection(&self, options: SelectionOpt) -> zbus::fdo::Result<()> {
         todo!()
     }
 

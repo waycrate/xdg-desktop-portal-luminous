@@ -1,12 +1,33 @@
+use std::os::fd::OwnedFd;
+
+use calloop_wayland_source::WaylandSource;
+use sctk::registry::{ProvidesRegistryState, RegistryState};
 use wayland_protocols::ext::data_control::v1::client::{
-    ext_data_control_device_v1,
+    ext_data_control_device_v1::{self, ExtDataControlDeviceV1},
     ext_data_control_manager_v1::{self, ExtDataControlManagerV1},
-    ext_data_control_offer_v1, ext_data_control_source_v1,
+    ext_data_control_offer_v1::{self, ExtDataControlOfferV1},
+    ext_data_control_source_v1,
 };
 
-use wayland_client::{Dispatch, delegate_noop, event_created_child, protocol::wl_seat::WlSeat};
+use calloop::{
+    EventLoop,
+    channel::{self, Channel, Sender},
+};
+use tokio::sync::oneshot::Sender as OneSender;
+use wayland_client::{
+    Connection, Dispatch, QueueHandle, delegate_noop, event_created_child,
+    globals::registry_queue_init, protocol::wl_seat::WlSeat,
+};
 
-pub struct ClipboardWl;
+pub struct ClipboardWl {
+    registry_state: RegistryState,
+    seat: WlSeat,
+    data_manager: ExtDataControlManagerV1,
+    device: ExtDataControlDeviceV1,
+    qh: QueueHandle<Self>,
+    current_selection: Option<ExtDataControlOfferV1>,
+    primary_selection: Option<ExtDataControlOfferV1>,
+}
 
 impl Dispatch<ext_data_control_device_v1::ExtDataControlDeviceV1, ()> for ClipboardWl {
     fn event(
@@ -17,6 +38,21 @@ impl Dispatch<ext_data_control_device_v1::ExtDataControlDeviceV1, ()> for Clipbo
         conn: &wayland_client::Connection,
         qhandle: &wayland_client::QueueHandle<Self>,
     ) {
+        match event {
+            ext_data_control_device_v1::Event::DataOffer { .. } => {}
+            ext_data_control_device_v1::Event::Finished => {
+                state.reset_offer();
+                state.reset_data_device();
+            }
+            ext_data_control_device_v1::Event::Selection { id } => {
+
+            }
+            ext_data_control_device_v1::Event::PrimarySelection { id } => {
+                // NOTE: we need to manager its lifetime
+                state.reset_primary_offer(id);
+            }
+            _ => unreachable!(),
+        }
     }
     event_created_child!(ClipboardWl, ext_data_control_device_v1::ExtDataControlDeviceV1, [
         ext_data_control_device_v1::EVT_DATA_OFFER_OPCODE => (ext_data_control_offer_v1::ExtDataControlOfferV1, ())
@@ -32,6 +68,11 @@ impl Dispatch<ext_data_control_source_v1::ExtDataControlSourceV1, ()> for Clipbo
         conn: &wayland_client::Connection,
         qhandle: &wayland_client::QueueHandle<Self>,
     ) {
+        match event {
+            ext_data_control_source_v1::Event::Send { mime_type, fd } => {}
+            ext_data_control_source_v1::Event::Cancelled => {}
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -44,8 +85,93 @@ impl Dispatch<ext_data_control_offer_v1::ExtDataControlOfferV1, ()> for Clipboar
         conn: &wayland_client::Connection,
         qhandle: &wayland_client::QueueHandle<Self>,
     ) {
+        if let ext_data_control_offer_v1::Event::Offer { mime_type } = event {}
     }
+}
+
+impl ProvidesRegistryState for ClipboardWl {
+    fn registry(&mut self) -> &mut RegistryState {
+        &mut self.registry_state
+    }
+    sctk::registry_handlers![];
 }
 
 delegate_noop!(ClipboardWl: ignore WlSeat);
 delegate_noop!(ClipboardWl: ignore ExtDataControlManagerV1);
+sctk::delegate_registry!(ClipboardWl);
+
+pub enum ClipboardRequest {
+    SetSelection { mime_types: Vec<String> },
+    Write { sender: OneSender<OwnedFd> },
+    Read { sender: OneSender<OwnedFd> },
+}
+
+impl ClipboardWl {
+    fn reset_data_device(&mut self) {
+        self.device.destroy();
+        self.device = self.data_manager.get_data_device(&self.seat, &self.qh, ());
+    }
+    fn reset_offer(&mut self) {
+        self.current_selection.take().map(|offer| offer.destroy());
+    }
+    fn reset_primary_offer(&mut self, id: Option<ExtDataControlOfferV1>) {
+        if let Some(id) = id {
+            self.primary_selection.take().map(|offer| offer.destroy());
+            self.primary_selection = Some(id);
+        }
+    }
+    pub fn select_selection(&mut self, mime_types: Vec<String>) -> anyhow::Result<()> {
+        let source = self.data_manager.create_data_source(&self.qh, ());
+
+        for mime_type in mime_types {
+            source.offer(mime_type);
+        }
+        self.device.set_selection(Some(&source));
+        Ok(())
+    }
+    pub fn new(receiver: Channel<ClipboardRequest>) -> anyhow::Result<()> {
+        let connection = Connection::connect_to_env()?;
+        let (globals, event_queue) = registry_queue_init::<Self>(&connection)?;
+        let qh = event_queue.handle();
+        let seat = globals.bind::<WlSeat, _, _>(&qh, 1..=1, ())?;
+        let data_manager = globals.bind::<ExtDataControlManagerV1, _, _>(&qh, 1..=1, ())?;
+        let device = data_manager.get_data_device(&seat, &qh, ());
+        let mut clipbard = ClipboardWl {
+            registry_state: RegistryState::new(&globals),
+            seat,
+            data_manager,
+            device,
+            qh,
+            current_selection: None,
+            primary_selection: None,
+        };
+
+        let mut event_loop: EventLoop<ClipboardWl> =
+            EventLoop::try_new().expect("Failed to initialize the event loop");
+
+        WaylandSource::new(connection, event_queue)
+            .insert(event_loop.handle())
+            .expect("Failed to init wayland source");
+        event_loop
+            .handle()
+            .insert_source(receiver, move |event, _, app_state| {
+                let channel::Event::Msg(message) = event else {
+                    return;
+                };
+
+                match message {
+                    ClipboardRequest::SetSelection { mime_types } => {}
+                    _ => {}
+                }
+            })
+            .expect("Error during event loop");
+        event_loop
+            .run(
+                std::time::Duration::from_millis(20),
+                &mut clipbard,
+                |_data| {},
+            )
+            .expect("Error during event loop");
+        Ok(())
+    }
+}
