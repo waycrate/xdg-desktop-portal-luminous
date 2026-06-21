@@ -1,3 +1,4 @@
+mod wayland_backend;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
