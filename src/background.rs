@@ -24,6 +24,7 @@ use crate::{
     request::{RequestCloseAction, RequestInterface},
     settings::SETTING_CONFIG,
     systemd::Systemd1Proxy,
+    utils::XDG_CONFIG_HOME,
 };
 
 const AUTOSTART_DBUS_ACTIVATABLE: u32 = 0x1;
@@ -389,21 +390,10 @@ fn autostart_paths(app_id: &str) -> fdo::Result<(PathBuf, PathBuf)> {
 }
 
 fn user_config_dir() -> fdo::Result<PathBuf> {
-    if let Some(config_home) = std::env::var_os("XDG_CONFIG_HOME").filter(|value| !value.is_empty())
-    {
-        let config_home = PathBuf::from(config_home);
-        if config_home.is_absolute() {
-            return Ok(config_home);
-        }
-        tracing::warn!(
-            "Ignoring relative XDG_CONFIG_HOME for Background autostart: {}",
-            config_home.display()
-        );
-    }
-
-    let home = std::env::var_os("HOME")
-        .ok_or_else(|| fdo::Error::FileNotFound("XDG_CONFIG_HOME and HOME are not set".into()))?;
-    Ok(PathBuf::from(home).join(".config"))
+    let config_home = XDG_CONFIG_HOME.clone().ok_or(fdo::Error::FileNotFound(
+        "XDG_CONFIG_HOME and XDG_CONFIG_HOME are not set".into(),
+    ))?;
+    Ok(config_home)
 }
 
 fn desktop_entry(app_id: &str, exec: &str, flags: u32, flatpak: bool) -> String {

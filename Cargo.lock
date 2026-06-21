@@ -4195,13 +4195,13 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "reis"
-version = "0.7.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81f3fedd2777cde52c1be5e572efbec485eac7b801c47820eda388d4f13b9c4b"
+checksum = "2aee09758db35e73eb1398c6ef321973ce7f4aad86573ba08c1c8ef98d350b46"
 dependencies = [
  "calloop 0.14.4",
  "enumflags2",
- "futures-util",
+ "futures",
  "log",
  "rustix 1.1.4",
  "tokio",

@@ -2,6 +2,7 @@ use serde::Deserialize;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use crate::utils::XDG_CONFIG_HOME;
 
 const DEFAULT_COLOR_NAME: &str = "default";
 const DARK_COLOR_NAME: &str = "dark";
@@ -115,14 +116,6 @@ impl Default for SettingsConfig {
 
 const PORTAL_CONFIG_FILE_NAME: &str = "config.toml";
 const PORTAL_CONFIG_DIR_NAME: &str = "xdg-desktop-portal-luminous";
-
-pub static XDG_CONFIG_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
-    if let Ok(xdg_config_home) = std::env::var("XDG_CONFIG_HOME") {
-        return Some(PathBuf::from(&xdg_config_home));
-    }
-    let home = std::env::var("HOME").ok()?;
-    Some(PathBuf::from(&home).join(".config"))
-});
 
 pub static XDG_CONFIG_HOME_FILE: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
     Some(
