@@ -164,11 +164,15 @@ impl ClipboardWl {
         self.device = self.data_manager.get_data_device(&self.seat, &self.qh, ());
     }
     fn reset_offer(&mut self) {
-        self.current_selection.take().map(|offer| offer.destroy());
+        if let Some(offer) = self.current_selection.take() {
+            offer.destroy()
+        }
     }
     fn reset_primary_offer(&mut self, id: Option<ExtDataControlOfferV1>) {
         if let Some(id) = id {
-            self.primary_selection.take().map(|offer| offer.destroy());
+            if let Some(offer) = self.primary_selection.take() {
+                offer.destroy()
+            }
             self.primary_selection = Some(id);
         }
     }
