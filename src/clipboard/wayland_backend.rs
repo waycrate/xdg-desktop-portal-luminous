@@ -1,10 +1,13 @@
-use std::os::fd::OwnedFd;
+use std::{
+    collections::HashMap,
+    os::fd::{AsFd, AsRawFd, OwnedFd},
+};
 
 use calloop_wayland_source::WaylandSource;
 use sctk::registry::{ProvidesRegistryState, RegistryState};
 use wayland_protocols::ext::data_control::v1::client::{
     ext_data_control_device_v1::{self, ExtDataControlDeviceV1},
-    ext_data_control_manager_v1::{self, ExtDataControlManagerV1},
+    ext_data_control_manager_v1::ExtDataControlManagerV1,
     ext_data_control_offer_v1::{self, ExtDataControlOfferV1},
     ext_data_control_source_v1,
 };
@@ -18,6 +21,8 @@ use wayland_client::{
     Connection, Dispatch, QueueHandle, delegate_noop, event_created_child,
     globals::registry_queue_init, protocol::wl_seat::WlSeat,
 };
+
+use os_pipe::{PipeReader, pipe};
 
 pub struct ClipboardThread {
     pub sender: Sender<ClipboardRequest>,
@@ -45,16 +50,25 @@ pub struct ClipboardWl {
     qh: QueueHandle<Self>,
     current_selection: Option<ExtDataControlOfferV1>,
     primary_selection: Option<ExtDataControlOfferV1>,
+    piperead: Option<PipeReader>,
+    mime_types: Vec<String>,
+    write_data: HashMap<i32, ClipboardData>,
+}
+
+struct ClipboardData {
+    sender: OneSender<(OwnedFd, String)>,
+    #[allow(unused)]
+    serial: u32,
 }
 
 impl Dispatch<ext_data_control_device_v1::ExtDataControlDeviceV1, ()> for ClipboardWl {
     fn event(
         state: &mut Self,
-        proxy: &ext_data_control_device_v1::ExtDataControlDeviceV1,
+        _proxy: &ext_data_control_device_v1::ExtDataControlDeviceV1,
         event: <ext_data_control_device_v1::ExtDataControlDeviceV1 as wayland_client::Proxy>::Event,
-        data: &(),
-        conn: &wayland_client::Connection,
-        qhandle: &wayland_client::QueueHandle<Self>,
+        _data: &(),
+        _conn: &wayland_client::Connection,
+        _qhandle: &wayland_client::QueueHandle<Self>,
     ) {
         match event {
             ext_data_control_device_v1::Event::DataOffer { .. } => {}
@@ -62,7 +76,11 @@ impl Dispatch<ext_data_control_device_v1::ExtDataControlDeviceV1, ()> for Clipbo
                 state.reset_offer();
                 state.reset_data_device();
             }
-            ext_data_control_device_v1::Event::Selection { id } => {}
+            ext_data_control_device_v1::Event::Selection { id } => {
+                if let Some(offer) = id {
+                    state.current_selection = Some(offer);
+                }
+            }
             ext_data_control_device_v1::Event::PrimarySelection { id } => {
                 // NOTE: we need to manager its lifetime
                 state.reset_primary_offer(id);
@@ -78,15 +96,24 @@ impl Dispatch<ext_data_control_device_v1::ExtDataControlDeviceV1, ()> for Clipbo
 impl Dispatch<ext_data_control_source_v1::ExtDataControlSourceV1, ()> for ClipboardWl {
     fn event(
         state: &mut Self,
-        proxy: &ext_data_control_source_v1::ExtDataControlSourceV1,
+        _proxy: &ext_data_control_source_v1::ExtDataControlSourceV1,
         event: <ext_data_control_source_v1::ExtDataControlSourceV1 as wayland_client::Proxy>::Event,
-        data: &(),
-        conn: &wayland_client::Connection,
-        qhandle: &wayland_client::QueueHandle<Self>,
+        _data: &(),
+        _conn: &wayland_client::Connection,
+        _qhandle: &wayland_client::QueueHandle<Self>,
     ) {
         match event {
-            ext_data_control_source_v1::Event::Send { mime_type, fd } => {}
-            ext_data_control_source_v1::Event::Cancelled => {}
+            ext_data_control_source_v1::Event::Send { mime_type, fd } => {
+                let raw_fd = fd.as_raw_fd();
+                let Some(data) = state.write_data.remove(&raw_fd) else {
+                    return;
+                };
+                let _ = data.sender.send((fd, mime_type));
+            }
+            ext_data_control_source_v1::Event::Cancelled => {
+                // TODO: maybe should one request to one offer?
+                state.write_data.clear();
+            }
             _ => unreachable!(),
         }
     }
@@ -94,14 +121,13 @@ impl Dispatch<ext_data_control_source_v1::ExtDataControlSourceV1, ()> for Clipbo
 
 impl Dispatch<ext_data_control_offer_v1::ExtDataControlOfferV1, ()> for ClipboardWl {
     fn event(
-        state: &mut Self,
-        proxy: &ext_data_control_offer_v1::ExtDataControlOfferV1,
-        event: <ext_data_control_offer_v1::ExtDataControlOfferV1 as wayland_client::Proxy>::Event,
-        data: &(),
-        conn: &wayland_client::Connection,
-        qhandle: &wayland_client::QueueHandle<Self>,
+        _state: &mut Self,
+        _proxy: &ext_data_control_offer_v1::ExtDataControlOfferV1,
+        _event: <ext_data_control_offer_v1::ExtDataControlOfferV1 as wayland_client::Proxy>::Event,
+        _data: &(),
+        _conn: &wayland_client::Connection,
+        _qhandle: &wayland_client::QueueHandle<Self>,
     ) {
-        if let ext_data_control_offer_v1::Event::Offer { mime_type } = event {}
     }
 }
 
@@ -147,6 +173,8 @@ impl ClipboardWl {
         }
     }
     pub fn select_selection(&mut self, mime_types: Vec<String>) -> anyhow::Result<()> {
+        self.mime_types = mime_types.clone();
+        self.reset_data_device();
         let source = self.data_manager.create_data_source(&self.qh, ());
 
         for mime_type in mime_types {
@@ -171,6 +199,9 @@ pub fn clipboard_loop(receiver: Channel<ClipboardRequest>) -> anyhow::Result<()>
         qh,
         current_selection: None,
         primary_selection: None,
+        piperead: None,
+        mime_types: Vec::new(),
+        write_data: HashMap::new(),
     };
 
     let mut event_loop: EventLoop<ClipboardWl> =
@@ -188,11 +219,36 @@ pub fn clipboard_loop(receiver: Channel<ClipboardRequest>) -> anyhow::Result<()>
             };
 
             match message {
-                ClipboardRequest::SetSelection { mime_types } => {}
+                ClipboardRequest::SetSelection { mime_types } => {
+                    let _ = app_state.select_selection(mime_types);
+                }
+                ClipboardRequest::Read { sender, mime_type } => {
+                    let Some(offer) = &app_state.current_selection else {
+                        return;
+                    };
+                    let (read, write) = pipe().unwrap();
+
+                    offer.receive(mime_type, write.as_fd());
+                    let _ = sender.send(read.into());
+                }
+                ClipboardRequest::Write { sender, serial } => {
+                    let Some(offer) = &app_state.current_selection else {
+                        return;
+                    };
+
+                    let (read, write) = pipe().unwrap();
+                    for mime_type in &app_state.mime_types {
+                        offer.receive(mime_type.clone(), write.as_fd());
+                    }
+                    let raw_fd = write.as_raw_fd();
+                    app_state.piperead = Some(read);
+                    app_state
+                        .write_data
+                        .insert(raw_fd, ClipboardData { sender, serial });
+                }
                 ClipboardRequest::Stop => {
                     signal.stop();
                 }
-                _ => {}
             }
         })
         .expect("Error during event loop");

@@ -137,9 +137,9 @@ impl Clipboard {
 
     async fn selection_write_done(
         &self,
-        session_handle: ObjectPath<'_>,
-        serial: u32,
-        success: bool,
+        _session_handle: ObjectPath<'_>,
+        _serial: u32,
+        _success: bool,
     ) -> zbus::fdo::Result<()> {
         // TODO: what to do here?
         Ok(())
