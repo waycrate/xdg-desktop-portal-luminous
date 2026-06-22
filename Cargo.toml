@@ -75,6 +75,7 @@ wayland-protocols-wlr = { version = "0.3.12", default-features = false, features
 	"client",
 ] }
 wayland-client = { version = "0.31.14" }
+os_pipe = { version = "1.1", features = ["io_safety"] }
 
 wayland-protocols-misc = { version = "0.3.12", features = ["client"] }
 xkbcommon = "0.9.0"
@@ -86,6 +87,7 @@ notify = "8.2.0"
 futures = "0.3.32"
 libwaysip = "0.6.1"
 reis = { version = "0.6.1", features = ["tokio", "calloop"] }
+sctk = { package = "smithay-client-toolkit", version = "0.20.0" }
 
 calloop = "0.14.4"
 calloop-wayland-source = "0.4.1"

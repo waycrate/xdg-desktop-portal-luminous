@@ -1,13 +1,13 @@
 use crate::access::AccessBackend;
 use crate::background::{BackgroundBackend, PendingBackgroundResponses};
+use crate::clipboard::Clipboard;
+use crate::dialog::{CopySelect, Message};
 use crate::input_capture::InputCapture;
 use crate::remotedesktop::RemoteDesktopBackend;
 use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
-use crate::settings::{AccentColor, SETTING_CONFIG, SettingsBackend, SettingsConfig};
-
-use crate::dialog::{CopySelect, Message};
 use crate::settings::XDG_CONFIG_HOME_FILE;
+use crate::settings::{AccentColor, SETTING_CONFIG, SettingsBackend, SettingsConfig};
 use futures::{
     SinkExt, StreamExt,
     channel::mpsc::{Receiver, Sender, UnboundedReceiver, channel},
@@ -162,6 +162,7 @@ pub async fn backend(
         .serve_at("/org/freedesktop/portal/desktop", RemoteDesktopBackend)?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
         .serve_at("/org/freedesktop/portal/desktop", InputCapture)?
+        .serve_at("/org/freedesktop/portal/desktop", Clipboard)?
         .build()
         .await?;
 

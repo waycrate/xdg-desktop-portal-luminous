@@ -1,6 +1,7 @@
 mod access;
 mod backend;
 mod background;
+mod clipboard;
 mod dialog;
 mod input_capture;
 mod remotedesktop;
