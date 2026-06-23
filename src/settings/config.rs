@@ -134,7 +134,9 @@ pub static PORTAL_ETC_CONFIG_FILE: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 pub static PORTAL_CONFIG_FILE: LazyLock<PathBuf> = LazyLock::new(|| {
-    if let Some(config_file) = XDG_CONFIG_HOME_FILE.clone() {
+    if let Some(config_file) = XDG_CONFIG_HOME_FILE.clone()
+        && config_file.exists()
+    {
         return config_file;
     }
     PORTAL_ETC_CONFIG_FILE.clone()
