@@ -295,7 +295,7 @@ impl AreaSelectorGUI {
                 size: Some((360, 128)),
                 anchor: Anchor::Top | Anchor::Bottom,
                 keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                output_option: OutputOption::None,
+                output_option: OutputOption::Active,
                 ..Default::default()
             },
             id,
@@ -447,7 +447,7 @@ impl AreaSelectorGUI {
                         anchor: Anchor::Right | Anchor::Top | Anchor::Left | Anchor::Bottom,
                         margin: Some((300, 300, 300, 300)),
                         keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                        output_option: OutputOption::None,
+                        output_option: OutputOption::Active,
                         ..Default::default()
                     },
                     id,
@@ -482,7 +482,7 @@ impl AreaSelectorGUI {
                         anchor: Anchor::Right | Anchor::Top | Anchor::Left | Anchor::Bottom,
                         margin: Some((300, 500, 300, 500)),
                         keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                        output_option: OutputOption::None,
+                        output_option: OutputOption::Active,
                         ..Default::default()
                     },
                     id,
@@ -519,7 +519,7 @@ impl AreaSelectorGUI {
                         size: Some((256, 100)),
                         anchor: Anchor::Top | Anchor::Bottom,
                         keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                        output_option: OutputOption::None,
+                        output_option: OutputOption::Active,
                         ..Default::default()
                     },
                     id,

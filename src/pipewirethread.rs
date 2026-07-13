@@ -1,5 +1,4 @@
 use libwayshot::reexport::FailureReason;
-use libwayshot::region::EmbeddedRegion;
 use libwayshot::{
     WayshotConnection, WayshotTarget,
     reexport::{ExtForeignToplevelHandleV1, WlOutput},
@@ -55,14 +54,13 @@ impl From<&CastTarget> for WayshotTarget {
 impl ScreencastThread {
     pub async fn start_cast(
         overlay_cursor: bool,
-        embedded_region: Option<EmbeddedRegion>,
         target: CastTarget,
         connection: WayshotConnection,
     ) -> anyhow::Result<Self> {
         let (tx, rx) = oneshot::channel();
         let (thread_stop_tx, thread_stop_rx) = pipewire::channel::channel::<()>();
         std::thread::spawn(move || {
-            match start_stream(connection, overlay_cursor, embedded_region, target) {
+            match start_stream(connection, overlay_cursor, target) {
                 Ok((loop_, listener, _stream, context, node_id_rx)) => {
                     tx.send(Ok(node_id_rx)).unwrap();
                     let weak_loop = loop_.downgrade();
@@ -98,7 +96,6 @@ struct StreamingData {
     connection: WayshotConnection,
     overlay_cursor: bool,
     available_video_formats: Vec<VideoFormat>,
-    embedded_region: Option<EmbeddedRegion>,
     size: libwayshot::Size,
     target: CastTarget,
     gbm_support: bool,
@@ -112,7 +109,6 @@ impl StreamingData {
         connection: WayshotConnection,
         overlay_cursor: bool,
         available_video_formats: Vec<VideoFormat>,
-        embedded_region: Option<EmbeddedRegion>,
         target: CastTarget,
         gbm_support: bool,
     ) -> Self {
@@ -122,7 +118,6 @@ impl StreamingData {
             overlay_cursor,
             available_video_formats,
             size: libwayshot::Size { width, height },
-            embedded_region,
             target,
             gbm_support,
         }
@@ -136,7 +131,7 @@ impl StreamingData {
         let cast = unsafe {
             &mut *((*buffer).user_data as *mut libwayshot::screencast::WayshotScreenCast)
         };
-        match self.connection.screencast(cast) {
+        match cast.screencast() {
             Err(libwayshot::Error::FramecopyFailedWithReason(WEnum::Value(
                 FailureReason::BufferConstraints,
             ))) => {
@@ -183,11 +178,7 @@ impl StreamingData {
             tracing::info!("Allocate dmabuf buffer");
             unit = self
                 .connection
-                .create_screencast_with_dmabuf(
-                    self.target.wayshot_target(),
-                    self.overlay_cursor,
-                    self.embedded_region,
-                )
+                .create_screencast_with_dmabuf(self.target.wayshot_target(), self.overlay_cursor)
                 .expect("We should make sure the protocol is existed");
             let bo = unit.dmabuf_bo().unwrap();
             let plane_len = bo.plane_count() as usize;
@@ -224,7 +215,6 @@ impl StreamingData {
                     self.target.wayshot_target(),
                     self.overlay_cursor,
                     self.chosen_format.unwrap(),
-                    self.embedded_region,
                     &fd,
                 )
                 .expect("We should make sure the protocol is existed");
@@ -291,7 +281,6 @@ type PipewireStreamResult = (
 fn start_stream(
     mut connection: WayshotConnection,
     overlay_cursor: bool,
-    embedded_region: Option<EmbeddedRegion>,
     target: CastTarget,
 ) -> anyhow::Result<PipewireStreamResult> {
     let loop_ = pipewire::main_loop::MainLoopRc::new(None).unwrap();
@@ -322,11 +311,7 @@ fn start_stream(
             // NOTE: try to run screencast once
             // If succeeded, We can think that it has gbm_support
             gbm_support = connection
-                .create_screencast_with_dmabuf(
-                    target.wayshot_target(),
-                    overlay_cursor,
-                    embedded_region,
-                )
+                .create_screencast_with_dmabuf(target.wayshot_target(), overlay_cursor)
                 .is_ok();
         }
 
@@ -349,7 +334,6 @@ fn start_stream(
             connection,
             overlay_cursor,
             available_video_formats.clone(),
-            embedded_region,
             target,
             gbm_support,
         ))

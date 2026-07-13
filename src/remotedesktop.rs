@@ -463,16 +463,12 @@ impl RemoteDesktopBackend {
 
             let output = wl_output;
 
-            let cast_thread_target = ScreencastThread::start_cast(
-                show_cursor,
-                None,
-                CastTarget::Screen(output),
-                connection,
-            )
-            .await
-            .map_err(|e| {
-                zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}"))
-            })?;
+            let cast_thread_target =
+                ScreencastThread::start_cast(show_cursor, CastTarget::Screen(output), connection)
+                    .await
+                    .map_err(|e| {
+                        zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}"))
+                    })?;
 
             let node_id = cast_thread_target.node_id();
             streams.push(Stream(

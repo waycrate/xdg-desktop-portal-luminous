@@ -317,7 +317,7 @@ impl ScreenCastBackend {
             }
         };
 
-        let cast_thread = ScreencastThread::start_cast(show_cursor, None, target, connection)
+        let cast_thread = ScreencastThread::start_cast(show_cursor, target, connection)
             .await
             .map_err(|e| {
                 zbus::Error::Failure(format!("cannot start pipewire stream, error: {e}"))
