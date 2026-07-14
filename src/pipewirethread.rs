@@ -168,7 +168,7 @@ impl StreamingData {
         unsafe { stream.queue_raw_buffer(buffer) };
     }
 
-    fn add_buffer(&self, buffer: *mut pipewire::sys::pw_buffer) {
+    fn add_buffer(&mut self, buffer: *mut pipewire::sys::pw_buffer) {
         let libwayshot::Size { width, height } = self.size;
         let buf = unsafe { &mut *(*buffer).buffer };
         let unit;

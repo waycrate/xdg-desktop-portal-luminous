@@ -2645,6 +2645,7 @@ dependencies = [
 [[package]]
 name = "libwayshot"
 version = "0.8.0"
+source = "git+https://github.com/waycrate/wayshot?rev=fcb90b402b96186324e6defc21001fdcef6c533d#fcb90b402b96186324e6defc21001fdcef6c533d"
 dependencies = [
  "drm 0.15.0",
  "gbm",

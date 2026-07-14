@@ -62,7 +62,8 @@ anyhow = "1.0.102"
 # pipewire
 pipewire = "0.10.0"
 
-libwayshot = { path = "../wayshot/libwayshot" }
+libwayshot = { git = "https://github.com/waycrate/wayshot", rev = "fcb90b402b96186324e6defc21001fdcef6c533d" }
+
 rustix = { version = "1.1.4", features = ["fs", "use-libc"] }
 
 # REMOTE
