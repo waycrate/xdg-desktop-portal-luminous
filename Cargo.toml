@@ -62,7 +62,8 @@ anyhow = "1.0.102"
 # pipewire
 pipewire = "0.10.0"
 
-libwayshot = "0.8.0"
+libwayshot = { git = "https://github.com/waycrate/wayshot", rev = "fcb90b402b96186324e6defc21001fdcef6c533d" }
+
 rustix = { version = "1.1.4", features = ["fs", "use-libc"] }
 
 # REMOTE
@@ -91,4 +92,4 @@ sctk = { package = "smithay-client-toolkit", version = "0.20.0" }
 
 calloop = "0.14.4"
 calloop-wayland-source = "0.4.1"
-iced_layershell = "0.18.1"
+iced_layershell = "0.19.1"
