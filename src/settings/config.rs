@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 
 const DEFAULT_COLOR_NAME: &str = "default";
 const DARK_COLOR_NAME: &str = "dark";
+#[allow(unused)]
 const LIGHT_COLOR_NAME: &str = "light";
 
 const DEFAULT_ACCENT_COLLOR: &str = "#ffffff";
@@ -67,7 +68,7 @@ impl SettingsConfig {
         match self.color_scheme.as_str() {
             DEFAULT_COLOR_NAME => super::DEFAULT_COLOR,
             DARK_COLOR_NAME => super::DARK_COLOR,
-            LIGHT_COLOR_NAME | _ => super::LIGHT_COLOR,
+            _ => super::LIGHT_COLOR,
         }
     }
     pub fn get_accent_color(&self) -> [f64; 3] {
