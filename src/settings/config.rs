@@ -67,8 +67,7 @@ impl SettingsConfig {
         match self.color_scheme.as_str() {
             DEFAULT_COLOR_NAME => super::DEFAULT_COLOR,
             DARK_COLOR_NAME => super::DARK_COLOR,
-            LIGHT_COLOR_NAME => super::LIGHT_COLOR,
-            _ => unreachable!(),
+            LIGHT_COLOR_NAME | _ => super::LIGHT_COLOR,
         }
     }
     pub fn get_accent_color(&self) -> [f64; 3] {
@@ -117,14 +116,11 @@ impl Default for SettingsConfig {
 const PORTAL_CONFIG_FILE_NAME: &str = "config.toml";
 const PORTAL_CONFIG_DIR_NAME: &str = "xdg-desktop-portal-luminous";
 
-pub static XDG_CONFIG_HOME_FILE: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
-    Some(
-        XDG_CONFIG_HOME
-            .clone()?
-            .join(PORTAL_CONFIG_DIR_NAME)
-            .join(PORTAL_CONFIG_FILE_NAME),
-    )
-});
+pub static XDG_CONFIG_HOME_DIR: LazyLock<Option<PathBuf>> =
+    LazyLock::new(|| Some(XDG_CONFIG_HOME.clone()?.join(PORTAL_CONFIG_DIR_NAME)));
+
+pub static XDG_CONFIG_HOME_FILE: LazyLock<Option<PathBuf>> =
+    LazyLock::new(|| Some(XDG_CONFIG_HOME_DIR.clone()?.join(PORTAL_CONFIG_FILE_NAME)));
 
 pub static PORTAL_ETC_CONFIG_FILE: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from("/etc")

@@ -6,7 +6,7 @@ use crate::input_capture::InputCapture;
 use crate::remotedesktop::RemoteDesktopBackend;
 use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
-use crate::settings::XDG_CONFIG_HOME_FILE;
+use crate::settings::XDG_CONFIG_HOME_DIR;
 use crate::settings::{AccentColor, SETTING_CONFIG, SettingsBackend, SettingsConfig};
 use futures::{
     SinkExt, StreamExt,
@@ -180,7 +180,7 @@ pub async fn backend(
     });
 
     tokio::spawn(async {
-        let Some(config_path) = XDG_CONFIG_HOME_FILE.clone() else {
+        let Some(config_path) = XDG_CONFIG_HOME_DIR.clone() else {
             tracing::info!("File not exist under $XDG_CONFIG_HOME/xdg-desktop-portal-luminous");
             return;
         };
