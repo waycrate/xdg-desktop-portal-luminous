@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::thread::ScopedJoinHandle;
 
+use libwayshot::{OutputInfo, TopLevel};
 use stream_message::SERVER_SOCK;
 use zbus::interface;
 
@@ -237,28 +239,48 @@ impl ScreenCastBackend {
         use iced::widget::image;
         let top_levels = connection.get_all_toplevels();
         let mut top_levels_iced = vec![];
+        use std::sync::mpsc;
         // NOTE: seems that when we shot the screen first time, it will influence the status later
         if self.toplevel_capture_support {
-            top_levels_iced = top_levels
-                .iter()
-                .map(|top_level| {
-                    let image = connection
-                        .screenshot_toplevel(top_level, show_cursor)
-                        .map(|data| {
-                            let rgba_data = data.to_rgba8();
-                            image::Handle::from_rgba(
-                                rgba_data.width(),
-                                rgba_data.height(),
-                                rgba_data.into_raw(),
-                            )
-                        })
-                        .ok();
-                    TopLevelInfo {
-                        top_level: top_level.clone(),
-                        image,
-                    }
-                })
-                .collect();
+            top_levels_iced = {
+                let tasks: Vec<(TopLevel, mpsc::Receiver<Option<image::Handle>>)> = top_levels
+                    .iter()
+                    .map(|top_level| {
+                        let way_conn = connection.try_clone();
+                        let (sender, receiver) = mpsc::channel();
+
+                        let top_level2 = top_level.clone();
+                        std::thread::spawn(move || {
+                            let Ok(way_conn) = way_conn else {
+                                return;
+                            };
+
+                            let image = way_conn
+                                .screenshot_toplevel(top_level2, show_cursor)
+                                .map(|data| {
+                                    let rgba_data = data.to_rgba8();
+                                    image::Handle::from_rgba(
+                                        rgba_data.width(),
+                                        rgba_data.height(),
+                                        rgba_data.into_raw(),
+                                    )
+                                })
+                                .ok();
+                            let _ = sender.send(image);
+                        });
+                        (top_level.clone(), receiver)
+                    })
+                    .collect();
+                tasks
+                    .into_iter()
+                    .map(|(top_level, receiver)| TopLevelInfo {
+                        top_level,
+                        image: receiver
+                            .recv_timeout(std::time::Duration::from_millis(500))
+                            .unwrap_or(None),
+                    })
+                    .collect()
+            };
         }
         let outputs = connection.get_all_outputs();
 
@@ -271,26 +293,42 @@ impl ScreenCastBackend {
             )
         } else {
             // NOTE: seems that when we shot the screen first time, it will influence the status later
-            let outputs_iced: Vec<WlOutputInfo> = outputs
-                .iter()
-                .map(|output| {
-                    let image = connection
-                        .screenshot_single_output(output, show_cursor)
-                        .map(|data| {
-                            let rgba_data = data.to_rgba8();
-                            image::Handle::from_rgba(
-                                rgba_data.width(),
-                                rgba_data.height(),
-                                rgba_data.into_raw(),
-                            )
-                        })
-                        .ok();
-                    WlOutputInfo {
-                        output: output.clone(),
-                        image,
-                    }
-                })
-                .collect();
+            let outputs_iced: Vec<WlOutputInfo> = std::thread::scope(|scope| {
+                let tasks: Vec<(OutputInfo, ScopedJoinHandle<Option<image::Handle>>)> = outputs
+                    .iter()
+                    .map(|output| {
+                        let way_conn = connection.try_clone();
+                        (
+                            output.clone(),
+                            scope.spawn(move || {
+                                let Ok(way_conn) = way_conn else {
+                                    return None;
+                                };
+
+                                way_conn
+                                    .screenshot_single_output(output, show_cursor)
+                                    .map(|data| {
+                                        let rgba_data = data.to_rgba8();
+                                        image::Handle::from_rgba(
+                                            rgba_data.width(),
+                                            rgba_data.height(),
+                                            rgba_data.into_raw(),
+                                        )
+                                    })
+                                    .ok()
+                            }),
+                        )
+                    })
+                    .collect();
+                tasks
+                    .into_iter()
+                    .map(|(output, task)| WlOutputInfo {
+                        output,
+                        image: task.join().unwrap_or(None),
+                    })
+                    .collect()
+            });
+
             let _ = self
                 .sender
                 .send(Message::ScreenCastOpen {
