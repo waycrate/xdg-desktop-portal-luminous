@@ -636,6 +636,7 @@ impl RemoteDesktopBackend {
     fn connect_to_eis(
         &self,
         session_handle: ObjectPath<'_>,
+        _app_id: String,
         _options: HashMap<String, Value<'_>>,
     ) -> zbus::fdo::Result<Fd<'_>> {
         let listener = eis::Listener::bind_auto()
