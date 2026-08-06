@@ -20,11 +20,11 @@ use rustix::fd::AsFd;
 use rustix::io;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use zbus::interface;
 use zbus::zvariant::{
-    Fd, ObjectPath, OwnedValue, Type, Value,
+    Fd, ObjectPath, OwnedObjectPath, OwnedValue, Type, Value,
     as_value::{self, optional},
 };
+use zbus::{interface, object_server::ResponseDispatchNotifier};
 
 use crate::PortalResponse;
 use crate::input_capture::BarrierInfo;
@@ -110,6 +110,26 @@ struct RemoteStartReturnValue {
     clipboard_enabled: bool,
     #[serde(with = "as_value")]
     screen_share_enabled: bool,
+}
+
+fn remote_start_response(
+    session_handle: &ObjectPath<'_>,
+    value: RemoteStartReturnValue,
+) -> ResponseDispatchNotifier<PortalResponse<RemoteStartReturnValue>> {
+    let clipboard_enabled = value.clipboard_enabled;
+    let (response, listener) = ResponseDispatchNotifier::new(PortalResponse::Success(value));
+    if clipboard_enabled {
+        let key: OwnedObjectPath = session_handle.to_owned().into();
+        tokio::spawn(async move {
+            listener.await; // resolves once the Start reply is on the bus
+            crate::clipboard::spawn_clipboard_forwarder(&key).await;
+        });
+    }
+    response
+}
+
+fn remote_start_other() -> ResponseDispatchNotifier<PortalResponse<RemoteStartReturnValue>> {
+    ResponseDispatchNotifier::new(PortalResponse::Other).0
 }
 
 #[derive(Type, Debug, Default, Deserialize, Serialize)]
@@ -417,21 +437,23 @@ impl RemoteDesktopBackend {
         _app_id: String,
         _parent_window: String,
         _options: HashMap<String, Value<'_>>,
-    ) -> zbus::fdo::Result<PortalResponse<RemoteStartReturnValue>> {
+        #[zbus(connection)] dbus_connection: &zbus::Connection,
+    ) -> zbus::fdo::Result<ResponseDispatchNotifier<PortalResponse<RemoteStartReturnValue>>> {
         let locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
             .iter()
             .position(|this_session| this_session.handle_path == session_handle.clone().into())
         else {
             tracing::warn!("No session is created or it is removed");
-            return Ok(PortalResponse::Other);
+            return Ok(remote_start_other());
         };
 
         let current_session = locked_sessions[index].clone();
         if current_session.session_type != SessionType::Remote {
-            return Ok(PortalResponse::Other);
+            return Ok(remote_start_other());
         }
         let device_type = current_session.device_type;
+        let clipboard_requested = current_session.clipboard_requested;
         drop(locked_sessions);
 
         let remote_sessions = REMOTE_SESSIONS.lock().await;
@@ -439,11 +461,23 @@ impl RemoteDesktopBackend {
             .iter()
             .find(|session| session.session_handle == session_handle.to_string())
         {
-            return Ok(PortalResponse::Success(RemoteStartReturnValue {
-                streams: session.streams(),
-                devices: device_type,
-                ..Default::default()
-            }));
+            let streams = session.streams();
+            drop(remote_sessions);
+            let clipboard_enabled = clipboard_requested
+                && crate::clipboard::ensure_clipboard_session(
+                    &session_handle,
+                    dbus_connection.clone(),
+                )
+                .await;
+            return Ok(remote_start_response(
+                &session_handle,
+                RemoteStartReturnValue {
+                    streams,
+                    devices: device_type,
+                    clipboard_enabled,
+                    screen_share_enabled: current_session.screen_share_enabled,
+                },
+            ));
         }
         drop(remote_sessions);
 
@@ -495,12 +529,18 @@ impl RemoteDesktopBackend {
             }],
         ))
         .await;
-        Ok(PortalResponse::Success(RemoteStartReturnValue {
-            streams,
-            devices: device_type,
-            screen_share_enabled,
-            ..Default::default()
-        }))
+        let clipboard_enabled = clipboard_requested
+            && crate::clipboard::ensure_clipboard_session(&session_handle, dbus_connection.clone())
+                .await;
+        Ok(remote_start_response(
+            &session_handle,
+            RemoteStartReturnValue {
+                streams,
+                devices: device_type,
+                clipboard_enabled,
+                screen_share_enabled,
+            },
+        ))
     }
 
     // keyboard and else

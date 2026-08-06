@@ -91,7 +91,7 @@ impl CursorMode {
 pub enum SessionType {
     ScreenCast,
     Remote,
-    Clipboard,
+    InputCapture,
 }
 
 #[derive(Default, Serialize, Deserialize, PartialEq, Eq, Debug, Copy, Clone, Type)]
@@ -119,6 +119,7 @@ pub struct Session {
 
     pub device_type: BitFlags<DeviceType>,
     pub screen_share_enabled: bool,
+    pub clipboard_requested: bool,
 }
 
 impl Session {
@@ -132,6 +133,7 @@ impl Session {
             persist_mode: PersistMode::DoNot,
             device_type: DeviceType::Keyboard.into(),
             screen_share_enabled: false,
+            clipboard_requested: false,
         }
     }
     pub fn set_screencast_options(&mut self, options: SelectSourcesOptions) {

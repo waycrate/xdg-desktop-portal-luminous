@@ -70,6 +70,7 @@ rustix = { version = "1.1.4", features = ["fs", "use-libc"] }
 wayland-protocols = { version = "0.32.13", default-features = false, features = [
 	"unstable",
 	"client",
+	"staging",
 ] }
 
 wayland-protocols-wlr = { version = "0.3.12", default-features = false, features = [
