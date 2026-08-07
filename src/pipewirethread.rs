@@ -4,6 +4,7 @@ use libwayshot::{
     reexport::{ExtForeignToplevelHandleV1, WlOutput},
 };
 use pipewire::spa::pod::Pod;
+use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::sys as libspa_sys;
 use pipewire::{
     spa::{
@@ -14,6 +15,7 @@ use pipewire::{
     stream::StreamState,
 };
 use std::ffi::c_void;
+use std::iter;
 use std::{io, os::fd::IntoRawFd, slice};
 use wayland_client::WEnum;
 use wayland_client::protocol::wl_shm::Format;
@@ -99,6 +101,7 @@ struct StreamingData {
     size: libwayshot::Size,
     target: CastTarget,
     gbm_support: bool,
+    modifiers: Vec<gbm::Modifier>,
 }
 
 impl StreamingData {
@@ -120,6 +123,7 @@ impl StreamingData {
             size: libwayshot::Size { width, height },
             target,
             gbm_support,
+            modifiers: vec![],
         }
     }
 
@@ -178,7 +182,11 @@ impl StreamingData {
             tracing::info!("Allocate dmabuf buffer");
             unit = self
                 .connection
-                .create_screencast_with_dmabuf(self.target.wayshot_target(), self.overlay_cursor)
+                .create_screencast_with_dmabuf(
+                    self.target.wayshot_target(),
+                    self.overlay_cursor,
+                    &self.modifiers,
+                )
                 .expect("We should make sure the protocol is existed");
             let bo = unit.dmabuf_bo().unwrap();
             let plane_len = bo.plane_count() as usize;
@@ -248,24 +256,64 @@ impl StreamingData {
         drop(cast);
     }
 
-    fn param_changed(&mut self, id: u32, pod: Option<&Pod>) {
+    fn param_changed(&mut self, stream: &pipewire::stream::Stream, id: u32, pod: Option<&Pod>) {
         if id != libspa_sys::SPA_PARAM_Format {
             return;
         }
         if let Some(pod) = pod {
-            let mut chosen_format_info = VideoInfoRaw::new();
-            match chosen_format_info.parse(pod) {
-                Ok(_) => {
-                    if let Some(wl_shm_fmt) = spa_format_to_wl_shm(chosen_format_info.format()) {
-                        self.chosen_format = Some(wl_shm_fmt);
-                    } else {
-                        tracing::error!(
-                            "Could not convert SPA format chosen by PipeWire server to wl_shm format"
-                        );
+            if !self.gbm_support {
+                let mut chosen_format_info = VideoInfoRaw::new();
+                match chosen_format_info.parse(pod) {
+                    Ok(_) => {
+                        if let Some(wl_shm_fmt) = spa_format_to_wl_shm(chosen_format_info.format())
+                        {
+                            self.chosen_format = Some(wl_shm_fmt);
+                        } else {
+                            tracing::error!(
+                                "Could not convert SPA format chosen by PipeWire server to wl_shm format"
+                            );
+                        }
                     }
-                }
-                Err(e) => tracing::error!("Could not parse format chosen by PipeWire server: {e}"),
+                    Err(e) => {
+                        tracing::error!("Could not parse format chosen by PipeWire server: {e}")
+                    }
+                };
+            }
+            let value = PodDeserializer::deserialize_from::<pod::Value>(pod.as_bytes());
+            let Ok((_, pod::Value::Object(object))) = &value else {
+                return;
             };
+
+            let Some(modifier_prop) = &object
+                .properties
+                .iter()
+                .find(|p| p.key == spa::sys::SPA_FORMAT_VIDEO_modifier)
+            else {
+                return;
+            };
+            let pod::Value::Choice(pod::ChoiceValue::Long(spa::utils::Choice(
+                _,
+                spa::utils::ChoiceEnum::Enum {
+                    default,
+                    alternatives,
+                },
+            ))) = &modifier_prop.value
+            else {
+                return;
+            };
+            self.modifiers = iter::once(default)
+                .chain(alternatives)
+                .map(|x| gbm::Modifier::from(*x as u64))
+                .collect();
+            let formats: Vec<VideoFormat> = iter::once(default)
+                .chain(alternatives)
+                .flat_map(|x| dmabuf_format_to_spa(*x as u32))
+                .collect();
+            let pod = format(self.size.width, self.size.height, formats);
+            let mut params = vec![Pod::from_bytes(pod.as_slice()).unwrap()];
+            if let Err(err) = stream.update_params(&mut params) {
+                tracing::error!("failed to update pipewire params :{err}");
+            }
         }
     }
 }
@@ -306,26 +354,32 @@ fn start_stream(
     let gbm_support = if *HEADLESS_START {
         false
     } else {
-        let mut gbm_support = connection.try_init_dmabuf(target.wayshot_target()).is_ok();
-        if gbm_support {
-            // NOTE: try to run screencast once
-            // If succeeded, We can think that it has gbm_support
-            gbm_support = connection
-                .create_screencast_with_dmabuf(target.wayshot_target(), overlay_cursor)
-                .is_ok();
-        }
-
-        gbm_support
+        connection.try_init_dmabuf(target.wayshot_target()).is_ok()
     };
-    let frame_format_list = connection.get_available_frame_formats(&target.wayshot_target())?;
-    if frame_format_list.is_empty() {
-        return Err(anyhow::anyhow!("We need at least one format"));
-    }
-    let libwayshot::Size { width, height } = frame_format_list[0].size;
-    let available_video_formats: Vec<VideoFormat> = frame_format_list
-        .iter()
-        .filter_map(|frame_format| wl_shm_format_to_spa(frame_format.format))
-        .collect();
+    let (frame_format_list, frame_dma_format) =
+        connection.get_available_frame_formats(&target.wayshot_target())?;
+    let libwayshot::Size { width, height } = if gbm_support {
+        if frame_dma_format.is_empty() {
+            return Err(anyhow::anyhow!("We need at least one format"));
+        }
+        frame_dma_format[0].size
+    } else {
+        if frame_format_list.is_empty() {
+            return Err(anyhow::anyhow!("We need at least one format"));
+        }
+        frame_format_list[0].size
+    };
+    let available_video_formats: Vec<VideoFormat> = if gbm_support {
+        frame_dma_format
+            .iter()
+            .filter_map(|frame_format| dmabuf_format_to_spa(frame_format.format))
+            .collect()
+    } else {
+        frame_format_list
+            .iter()
+            .filter_map(|frame_format| wl_shm_format_to_spa(frame_format.format))
+            .collect()
+    };
 
     let listener = stream
         .add_local_listener_with_user_data(StreamingData::new(
@@ -351,8 +405,8 @@ fn start_stream(
                 _ => {}
             }
         })
-        .param_changed(|_stream, streaming_data, id, pod| {
-            streaming_data.param_changed(id, pod);
+        .param_changed(|stream, streaming_data, id, pod| {
+            streaming_data.param_changed(stream, id, pod);
         })
         .add_buffer(|_, data, buffer| {
             data.add_buffer(buffer);
@@ -539,4 +593,30 @@ fn wl_shm_format_to_spa(format: Format) -> Option<VideoFormat> {
         Format::Bgra1010102 => Some(VideoFormat::BGRA_102LE),
         _ => None,
     }
+}
+
+fn dmabuf_format_to_spa(format: u32) -> Option<VideoFormat> {
+    let drm_format = format.try_into().ok()?;
+    Some(match drm_format {
+        drm::buffer::DrmFourcc::Argb8888 => VideoFormat::RGBA,
+        drm::buffer::DrmFourcc::Xrgb8888 => VideoFormat::BGRx,
+        drm::buffer::DrmFourcc::Rgba8888 => VideoFormat::ABGR,
+        drm::buffer::DrmFourcc::Rgbx8888 => VideoFormat::xRGB,
+        drm::buffer::DrmFourcc::Abgr8888 => VideoFormat::RGBA,
+        drm::buffer::DrmFourcc::Xbgr8888 => VideoFormat::RGBx,
+        drm::buffer::DrmFourcc::Bgra8888 => VideoFormat::ARGB,
+        drm::buffer::DrmFourcc::Bgrx8888 => VideoFormat::xRGB,
+        drm::buffer::DrmFourcc::Xrgb2101010 => VideoFormat::xRGB_210LE,
+        drm::buffer::DrmFourcc::Xbgr2101010 => VideoFormat::xBGR_210LE,
+        drm::buffer::DrmFourcc::Rgbx1010102 => VideoFormat::RGBx_102LE,
+        drm::buffer::DrmFourcc::Bgrx1010102 => VideoFormat::BGRx_102LE,
+        drm::buffer::DrmFourcc::Argb2101010 => VideoFormat::ARGB_210LE,
+        drm::buffer::DrmFourcc::Abgr2101010 => VideoFormat::ABGR_210LE,
+        drm::buffer::DrmFourcc::Rgba1010102 => VideoFormat::RGBA_102LE,
+        drm::buffer::DrmFourcc::Bgra1010102 => VideoFormat::BGRA_102LE,
+        drm::buffer::DrmFourcc::Rgb888 => VideoFormat::RGB,
+        drm::buffer::DrmFourcc::Bgr888 => VideoFormat::BGR,
+        drm::buffer::DrmFourcc::Nv12 => VideoFormat::NV12,
+        _ => VideoFormat::Unknown,
+    })
 }

@@ -2644,9 +2644,7 @@ dependencies = [
 
 [[package]]
 name = "libwayshot"
-version = "0.9.0-rc1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54f31b23a1e49b7f004e60fdc8b3f6a0ced57be0a1c5ba49212282f2fba0c94f"
+version = "0.9.0"
 dependencies = [
  "drm 0.15.0",
  "gbm",
@@ -6209,8 +6207,10 @@ dependencies = [
  "calloop 0.14.4",
  "calloop-wayland-source 0.4.1",
  "csscolorparser",
+ "drm 0.15.0",
  "enumflags2",
  "futures",
+ "gbm",
  "iced",
  "iced_futures",
  "iced_layershell",
