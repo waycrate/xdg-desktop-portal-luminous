@@ -1,133 +1,250 @@
 use std::{
     collections::HashMap,
-    os::fd::{AsFd, AsRawFd, OwnedFd},
-};
-
-use calloop_wayland_source::WaylandSource;
-use sctk::registry::{ProvidesRegistryState, RegistryState};
-use wayland_protocols::ext::data_control::v1::client::{
-    ext_data_control_device_v1::{self, ExtDataControlDeviceV1},
-    ext_data_control_manager_v1::ExtDataControlManagerV1,
-    ext_data_control_offer_v1::{self, ExtDataControlOfferV1},
-    ext_data_control_source_v1,
+    io,
+    os::fd::{AsFd, OwnedFd},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+    },
 };
 
 use calloop::{
     EventLoop,
-    channel::{self, Channel, Sender},
+    channel::{self, Channel, SyncSender},
 };
-use tokio::sync::oneshot::Sender as OneSender;
+use calloop_wayland_source::WaylandSource;
+use os_pipe::pipe;
+use sctk::registry::{ProvidesRegistryState, RegistryState};
+use tokio::sync::{mpsc::Sender as SignalSender, oneshot::Sender as OneSender, watch};
 use wayland_client::{
-    Connection, Dispatch, QueueHandle, delegate_noop, event_created_child,
-    globals::registry_queue_init, protocol::wl_seat::WlSeat,
+    Connection, Dispatch, Proxy, QueueHandle, backend::ObjectId, delegate_noop,
+    event_created_child, globals::registry_queue_init, protocol::wl_seat::WlSeat,
 };
+use wayland_protocols::ext::data_control::v1::client::{
+    ext_data_control_device_v1::{self, ExtDataControlDeviceV1},
+    ext_data_control_manager_v1::ExtDataControlManagerV1,
+    ext_data_control_offer_v1::{self, ExtDataControlOfferV1},
+    ext_data_control_source_v1::{self, ExtDataControlSourceV1},
+};
+use zbus::zvariant::OwnedObjectPath;
 
-use os_pipe::{PipeReader, pipe};
+static CLIPBOARD_SERIAL: AtomicU32 = AtomicU32::new(1);
 
-pub struct ClipboardThread {
-    pub sender: Sender<ClipboardRequest>,
+// caps fds pinned by clients that never call SelectionWriteDone
+const MAX_PENDING_TRANSFERS: usize = 16;
+// bounds queued commands against a stalled worker; try_send surfaces Full as a D-Bus error
+const REQUEST_QUEUE_DEPTH: usize = 64;
+
+pub(super) struct TransferEvent {
+    pub(super) mime_type: String,
+    pub(super) serial: u32,
+}
+
+#[derive(Clone)]
+pub(super) struct OwnerState {
+    pub(super) mime_types: Vec<String>,
+    pub(super) session_is_owner: bool,
+}
+
+pub(super) enum ClipboardRequest {
+    SetSelection {
+        mime_types: Vec<String>,
+    },
+    Write {
+        serial: u32,
+        sender: OneSender<Result<OwnedFd, String>>,
+    },
+    WriteDone {
+        serial: u32,
+        success: bool,
+        sender: OneSender<Result<(), String>>,
+    },
+    Read {
+        mime_type: String,
+        sender: OneSender<Result<OwnedFd, String>>,
+    },
+    Stop,
+}
+
+pub(super) struct ClipboardThread {
+    pub(super) sender: SyncSender<ClipboardRequest>,
+    pub(super) shutdown: Arc<AtomicBool>,
+    pub(super) exit_rx: watch::Receiver<()>,
 }
 
 impl ClipboardThread {
-    pub fn new() -> Self {
-        let (sender, receiver) = channel::channel();
-        std::thread::spawn(move || {
-            let _ = clipboard_loop(receiver);
-        });
-        Self { sender }
-    }
+    pub(super) fn spawn(
+        transfer_tx: SignalSender<TransferEvent>,
+        owner_tx: watch::Sender<Option<OwnerState>>,
+        ready_tx: tokio::sync::oneshot::Sender<Result<(), String>>,
+        session_path: OwnedObjectPath,
+    ) -> io::Result<Self> {
+        let (sender, receiver) = channel::sync_channel(REQUEST_QUEUE_DEPTH);
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let (exit_tx, exit_rx) = watch::channel(());
+        let log_path = session_path.clone();
 
-    pub fn stop(&self) {
-        let _ = self.sender.send(ClipboardRequest::Stop);
+        std::thread::Builder::new()
+            .name("luminous-clipboard".to_owned())
+            .spawn(move || {
+                if let Err(error) = clipboard_loop(
+                    transfer_tx,
+                    owner_tx,
+                    ready_tx,
+                    exit_tx,
+                    receiver,
+                    worker_shutdown,
+                    session_path,
+                ) {
+                    tracing::error!(%log_path, %error, "clipboard worker failed");
+                }
+                tracing::info!(%log_path, "clipboard worker exited");
+            })?;
+
+        Ok(Self {
+            sender,
+            shutdown,
+            exit_rx,
+        })
     }
 }
 
-pub struct ClipboardWl {
+impl Drop for ClipboardThread {
+    fn drop(&mut self) {
+        // NOTE: never block here (runs inside Session.Close); the flag alone stops the worker
+        self.shutdown.store(true, Ordering::SeqCst);
+        let _ = self.sender.try_send(ClipboardRequest::Stop);
+    }
+}
+
+struct ClipboardWl {
     registry_state: RegistryState,
-    seat: WlSeat,
     data_manager: ExtDataControlManagerV1,
     device: ExtDataControlDeviceV1,
     qh: QueueHandle<Self>,
+    connection: Connection,
+    transfer_tx: SignalSender<TransferEvent>,
+    owner_tx: watch::Sender<Option<OwnerState>>,
+    loop_signal: calloop::LoopSignal,
+    defunct: bool,
+    shutdown: Arc<AtomicBool>,
+    pending_offers: HashMap<ObjectId, Vec<String>>,
     current_selection: Option<ExtDataControlOfferV1>,
+    current_mime_types: Vec<String>,
     primary_selection: Option<ExtDataControlOfferV1>,
-    piperead: Option<PipeReader>,
-    mime_types: Vec<String>,
-    write_data: HashMap<i32, ClipboardData>,
+    own_source: Option<ExtDataControlSourceV1>,
+    is_owner: bool,
+    pending_writes: HashMap<u32, OwnedFd>,
 }
 
-struct ClipboardData {
-    sender: OneSender<(OwnedFd, String)>,
-    #[allow(unused)]
-    serial: u32,
-}
-
-impl Dispatch<ext_data_control_device_v1::ExtDataControlDeviceV1, ()> for ClipboardWl {
+impl Dispatch<ExtDataControlDeviceV1, ()> for ClipboardWl {
     fn event(
         state: &mut Self,
-        _proxy: &ext_data_control_device_v1::ExtDataControlDeviceV1,
-        event: <ext_data_control_device_v1::ExtDataControlDeviceV1 as wayland_client::Proxy>::Event,
+        _proxy: &ExtDataControlDeviceV1,
+        event: ext_data_control_device_v1::Event,
         _data: &(),
-        _conn: &wayland_client::Connection,
-        _qhandle: &wayland_client::QueueHandle<Self>,
+        _conn: &Connection,
+        _qhandle: &QueueHandle<Self>,
     ) {
         match event {
-            ext_data_control_device_v1::Event::DataOffer { .. } => {}
-            ext_data_control_device_v1::Event::Finished => {
-                state.reset_offer();
-                state.reset_data_device();
+            ext_data_control_device_v1::Event::DataOffer { id } => {
+                state.pending_offers.insert(id.id(), Vec::new());
             }
             ext_data_control_device_v1::Event::Selection { id } => {
-                if let Some(offer) = id {
-                    state.current_selection = Some(offer);
+                if let Some(old) = state.current_selection.take() {
+                    state.pending_offers.remove(&old.id());
+                    old.destroy();
                 }
+                let mime_types = match &id {
+                    Some(offer) => state.pending_offers.remove(&offer.id()).unwrap_or_default(),
+                    None => Vec::new(),
+                };
+                state.current_mime_types = mime_types.clone();
+                state.current_selection = id;
+                state.owner_tx.send_replace(Some(OwnerState {
+                    mime_types,
+                    session_is_owner: state.is_owner,
+                }));
             }
             ext_data_control_device_v1::Event::PrimarySelection { id } => {
-                // NOTE: we need to manager its lifetime
+                if let Some(offer) = &id {
+                    state.pending_offers.remove(&offer.id());
+                }
                 state.reset_primary_offer(id);
+            }
+            ext_data_control_device_v1::Event::Finished => {
+                tracing::error!("ext_data_control device finished; stopping clipboard worker");
+                state.defunct = true;
+                state.reset_offer();
+                state.loop_signal.stop();
             }
             _ => unreachable!(),
         }
     }
-    event_created_child!(ClipboardWl, ext_data_control_device_v1::ExtDataControlDeviceV1, [
-        ext_data_control_device_v1::EVT_DATA_OFFER_OPCODE => (ext_data_control_offer_v1::ExtDataControlOfferV1, ())
+
+    event_created_child!(ClipboardWl, ExtDataControlDeviceV1, [
+        ext_data_control_device_v1::EVT_DATA_OFFER_OPCODE => (ExtDataControlOfferV1, ())
     ]);
 }
 
-impl Dispatch<ext_data_control_source_v1::ExtDataControlSourceV1, ()> for ClipboardWl {
+impl Dispatch<ExtDataControlSourceV1, ()> for ClipboardWl {
     fn event(
         state: &mut Self,
-        _proxy: &ext_data_control_source_v1::ExtDataControlSourceV1,
-        event: <ext_data_control_source_v1::ExtDataControlSourceV1 as wayland_client::Proxy>::Event,
+        proxy: &ExtDataControlSourceV1,
+        event: ext_data_control_source_v1::Event,
         _data: &(),
-        _conn: &wayland_client::Connection,
-        _qhandle: &wayland_client::QueueHandle<Self>,
+        _conn: &Connection,
+        _qhandle: &QueueHandle<Self>,
     ) {
         match event {
             ext_data_control_source_v1::Event::Send { mime_type, fd } => {
-                let raw_fd = fd.as_raw_fd();
-                let Some(data) = state.write_data.remove(&raw_fd) else {
+                if state.pending_writes.len() >= MAX_PENDING_TRANSFERS {
+                    tracing::warn!(
+                        "pending clipboard transfers at capacity; rejecting paste request"
+                    );
                     return;
-                };
-                let _ = data.sender.send((fd, mime_type));
+                }
+                let serial = CLIPBOARD_SERIAL.fetch_add(1, Ordering::Relaxed);
+                state.pending_writes.insert(serial, fd);
+                if state
+                    .transfer_tx
+                    .try_send(TransferEvent { mime_type, serial })
+                    .is_err()
+                {
+                    state.pending_writes.remove(&serial);
+                }
             }
             ext_data_control_source_v1::Event::Cancelled => {
-                // TODO: maybe should one request to one offer?
-                state.write_data.clear();
+                if state.own_source.as_ref().map(Proxy::id) == Some(proxy.id()) {
+                    state.own_source = None;
+                    state.is_owner = false;
+                    state.owner_tx.send_replace(Some(OwnerState {
+                        mime_types: state.current_mime_types.clone(),
+                        session_is_owner: false,
+                    }));
+                }
+                proxy.destroy();
             }
             _ => unreachable!(),
         }
     }
 }
 
-impl Dispatch<ext_data_control_offer_v1::ExtDataControlOfferV1, ()> for ClipboardWl {
+impl Dispatch<ExtDataControlOfferV1, ()> for ClipboardWl {
     fn event(
-        _state: &mut Self,
-        _proxy: &ext_data_control_offer_v1::ExtDataControlOfferV1,
-        _event: <ext_data_control_offer_v1::ExtDataControlOfferV1 as wayland_client::Proxy>::Event,
+        state: &mut Self,
+        proxy: &ExtDataControlOfferV1,
+        event: ext_data_control_offer_v1::Event,
         _data: &(),
-        _conn: &wayland_client::Connection,
-        _qhandle: &wayland_client::QueueHandle<Self>,
+        _conn: &Connection,
+        _qhandle: &QueueHandle<Self>,
     ) {
+        if let ext_data_control_offer_v1::Event::Offer { mime_type } = event
+            && let Some(mimes) = state.pending_offers.get_mut(&proxy.id())
+        {
+            mimes.push(mime_type);
+        }
     }
 }
 
@@ -135,6 +252,7 @@ impl ProvidesRegistryState for ClipboardWl {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }
+
     sctk::registry_handlers![];
 }
 
@@ -142,126 +260,195 @@ delegate_noop!(ClipboardWl: ignore WlSeat);
 delegate_noop!(ClipboardWl: ignore ExtDataControlManagerV1);
 sctk::delegate_registry!(ClipboardWl);
 
-pub enum ClipboardRequest {
-    SetSelection {
-        mime_types: Vec<String>,
-    },
-    Write {
-        sender: OneSender<(OwnedFd, String)>,
-        serial: u32,
-    },
-
-    Read {
-        sender: OneSender<OwnedFd>,
-        mime_type: String,
-    },
-    Stop,
-}
-
 impl ClipboardWl {
-    fn reset_data_device(&mut self) {
-        self.device.destroy();
-        self.device = self.data_manager.get_data_device(&self.seat, &self.qh, ());
-    }
     fn reset_offer(&mut self) {
         if let Some(offer) = self.current_selection.take() {
-            offer.destroy()
+            offer.destroy();
         }
+        self.current_mime_types.clear();
     }
-    fn reset_primary_offer(&mut self, id: Option<ExtDataControlOfferV1>) {
-        if let Some(id) = id {
-            if let Some(offer) = self.primary_selection.take() {
-                offer.destroy()
-            }
-            self.primary_selection = Some(id);
-        }
-    }
-    pub fn select_selection(&mut self, mime_types: Vec<String>) -> anyhow::Result<()> {
-        self.mime_types = mime_types.clone();
-        self.reset_data_device();
-        let source = self.data_manager.create_data_source(&self.qh, ());
 
-        for mime_type in mime_types {
-            source.offer(mime_type);
+    fn reset_primary_offer(&mut self, id: Option<ExtDataControlOfferV1>) {
+        if let Some(offer) = self.primary_selection.take() {
+            offer.destroy();
         }
-        self.device.set_selection(Some(&source));
-        Ok(())
+        self.primary_selection = id;
+    }
+
+    fn set_selection(&mut self, mime_types: Vec<String>) {
+        if mime_types.is_empty() {
+            self.device.set_selection(None);
+            self.own_source = None;
+            self.is_owner = false;
+            self.owner_tx.send_replace(Some(OwnerState {
+                mime_types: Vec::new(),
+                session_is_owner: false,
+            }));
+        } else {
+            let source = self.data_manager.create_data_source(&self.qh, ());
+            for mime_type in &mime_types {
+                source.offer(mime_type.clone());
+            }
+            self.device.set_selection(Some(&source));
+            self.own_source = Some(source);
+            self.is_owner = true;
+        }
+        let _ = self.connection.flush();
+    }
+
+    fn read_selection(&mut self, mime_type: &str) -> Result<OwnedFd, String> {
+        let (read, write) = pipe().map_err(|error| format!("pipe failed: {error}"))?;
+        let offer = self.current_selection.as_ref().filter(|_| {
+            self.current_mime_types
+                .iter()
+                .any(|offered| offered == mime_type)
+        });
+        if let Some(offer) = offer {
+            offer.receive(mime_type.to_owned(), write.as_fd());
+            let _ = self.connection.flush();
+        }
+        drop(write);
+        Ok(read.into())
     }
 }
-pub fn clipboard_loop(receiver: Channel<ClipboardRequest>) -> anyhow::Result<()> {
-    let connection = Connection::connect_to_env()?;
-    let (globals, event_queue) = registry_queue_init::<ClipboardWl>(&connection)?;
+
+fn handle_request(
+    app_state: &mut ClipboardWl,
+    signal: &calloop::LoopSignal,
+    message: ClipboardRequest,
+) {
+    if app_state.shutdown.load(Ordering::SeqCst) || app_state.defunct {
+        signal.stop();
+        return;
+    }
+
+    match message {
+        ClipboardRequest::SetSelection { mime_types } => {
+            app_state.set_selection(mime_types);
+        }
+        ClipboardRequest::Read { mime_type, sender } => {
+            let result = app_state.read_selection(&mime_type);
+            let _ = sender.send(result);
+        }
+        ClipboardRequest::Write { serial, sender } => {
+            let result = match app_state.pending_writes.get(&serial) {
+                Some(fd) => fd
+                    .try_clone()
+                    .map_err(|error| format!("dup failed: {error}")),
+                None => Err(format!("no pending transfer with serial {serial}")),
+            };
+            let _ = sender.send(result);
+        }
+        ClipboardRequest::WriteDone {
+            serial,
+            success,
+            sender,
+        } => {
+            tracing::debug!(serial, success, "selection write done");
+            let result = match app_state.pending_writes.remove(&serial) {
+                Some(_) => Ok(()),
+                None => Err(format!("no pending transfer with serial {serial}")),
+            };
+            let _ = sender.send(result);
+        }
+        ClipboardRequest::Stop => {
+            app_state.defunct = true;
+            signal.stop();
+        }
+    }
+}
+
+fn clipboard_loop(
+    transfer_tx: SignalSender<TransferEvent>,
+    owner_tx: watch::Sender<Option<OwnerState>>,
+    ready_tx: tokio::sync::oneshot::Sender<Result<(), String>>,
+    exit_tx: watch::Sender<()>,
+    receiver: Channel<ClipboardRequest>,
+    shutdown: Arc<AtomicBool>,
+    session_path: OwnedObjectPath,
+) -> anyhow::Result<()> {
+    tracing::debug!(%session_path, "initializing clipboard worker");
+
+    macro_rules! ready_try {
+        ($expression:expr) => {
+            match $expression {
+                Ok(value) => value,
+                Err(error) => {
+                    let message = error.to_string();
+                    let _ = ready_tx.send(Err(message.clone()));
+                    return Err(anyhow::anyhow!(message));
+                }
+            }
+        };
+    }
+
+    let connection = ready_try!(Connection::connect_to_env());
+    let (globals, mut event_queue) = ready_try!(registry_queue_init::<ClipboardWl>(&connection));
     let qh = event_queue.handle();
-    let seat = globals.bind::<WlSeat, _, _>(&qh, 1..=1, ())?;
-    let data_manager = globals.bind::<ExtDataControlManagerV1, _, _>(&qh, 1..=1, ())?;
+    let seat = ready_try!(globals.bind::<WlSeat, _, _>(&qh, 1..=1, ()));
+    let data_manager = ready_try!(globals.bind::<ExtDataControlManagerV1, _, _>(&qh, 1..=1, ()));
     let device = data_manager.get_data_device(&seat, &qh, ());
-    let mut clipbard = ClipboardWl {
+    let mut event_loop: EventLoop<ClipboardWl> = ready_try!(EventLoop::try_new());
+    let loop_signal = event_loop.get_signal();
+    let mut clipboard = ClipboardWl {
         registry_state: RegistryState::new(&globals),
-        seat,
         data_manager,
         device,
         qh,
+        connection: connection.clone(),
+        transfer_tx,
+        owner_tx,
+        loop_signal,
+        defunct: false,
+        shutdown,
+        pending_offers: HashMap::new(),
         current_selection: None,
+        current_mime_types: Vec::new(),
         primary_selection: None,
-        piperead: None,
-        mime_types: Vec::new(),
-        write_data: HashMap::new(),
+        own_source: None,
+        is_owner: false,
+        pending_writes: HashMap::new(),
     };
+    // Rebinding after `clipboard` makes the exit signal drop first during unwinding.
+    let exit_tx = exit_tx;
 
-    let mut event_loop: EventLoop<ClipboardWl> =
-        EventLoop::try_new().expect("Failed to initialize the event loop");
+    ready_try!(event_queue.roundtrip(&mut clipboard));
+    if clipboard.defunct {
+        let message = "ext_data_control device finished during initialization".to_owned();
+        let _ = ready_tx.send(Err(message.clone()));
+        return Err(anyhow::anyhow!(message));
+    }
 
-    let signal = event_loop.get_signal();
-    WaylandSource::new(connection, event_queue)
-        .insert(event_loop.handle())
-        .expect("Failed to init wayland source");
-    event_loop
-        .handle()
-        .insert_source(receiver, move |event, _, app_state| {
-            let channel::Event::Msg(message) = event else {
-                return;
-            };
+    ready_try!(WaylandSource::new(connection.clone(), event_queue).insert(event_loop.handle()));
 
-            match message {
-                ClipboardRequest::SetSelection { mime_types } => {
-                    let _ = app_state.select_selection(mime_types);
-                }
-                ClipboardRequest::Read { sender, mime_type } => {
-                    let Some(offer) = &app_state.current_selection else {
+    let request_signal = event_loop.get_signal();
+    ready_try!(
+        event_loop
+            .handle()
+            .insert_source(receiver, move |event, _, app_state| {
+                let message = match event {
+                    channel::Event::Msg(message) => message,
+                    channel::Event::Closed => {
+                        request_signal.stop();
                         return;
-                    };
-                    let (read, write) = pipe().unwrap();
-
-                    offer.receive(mime_type, write.as_fd());
-                    let _ = sender.send(read.into());
-                }
-                ClipboardRequest::Write { sender, serial } => {
-                    let Some(offer) = &app_state.current_selection else {
-                        return;
-                    };
-
-                    let (read, write) = pipe().unwrap();
-                    for mime_type in &app_state.mime_types {
-                        offer.receive(mime_type.clone(), write.as_fd());
                     }
-                    let raw_fd = write.as_raw_fd();
-                    app_state.piperead = Some(read);
-                    app_state
-                        .write_data
-                        .insert(raw_fd, ClipboardData { sender, serial });
-                }
-                ClipboardRequest::Stop => {
-                    signal.stop();
-                }
+                };
+                handle_request(app_state, &request_signal, message);
+            })
+    );
+
+    let _ = ready_tx.send(Ok(()));
+
+    let result = event_loop.run(
+        std::time::Duration::from_millis(20),
+        &mut clipboard,
+        |state| {
+            if state.shutdown.load(Ordering::SeqCst) || state.defunct {
+                state.loop_signal.stop();
             }
-        })
-        .expect("Error during event loop");
-    event_loop
-        .run(
-            std::time::Duration::from_millis(20),
-            &mut clipbard,
-            |_data| {},
-        )
-        .expect("Error during event loop");
+        },
+    );
+    drop(exit_tx);
+    result?;
     Ok(())
 }

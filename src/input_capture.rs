@@ -170,7 +170,7 @@ impl InputCapture {
                 },
             )
             .await?;
-        let current_session = Session::new(session_handle.clone(), SessionType::Remote);
+        let current_session = Session::new(session_handle.clone(), SessionType::InputCapture);
         append_session(current_session.clone()).await;
         server.at(session_handle.clone(), current_session).await?;
 
