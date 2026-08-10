@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     clipboard::remove_clipboard_session,
-    remotedesktop::{SelectDevicesOptions, remove_remote_session},
+    remotedesktop::{RestoreData, SelectDevicesOptions, remove_remote_session},
     screencast::{SelectSourcesOptions, remove_cast_session},
 };
 
@@ -120,6 +120,7 @@ pub struct Session {
     pub device_type: BitFlags<DeviceType>,
     pub screen_share_enabled: bool,
     pub clipboard_requested: bool,
+    pub restore_data: Option<RestoreData>,
 }
 
 impl Session {
@@ -134,6 +135,7 @@ impl Session {
             device_type: DeviceType::Keyboard.into(),
             screen_share_enabled: false,
             clipboard_requested: false,
+            restore_data: None,
         }
     }
     pub fn set_screencast_options(&mut self, options: SelectSourcesOptions) {
@@ -157,6 +159,7 @@ impl Session {
         if let Some(persist_mode) = options.persist_mode {
             self.persist_mode = persist_mode;
         }
+        self.restore_data = options.restore_data;
     }
 }
 

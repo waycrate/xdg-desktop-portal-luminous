@@ -110,6 +110,8 @@ struct RemoteStartReturnValue {
     clipboard_enabled: bool,
     #[serde(with = "as_value")]
     screen_share_enabled: bool,
+    #[serde(with = "as_value")]
+    restore_data: RestoreData,
 }
 
 fn remote_start_response(
@@ -132,6 +134,32 @@ fn remote_start_other() -> ResponseDispatchNotifier<PortalResponse<RemoteStartRe
     ResponseDispatchNotifier::new(PortalResponse::Other).0
 }
 
+#[derive(Type, Debug, Default, Deserialize, Serialize, Clone)]
+#[zvariant(signature = "(suv)")]
+pub struct RestoreData {
+    vendor_name: String,
+    version: u32,
+    data: LuminousData,
+}
+
+const VENDOR_NAME: &str = "luminous";
+const RESTORE_DATA_VERSION: u32 = 1;
+
+impl RestoreData {
+    pub fn new(data: LuminousData) -> Self {
+        Self {
+            vendor_name: VENDOR_NAME.to_owned(),
+            version: RESTORE_DATA_VERSION,
+            data,
+        }
+    }
+}
+
+#[derive(Type, Debug, Default, Deserialize, Serialize, Clone)]
+pub struct LuminousData {
+    pub display: String,
+}
+
 #[derive(Type, Debug, Default, Deserialize, Serialize)]
 /// Specified options for a [`RemoteDesktop::select_devices`] request.
 #[zvariant(signature = "dict")]
@@ -141,7 +169,7 @@ pub struct SelectDevicesOptions {
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub types: Option<BitFlags<DeviceType>>,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
-    pub restore_token: Option<String>,
+    pub restore_data: Option<RestoreData>,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub persist_mode: Option<PersistMode>,
 }
@@ -159,6 +187,7 @@ pub struct RemoteSessionData {
     pub zones: Vec<Zone>,
     pub zone_id: ZoneId,
     pub barriers: Vec<BarrierInfo>,
+    pub restore_data: RestoreData,
     cursor: CursorPosition,
     activation_id: u32,
 }
@@ -169,6 +198,7 @@ impl RemoteSessionData {
         cast_thread: Option<ScreencastThread>,
         remote_control: RemoteControl,
         zones: Vec<Zone>,
+        restore_data: RestoreData,
     ) -> Self {
         Self {
             session_handle,
@@ -179,6 +209,7 @@ impl RemoteSessionData {
             cursor: CursorPosition::default(),
             barriers: Vec::new(),
             activation_id: 0,
+            restore_data,
         }
     }
     pub fn step(&mut self) {
@@ -464,6 +495,7 @@ impl RemoteDesktopBackend {
             .iter()
             .find(|session| session.session_handle == session_handle.to_string())
         {
+            let restore_data = session.restore_data.clone();
             let streams = session.streams();
             drop(remote_sessions);
             let clipboard_enabled = clipboard_requested
@@ -479,6 +511,7 @@ impl RemoteDesktopBackend {
                     devices: device_type,
                     clipboard_enabled,
                     screen_share_enabled: current_session.screen_share_enabled,
+                    restore_data,
                 },
             ));
         }
@@ -494,7 +527,33 @@ impl RemoteDesktopBackend {
             x,
             y,
             wl_output,
-        } = get_monitor_info_from_socket(&connection)?;
+            output_name,
+        } = if let Some(RestoreData {
+            vendor_name,
+            version,
+            data,
+        }) = current_session.restore_data
+            && vendor_name == VENDOR_NAME
+            && version == RESTORE_DATA_VERSION
+            && let Some(display) = connection
+                .get_all_outputs()
+                .iter()
+                .find(|output_info| output_info.name == data.display)
+        {
+            let libwayshot::Size { width, height } = space_size(&connection);
+
+            let libwayshot::region::Position { x, y } = display.logical_region.inner.position;
+            RemoteInfo {
+                x,
+                y,
+                width,
+                height,
+                output_name: display.name.to_owned(),
+                wl_output: display.wl_output.clone(),
+            }
+        } else {
+            get_monitor_info_from_socket(&connection)?
+        };
         if screen_share_enabled {
             let show_cursor = current_session.cursor_mode.show_cursor();
 
@@ -519,7 +578,9 @@ impl RemoteDesktopBackend {
             cast_thread = Some(cast_thread_target);
         }
         let remote_control = RemoteControl::init(x as u32, y as u32, width as u32, height as u32);
-
+        let restore_data = RestoreData::new(LuminousData {
+            display: output_name,
+        });
         append_remote_session(RemoteSessionData::new(
             session_handle.to_string(),
             cast_thread,
@@ -530,6 +591,7 @@ impl RemoteDesktopBackend {
                 width: width as u32,
                 height: height as u32,
             }],
+            restore_data.clone(),
         ))
         .await;
         let clipboard_enabled = clipboard_requested
@@ -542,6 +604,7 @@ impl RemoteDesktopBackend {
                 devices: device_type,
                 clipboard_enabled,
                 screen_share_enabled,
+                restore_data,
             },
         ))
     }
@@ -710,6 +773,7 @@ pub struct RemoteInfo {
     pub y: i32,
     pub width: i32,
     pub height: i32,
+    pub output_name: String,
     wl_output: wl_output::WlOutput,
 }
 
@@ -747,6 +811,7 @@ pub fn get_monitor_info_from_socket(
             y,
             width,
             height,
+            output_name: output.name.to_owned(),
             wl_output: output.wl_output.clone(),
         })
     } else {
@@ -768,6 +833,7 @@ pub fn get_monitor_info_from_socket(
             y,
             width,
             height,
+            output_name: screen_info.name.to_owned(),
             wl_output: screen_info.wl_output,
         })
     }
