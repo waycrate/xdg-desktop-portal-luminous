@@ -22,18 +22,24 @@ pub async fn append_session(session: Session) {
     sessions.push(session)
 }
 
-pub async fn remove_session(session: &Session) {
+#[must_use]
+pub async fn remove_session(session: &Session) -> bool {
+    // It will always alive
+    if matches!(session.persist_mode, PersistMode::Application) {
+        return false;
+    }
     let mut sessions = SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
         .position(|the_session| the_session.handle_path == session.handle_path)
     else {
-        return;
+        return true;
     };
     remove_cast_session(&session.handle_path.to_string()).await;
     remove_remote_session(&session.handle_path.to_string()).await;
     remove_clipboard_session(session.handle_path.as_ref()).await;
     sessions.remove(index);
+    return true;
 }
 
 #[bitflags]
@@ -170,10 +176,13 @@ impl Session {
         #[zbus(signal_emitter)] cxts: SignalEmitter<'_>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<()> {
+        if !remove_session(self).await {
+            tracing::info!("Session should not be closed at this time");
+            return Ok(());
+        }
         server
             .remove::<Self, &OwnedObjectPath>(&self.handle_path)
             .await?;
-        remove_session(self).await;
         Self::closed(&cxts, "Closed").await?;
         Ok(())
     }
