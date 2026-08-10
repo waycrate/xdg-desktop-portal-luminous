@@ -39,7 +39,7 @@ pub async fn remove_session(session: &Session) -> bool {
     remove_remote_session(&session.handle_path.to_string()).await;
     remove_clipboard_session(session.handle_path.as_ref()).await;
     sessions.remove(index);
-    return true;
+    true
 }
 
 #[bitflags]
