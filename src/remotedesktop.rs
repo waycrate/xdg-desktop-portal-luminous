@@ -110,8 +110,8 @@ struct RemoteStartReturnValue {
     clipboard_enabled: bool,
     #[serde(with = "as_value")]
     screen_share_enabled: bool,
-    #[serde(with = "as_value")]
-    restore_data: RestoreData,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
+    restore_data: Option<RestoreData>,
 }
 
 fn remote_start_response(
@@ -187,7 +187,7 @@ pub struct RemoteSessionData {
     pub zones: Vec<Zone>,
     pub zone_id: ZoneId,
     pub barriers: Vec<BarrierInfo>,
-    pub restore_data: RestoreData,
+    pub restore_data: Option<RestoreData>,
     cursor: CursorPosition,
     activation_id: u32,
 }
@@ -198,7 +198,7 @@ impl RemoteSessionData {
         cast_thread: Option<ScreencastThread>,
         remote_control: RemoteControl,
         zones: Vec<Zone>,
-        restore_data: RestoreData,
+        restore_data: impl Into<Option<RestoreData>>,
     ) -> Self {
         Self {
             session_handle,
@@ -209,7 +209,7 @@ impl RemoteSessionData {
             cursor: CursorPosition::default(),
             barriers: Vec::new(),
             activation_id: 0,
-            restore_data,
+            restore_data: restore_data.into(),
         }
     }
     pub fn step(&mut self) {
@@ -533,6 +533,7 @@ impl RemoteDesktopBackend {
             version,
             data,
         }) = current_session.restore_data
+            && current_session.persist_mode.is_persist()
             && vendor_name == VENDOR_NAME
             && version == RESTORE_DATA_VERSION
             && let Some(display) = connection
@@ -578,8 +579,10 @@ impl RemoteDesktopBackend {
             cast_thread = Some(cast_thread_target);
         }
         let remote_control = RemoteControl::init(x as u32, y as u32, width as u32, height as u32);
-        let restore_data = RestoreData::new(LuminousData {
-            display: output_name,
+        let restore_data = current_session.persist_mode.is_persist().then(|| {
+            RestoreData::new(LuminousData {
+                display: output_name,
+            })
         });
         append_remote_session(RemoteSessionData::new(
             session_handle.to_string(),

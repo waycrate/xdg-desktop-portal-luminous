@@ -113,6 +113,12 @@ pub enum PersistMode {
     ExplicitlyRevoked = 2,
 }
 
+impl PersistMode {
+    pub fn is_persist(&self) -> bool {
+        matches!(self, Self::Application | Self::ExplicitlyRevoked)
+    }
+}
+
 #[derive(Debug, Clone)]
 // TODO: when is remote?
 pub struct Session {
