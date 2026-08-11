@@ -20,12 +20,17 @@ use libwayshot::region::TopLevel;
 
 const BACKGROUND_PROMPT_QUEUE_CAPACITY: usize = 8;
 const BACKGROUND_PROMPT_TOMBSTONE_CAPACITY: usize = 64;
-const CHOOSER_WIDTH: u32 = 800;
-const CHOOSER_HEIGHT: u32 = 500;
+const CHOOSER_WIDTH: u32 = 1000;
+const CHOOSER_HEIGHT: u32 = 620;
 const CHOOSER_SHADOW_MARGIN: u32 = 24;
 const PERMISSION_DIALOG_WIDTH: u32 = 420;
 const PERMISSION_DIALOG_HEIGHT: u32 = 200;
 const PERMISSION_DIALOG_SHADOW_MARGIN: u32 = 16;
+const PREVIEW_BUTTON_HEIGHT: f32 = 320.0;
+const PREVIEW_BUTTON_PADDING: u16 = 8;
+const PREVIEW_BUTTON_LINE_HEIGHT: f32 = 17.0;
+const FOOTER_HEIGHT: f32 = 81.0;
+const FOOTER_BOX_HEIGHT: f32 = 33.0;
 
 const ACCENT: Color = Color::from_rgb8(56, 132, 228);
 
@@ -50,7 +55,7 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Err
     )
     .layer_settings(LayerShellSettings {
         exclusive_zone: 0,
-        anchor: Anchor::Bottom | Anchor::Left | Anchor::Right | Anchor::Top,
+        anchor: Anchor::all(),
         keyboard_interactivity: KeyboardInteractivity::OnDemand,
         start_mode: StartMode::Background,
         ..Default::default()
@@ -323,8 +328,8 @@ impl AreaSelectorGUI {
                 },
             })
             .width(Length::Fill)
-            .height(Length::Fixed(206.0))
-            .padding(8)
+            .height(Length::Fixed(PREVIEW_BUTTON_HEIGHT))
+            .padding(PREVIEW_BUTTON_PADDING)
             .style(bordered_button_style)
             .into()
     }
@@ -350,7 +355,7 @@ impl AreaSelectorGUI {
                 .center()
                 .width(Length::Fill)
                 .size(14)
-                .line_height(Pixels(17.0))
+                .line_height(Pixels(PREVIEW_BUTTON_LINE_HEIGHT))
                 .font(FONT_MEDIUM)
         ]
         .spacing(12)
@@ -360,8 +365,8 @@ impl AreaSelectorGUI {
         button(button_context)
             .on_press(Message::Selected { id, select })
             .width(Length::Fill)
-            .height(Length::Fixed(206.0))
-            .padding(8)
+            .height(Length::Fixed(PREVIEW_BUTTON_HEIGHT))
+            .padding(PREVIEW_BUTTON_PADDING)
             .style(bordered_button_style)
             .into()
     }
@@ -378,7 +383,7 @@ impl AreaSelectorGUI {
                     .center()
                     .width(Length::Fill)
                     .size(14)
-                    .line_height(Pixels(17.0))
+                    .line_height(Pixels(PREVIEW_BUTTON_LINE_HEIGHT))
                     .font(FONT_MEDIUM),
             )
             .center_x(Length::Fill)
@@ -388,8 +393,8 @@ impl AreaSelectorGUI {
         )
         .on_press(Message::Selected { id, select })
         .width(Length::Fill)
-        .height(Length::Fixed(206.0))
-        .padding(8)
+        .height(Length::Fixed(PREVIEW_BUTTON_HEIGHT))
+        .padding(PREVIEW_BUTTON_PADDING)
         .style(bordered_button_style)
         .into()
     }
@@ -924,7 +929,7 @@ impl AreaSelectorGUI {
         let content = container(content)
             .padding(10)
             .width(Length::Fill)
-            .height(Length::Fixed(226.0));
+            .height(Length::Fill);
 
         let cursor_checkbox = checkbox(self.use_cursor)
             .label("Include cursor")
@@ -961,11 +966,11 @@ impl AreaSelectorGUI {
             .align_y(Alignment::Center)
             .spacing(10)
             .width(Length::Fill)
-            .height(Length::Fixed(33.0)),
+            .height(Length::Fixed(FOOTER_BOX_HEIGHT)),
         )
         .padding([24, 0])
         .width(Length::Fill)
-        .height(Length::Fixed(81.0));
+        .height(Length::Fixed(FOOTER_HEIGHT));
 
         let title = if self.gui_mode == GuiMode::ScreenShot {
             "Take a Screenshot"
