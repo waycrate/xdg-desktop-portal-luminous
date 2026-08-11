@@ -2,9 +2,12 @@ use std::collections::VecDeque;
 
 use iced::futures::channel::mpsc::{Sender, UnboundedSender};
 use iced::widget::{
-    Row, Space, button, checkbox, column, container, grid, image, row, scrollable, text,
+    Row, Space, button, checkbox, column, container, grid, image, row, rule, scrollable, text,
 };
-use iced::{Alignment, Element, Length, Task};
+use iced::{
+    Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Pixels, Shadow, Task,
+    Vector,
+};
 use iced_layershell::daemon;
 use iced_layershell::reexport::{
     Anchor, KeyboardInteractivity, NewLayerShellSettings, OutputOption,
@@ -17,6 +20,28 @@ use libwayshot::region::TopLevel;
 
 const BACKGROUND_PROMPT_QUEUE_CAPACITY: usize = 8;
 const BACKGROUND_PROMPT_TOMBSTONE_CAPACITY: usize = 64;
+const CHOOSER_WIDTH: u32 = 1000;
+const CHOOSER_HEIGHT: u32 = 620;
+const CHOOSER_SHADOW_MARGIN: u32 = 24;
+const PERMISSION_DIALOG_WIDTH: u32 = 420;
+const PERMISSION_DIALOG_HEIGHT: u32 = 200;
+const PERMISSION_DIALOG_SHADOW_MARGIN: u32 = 16;
+const PREVIEW_BUTTON_HEIGHT: f32 = 320.0;
+const PREVIEW_BUTTON_PADDING: u16 = 8;
+const PREVIEW_BUTTON_LINE_HEIGHT: f32 = 17.0;
+const FOOTER_HEIGHT: f32 = 81.0;
+const FOOTER_BOX_HEIGHT: f32 = 33.0;
+
+const ACCENT: Color = Color::from_rgb8(56, 132, 228);
+
+const FONT_MEDIUM: Font = Font {
+    weight: iced::font::Weight::Medium,
+    ..Font::DEFAULT
+};
+const FONT_SEMIBOLD: Font = Font {
+    weight: iced::font::Weight::Semibold,
+    ..Font::DEFAULT
+};
 
 pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Error> {
     unsafe { std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info") }
@@ -30,7 +55,7 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Err
     )
     .layer_settings(LayerShellSettings {
         exclusive_zone: 0,
-        anchor: Anchor::Bottom | Anchor::Left | Anchor::Right | Anchor::Top,
+        anchor: Anchor::all(),
         keyboard_interactivity: KeyboardInteractivity::OnDemand,
         start_mode: StartMode::Background,
         ..Default::default()
@@ -145,26 +170,155 @@ pub enum Message {
     },
 }
 
+fn dialog_style(outlined: bool) -> impl Fn(&iced::Theme) -> container::Style + Copy {
+    move |theme| {
+        let palette = theme.extended_palette();
+
+        container::Style {
+            background: Some(Background::Color(iced::theme::Palette::LIGHT.background)),
+            text_color: Some(iced::theme::Palette::LIGHT.text),
+            border: Border {
+                color: if outlined {
+                    palette.background.strong.color
+                } else {
+                    Color::TRANSPARENT
+                },
+                width: if outlined { 1.0 } else { 0.0 },
+                radius: 12.0.into(),
+            },
+            shadow: Shadow {
+                color: Color::from_rgba8(0, 0, 0, if outlined { 0.15 } else { 0.12 }),
+                offset: Vector::new(0.0, 4.0),
+                blur_radius: if outlined { 12.0 } else { 16.0 },
+            },
+            ..container::Style::default()
+        }
+    }
+}
+
+fn tab_bar_style(theme: &iced::Theme) -> container::Style {
+    let mut style = container::rounded_box(theme);
+    style.border.radius = 8.0.into();
+    style
+}
+
+fn tab_style(selected: bool) -> impl Fn(&iced::Theme, button::Status) -> button::Style + Copy {
+    move |theme, status| {
+        let mut style = if selected {
+            button::primary(theme, status)
+        } else {
+            button::text(theme, status)
+        };
+        style.border.radius = 6.0.into();
+        style
+    }
+}
+
+fn bordered_button_style(theme: &iced::Theme, status: button::Status) -> button::Style {
+    let mut style = button::background(&iced::Theme::Light, status);
+    style.border = Border {
+        color: theme.extended_palette().background.strong.color,
+        width: 1.0,
+        radius: 8.0.into(),
+    };
+    style
+}
+
+fn primary_button_style(theme: &iced::Theme, status: button::Status) -> button::Style {
+    let mut style = button::primary(theme, status);
+    style.border.radius = 8.0.into();
+    style
+}
+
+fn divider() -> Element<'static, Message> {
+    rule::horizontal(1).style(rule::weak).into()
+}
+
+fn chooser_layer_settings() -> NewLayerShellSettings {
+    NewLayerShellSettings {
+        size: Some((
+            CHOOSER_WIDTH + CHOOSER_SHADOW_MARGIN * 2,
+            CHOOSER_HEIGHT + CHOOSER_SHADOW_MARGIN * 2,
+        )),
+        exclusive_zone: None,
+        anchor: Anchor::all(),
+        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+        output_option: OutputOption::Active,
+        ..Default::default()
+    }
+}
+
+fn permission_layer_settings() -> NewLayerShellSettings {
+    NewLayerShellSettings {
+        size: Some((
+            PERMISSION_DIALOG_WIDTH + PERMISSION_DIALOG_SHADOW_MARGIN * 2,
+            PERMISSION_DIALOG_HEIGHT + PERMISSION_DIALOG_SHADOW_MARGIN * 2,
+        )),
+        exclusive_zone: None,
+        anchor: Anchor::Top | Anchor::Bottom,
+        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+        output_option: OutputOption::Active,
+        ..Default::default()
+    }
+}
+
+fn dialog_theme() -> iced::Theme {
+    let widget_palette = iced::theme::Palette {
+        primary: ACCENT,
+        ..iced::theme::Palette::LIGHT
+    };
+    let mut widget_colors = iced::theme::palette::Extended::generate(widget_palette);
+    widget_colors.background.base.color = Color::TRANSPARENT;
+
+    iced::Theme::custom_with_fn(
+        "Luminous dialogs",
+        iced::theme::Palette {
+            background: Color::TRANSPARENT,
+            ..widget_palette
+        },
+        move |_| widget_colors,
+    )
+}
+
 impl AreaSelectorGUI {
-    fn toplevel_preview(
-        &self,
+    fn preview<'a>(handle: Option<&'a image::Handle>) -> Element<'a, Message> {
+        let preview: Element<'a, Message> = match handle {
+            Some(handle) => image(handle)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .content_fit(ContentFit::Contain)
+                .into(),
+            None => Space::new().width(Length::Fill).height(Length::Fill).into(),
+        };
+
+        container(preview)
+            .width(Length::Fill)
+            .height(Length::Fixed(161.0))
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .style(container::rounded_box)
+            .into()
+    }
+
+    fn toplevel_preview<'a>(
+        &'a self,
         id: iced::window::Id,
         index: usize,
-        info: &TopLevelInfo,
-    ) -> Element<'_, Message> {
-        let button_context: Element<Message> = match &info.image {
-            Some(handle) => column![
-                text(info.top_level.id_and_title())
-                    .center()
-                    .width(Length::Fill),
-                image(handle).width(Length::Fill)
-            ]
-            .into(),
-            None => text(info.top_level.id_and_title())
+        info: &'a TopLevelInfo,
+    ) -> Element<'a, Message> {
+        let button_context = column![
+            Self::preview(info.image.as_ref()),
+            text(info.top_level.id_and_title())
                 .center()
                 .width(Length::Fill)
-                .into(),
-        };
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM)
+        ]
+        .spacing(12)
+        .width(Length::Fill)
+        .align_x(Alignment::Center);
+
         button(button_context)
             .on_press(Message::Selected {
                 id,
@@ -173,83 +327,139 @@ impl AreaSelectorGUI {
                     show_cursor: self.use_cursor,
                 },
             })
-            .style(button::subtle)
+            .width(Length::Fill)
+            .height(Length::Fixed(PREVIEW_BUTTON_HEIGHT))
+            .padding(PREVIEW_BUTTON_PADDING)
+            .style(bordered_button_style)
             .into()
     }
+
     fn output_preview<'a>(
         &'a self,
         id: iced::window::Id,
         index: usize,
         info: &'a WlOutputInfo,
     ) -> Element<'a, Message> {
-        let button_context: Element<'a, Message> = match &info.image {
-            Some(handle) => column![
-                text(&info.output.name).center().width(Length::Fill),
-                image(handle).width(Length::Fill)
-            ]
-            .into(),
-            None => text(&info.output.name).center().width(Length::Fill).into(),
+        let select = CopySelect::Screen {
+            index,
+            show_cursor: self.use_cursor,
         };
+
+        if info.image.is_none() {
+            return self.option_card(id, &info.output.name, select);
+        }
+
+        let button_context = column![
+            Self::preview(info.image.as_ref()),
+            text(&info.output.name)
+                .center()
+                .width(Length::Fill)
+                .size(14)
+                .line_height(Pixels(PREVIEW_BUTTON_LINE_HEIGHT))
+                .font(FONT_MEDIUM)
+        ]
+        .spacing(12)
+        .width(Length::Fill)
+        .align_x(Alignment::Center);
+
         button(button_context)
-            .on_press(Message::Selected {
-                id,
-                select: CopySelect::Screen {
-                    index,
-                    show_cursor: self.use_cursor,
-                },
-            })
-            .style(button::subtle)
+            .on_press(Message::Selected { id, select })
+            .width(Length::Fill)
+            .height(Length::Fixed(PREVIEW_BUTTON_HEIGHT))
+            .padding(PREVIEW_BUTTON_PADDING)
+            .style(bordered_button_style)
             .into()
     }
-    fn selector(&self) -> Row<'_, Message> {
+
+    fn option_card<'a>(
+        &self,
+        id: iced::window::Id,
+        label: &'a str,
+        select: CopySelect,
+    ) -> Element<'a, Message> {
+        button(
+            container(
+                text(label)
+                    .center()
+                    .width(Length::Fill)
+                    .size(14)
+                    .line_height(Pixels(PREVIEW_BUTTON_LINE_HEIGHT))
+                    .font(FONT_MEDIUM),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .width(Length::Fill)
+            .height(Length::Fill),
+        )
+        .on_press(Message::Selected { id, select })
+        .width(Length::Fill)
+        .height(Length::Fixed(PREVIEW_BUTTON_HEIGHT))
+        .padding(PREVIEW_BUTTON_PADDING)
+        .style(bordered_button_style)
+        .into()
+    }
+
+    fn tab_button(
+        &self,
+        label: &'static str,
+        selected: bool,
+        on_press: Option<Message>,
+    ) -> Element<'_, Message> {
+        button(
+            text(label)
+                .center()
+                .width(Length::Fill)
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press_maybe(on_press)
+        .width(Length::Fill)
+        .height(Length::Fixed(29.0))
+        .padding([6, 8])
+        .style(tab_style(selected))
+        .into()
+    }
+
+    fn selector(&self) -> Element<'_, Message> {
         let mut button_list = vec![];
         if self.gui_mode == GuiMode::ScreenShot {
-            button_list.push(
-                button(text("Others").center().width(Length::Fill))
-                    .on_press_maybe(if self.gui_mode == GuiMode::ScreenShot {
-                        Some(Message::ShowModeChange(ShowMode::Others))
-                    } else {
-                        None
-                    })
-                    .width(Length::Fill)
-                    .style(if self.mode == ViewMode::Others {
-                        button::primary
-                    } else {
-                        button::secondary
-                    })
-                    .into(),
-            );
+            button_list.push(self.tab_button(
+                "Options",
+                self.mode == ViewMode::Others,
+                Some(Message::ShowModeChange(ShowMode::Others)),
+            ));
         }
         button_list.append(&mut vec![
-            button(text("Screen").center().width(Length::Fill))
-                .on_press(Message::ShowModeChange(ShowMode::Screens))
-                .width(Length::Fill)
-                .style(if self.mode == ViewMode::Screens {
-                    button::primary
-                } else {
-                    button::secondary
-                })
-                .into(),
-            button(text("Window").center().width(Length::Fill))
-                .on_press_maybe(if self.toplevel_capture_support {
+            self.tab_button(
+                "Screen",
+                self.mode == ViewMode::Screens,
+                Some(Message::ShowModeChange(ShowMode::Screens)),
+            ),
+            self.tab_button(
+                "Window",
+                self.mode == ViewMode::Windows,
+                if self.toplevel_capture_support {
                     Some(Message::ShowModeChange(ShowMode::Windows))
                 } else {
                     None
-                })
-                .width(Length::Fill)
-                .style(if self.mode == ViewMode::Windows {
-                    button::primary
-                } else {
-                    button::secondary
-                })
-                .into(),
+                },
+            ),
         ]);
-        Row::from_vec(button_list)
-            .align_y(Alignment::Center)
-            .spacing(10)
-            .padding(20)
-            .width(Length::Fill)
+
+        container(
+            Row::from_vec(button_list)
+                .align_y(Alignment::Center)
+                .spacing(4)
+                .width(Length::Fill),
+        )
+        .padding(6)
+        .width(Length::Fill)
+        .height(Length::Fixed(41.0))
+        .style(tab_bar_style)
+        .into()
     }
+
     fn new(toplevel_capture_support: bool) -> Self {
         Self {
             gui_mode: GuiMode::ScreenShot,
@@ -442,14 +652,7 @@ impl AreaSelectorGUI {
                 let id = iced::window::Id::unique();
                 self.window_id = Some(id);
                 Task::done(Message::NewLayerShell {
-                    settings: NewLayerShellSettings {
-                        exclusive_zone: None,
-                        anchor: Anchor::Right | Anchor::Top | Anchor::Left | Anchor::Bottom,
-                        margin: Some((300, 300, 300, 300)),
-                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                        output_option: OutputOption::Active,
-                        ..Default::default()
-                    },
+                    settings: chooser_layer_settings(),
                     id,
                 })
             }
@@ -477,14 +680,7 @@ impl AreaSelectorGUI {
                 let id = iced::window::Id::unique();
                 self.window_id = Some(id);
                 Task::done(Message::NewLayerShell {
-                    settings: NewLayerShellSettings {
-                        exclusive_zone: None,
-                        anchor: Anchor::Right | Anchor::Top | Anchor::Left | Anchor::Bottom,
-                        margin: Some((300, 500, 300, 500)),
-                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                        output_option: OutputOption::Active,
-                        ..Default::default()
-                    },
+                    settings: chooser_layer_settings(),
                     id,
                 })
             }
@@ -515,13 +711,7 @@ impl AreaSelectorGUI {
                 let id = iced::window::Id::unique();
                 self.window_id = Some(id);
                 Task::done(Message::NewLayerShell {
-                    settings: NewLayerShellSettings {
-                        size: Some((256, 100)),
-                        anchor: Anchor::Top | Anchor::Bottom,
-                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                        output_option: OutputOption::Active,
-                        ..Default::default()
-                    },
+                    settings: permission_layer_settings(),
                     id,
                 })
             }
@@ -580,34 +770,69 @@ impl AreaSelectorGUI {
     }
 
     fn view_permission_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
-        column![
-            container(text(self.prompt_text.as_ref().unwrap()))
-                .center_x(Length::Fill)
-                .center_y(Length::Fill)
-                .height(Length::Fill),
-            Space::new().height(Length::Fill),
-            row![
-                button("No")
-                    .style(button::text)
-                    .on_press(Message::Selected {
-                        id,
-                        select: CopySelect::Permission(false)
-                    })
-                    .width(Length::Fill),
-                button("Yes")
-                    .on_press(Message::Selected {
-                        id,
-                        select: CopySelect::Permission(true)
-                    })
-                    .width(Length::Fill)
-            ]
-            .padding(2.)
-            .spacing(5.)
+        let deny_button = button(
+            text("Deny")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::Permission(false),
+        })
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(bordered_button_style);
+
+        let allow_button = button(
+            text("Allow")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::Permission(true),
+        })
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(primary_button_style);
+
+        let button_row = row![Space::new().width(Length::Fill), deny_button, allow_button]
+            .align_y(Alignment::Center)
+            .spacing(10)
+            .padding(10)
             .width(Length::Fill)
-        ]
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+            .height(Length::Fixed(60.0));
+
+        let dialog = container(
+            column![
+                text(self.prompt_text.as_deref().unwrap_or_default())
+                    .width(Length::Fill)
+                    .height(Length::Fixed(60.0))
+                    .size(20)
+                    .line_height(Pixels(24.0))
+                    .font(FONT_SEMIBOLD),
+                Space::new().height(Length::Fixed(16.0)),
+                divider(),
+                Space::new().height(Length::Fixed(15.0)),
+                button_row,
+            ]
+            .width(Length::Fill)
+            .height(Length::Fill),
+        )
+        .padding(24)
+        .width(Length::Fixed(PERMISSION_DIALOG_WIDTH as f32))
+        .height(Length::Fixed(PERMISSION_DIALOG_HEIGHT as f32))
+        .style(dialog_style(false));
+
+        container(dialog)
+            .padding(PERMISSION_DIALOG_SHADOW_MARGIN as f32)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
     }
 
     fn view_background_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
@@ -674,7 +899,8 @@ impl AreaSelectorGUI {
                         .map(|(index, info)| self.output_preview(id, index, info)),
                 )
                 .columns(2)
-                .spacing(10),
+                .spacing(12)
+                .height(Length::Shrink),
             )
             .height(Length::Fill)
             .into(),
@@ -685,68 +911,106 @@ impl AreaSelectorGUI {
                         .enumerate()
                         .map(|(index, info)| self.toplevel_preview(id, index, info)),
                 )
-                .columns(3)
-                .spacing(10),
+                .columns(2)
+                .spacing(12)
+                .height(Length::Shrink),
             )
             .height(Length::Fill)
             .into(),
-            ViewMode::Others => column![
-                button(
-                    container(text("Area Select"))
-                        .center_y(Length::Fill)
-                        .center_x(Length::Fill)
-                )
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .on_press(Message::Selected {
-                    id,
-                    select: CopySelect::Slurp
-                })
-                .style(button::subtle),
-                button(
-                    container(text("All"))
-                        .center_y(Length::Fill)
-                        .center_x(Length::Fill)
-                )
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .on_press(Message::Selected {
-                    id,
-                    select: CopySelect::All
-                })
-                .style(button::subtle),
-            ]
-            .spacing(10)
-            .height(Length::Fill)
+            ViewMode::Others => grid(vec![
+                self.option_card(id, "Area Select", CopySelect::Slurp),
+                self.option_card(id, "All Screens", CopySelect::All),
+            ])
+            .columns(2)
+            .spacing(12)
+            .height(Length::Shrink)
             .into(),
         };
+        let content = container(content)
+            .padding(10)
+            .width(Length::Fill)
+            .height(Length::Fill);
 
-        let bottom_button_list: Element<'_, Message> = container(row![
-            Space::new().width(Length::Fill),
-            container(
-                checkbox(self.use_cursor)
-                    .label("use_cursor")
-                    .on_toggle_maybe(if self.gui_mode == GuiMode::ScreenShot {
-                        Some(Message::ToggleCursor)
-                    } else {
-                        None
-                    })
-            )
-            .center_y(Length::Fill),
-            Space::new().width(Length::Fixed(2.)),
-            button(text("Cancel")).on_press(Message::Selected {
-                id,
-                select: CopySelect::Cancel
+        let cursor_checkbox = checkbox(self.use_cursor)
+            .label("Include cursor")
+            .on_toggle_maybe(if self.gui_mode == GuiMode::ScreenShot {
+                Some(Message::ToggleCursor)
+            } else {
+                None
             })
-        ])
-        .center_y(Length::Fixed(30.0))
-        .into();
+            .size(16)
+            .spacing(8)
+            .text_size(14)
+            .font(FONT_MEDIUM);
 
-        column![selector, content, bottom_button_list]
-            .padding(20)
+        let cancel_button = button(
+            text("Cancel")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::Cancel,
+        })
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(bordered_button_style);
+
+        let footer = container(
+            row![
+                cursor_checkbox,
+                Space::new().width(Length::Fill),
+                cancel_button
+            ]
+            .align_y(Alignment::Center)
             .spacing(10)
             .width(Length::Fill)
+            .height(Length::Fixed(FOOTER_BOX_HEIGHT)),
+        )
+        .padding([24, 0])
+        .width(Length::Fill)
+        .height(Length::Fixed(FOOTER_HEIGHT));
+
+        let title = if self.gui_mode == GuiMode::ScreenShot {
+            "Take a Screenshot"
+        } else {
+            "Share Your Screen"
+        };
+
+        let dialog = container(
+            column![
+                text(title)
+                    .width(Length::Fill)
+                    .height(Length::Fixed(24.0))
+                    .size(20)
+                    .line_height(Pixels(24.0))
+                    .font(FONT_SEMIBOLD),
+                Space::new().height(Length::Fixed(16.0)),
+                divider(),
+                Space::new().height(Length::Fixed(15.0)),
+                selector,
+                Space::new().height(Length::Fixed(16.0)),
+                content,
+                Space::new().height(Length::Fixed(16.0)),
+                divider(),
+                Space::new().height(Length::Fixed(15.0)),
+                footer,
+            ]
+            .width(Length::Fill)
+            .height(Length::Fill),
+        )
+        .padding(24)
+        .width(Length::Fixed(CHOOSER_WIDTH as f32))
+        .height(Length::Fixed(CHOOSER_HEIGHT as f32))
+        .style(dialog_style(true));
+
+        container(dialog)
+            .padding(CHOOSER_SHADOW_MARGIN as f32)
+            .width(Length::Fill)
             .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
             .into()
     }
 
@@ -771,10 +1035,9 @@ impl AreaSelectorGUI {
         })
     }
     fn theme(&self, _id: iced::window::Id) -> Option<iced::Theme> {
-        if self.gui_mode == GuiMode::PermissionPrompt || self.gui_mode == GuiMode::BackgroundPrompt
-        {
+        if self.gui_mode == GuiMode::BackgroundPrompt {
             return Some(iced::Theme::TokyoNight);
         }
-        None
+        Some(dialog_theme())
     }
 }
