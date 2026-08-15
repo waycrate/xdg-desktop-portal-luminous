@@ -64,6 +64,10 @@ impl From<SettingsConfigRead> for SettingsConfig {
 }
 
 impl SettingsConfig {
+    pub fn prefers_dark(&self) -> bool {
+        self.color_scheme == DARK_COLOR_NAME
+    }
+
     pub fn get_color_scheme(&self) -> u32 {
         match self.color_scheme.as_str() {
             DEFAULT_COLOR_NAME => super::DEFAULT_COLOR,

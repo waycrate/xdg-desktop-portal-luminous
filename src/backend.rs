@@ -56,9 +56,13 @@ fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Resul
     Ok((watcher, rx))
 }
 
-async fn update_settings<'a>(signal_context: &SignalEmitter<'a>) {
+async fn update_settings<'a>(
+    signal_context: &SignalEmitter<'a>,
+    dialog_sender: &mut Sender<Message>,
+) {
     let mut config = SETTING_CONFIG.lock().await;
     *config = SettingsConfig::config_from_file();
+    let prefers_dark = config.prefers_dark();
     let _ = SettingsBackend::setting_changed(
         signal_context,
         "org.freedesktop.appearance".to_string(),
@@ -89,9 +93,15 @@ async fn update_settings<'a>(signal_context: &SignalEmitter<'a>) {
         config.get_reduced_motion().into(),
     )
     .await;
+    let _ = dialog_sender
+        .send(Message::ColorSchemeChanged(prefers_dark))
+        .await;
 }
 
-async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
+async fn async_watch<P: AsRef<Path>>(
+    path: P,
+    mut dialog_sender: Sender<Message>,
+) -> notify::Result<()> {
     let connection = get_connection().await;
     let (mut watcher, mut rx) = async_watcher()?;
 
@@ -111,7 +121,7 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                 kind: EventKind::Create(_),
                 ..
             }) => {
-                update_settings(&signal_context).await;
+                update_settings(&signal_context, &mut dialog_sender).await;
             }
             Err(e) => println!("watch error: {e:?}"),
             _ => {}
@@ -129,6 +139,7 @@ pub async fn backend(
     receiver_cast: Receiver<CopySelect>,
     receiver_background: UnboundedReceiver<CopySelect>,
 ) -> anyhow::Result<()> {
+    let mut settings_dialog_sender = sender.clone();
     let toplevel_capture_support = libwayshot::WayshotConnection::new()
         .map(|conn| conn.toplevel_capture_support())
         .unwrap_or(false);
@@ -179,12 +190,13 @@ pub async fn backend(
         }
     });
 
-    tokio::spawn(async {
+    let watcher_dialog_sender = settings_dialog_sender.clone();
+    tokio::spawn(async move {
         let Some(config_path) = XDG_CONFIG_HOME_DIR.clone() else {
             tracing::info!("File not exist under $XDG_CONFIG_HOME/xdg-desktop-portal-luminous");
             return;
         };
-        if let Err(e) = async_watch(config_path).await {
+        if let Err(e) = async_watch(config_path, watcher_dialog_sender).await {
             tracing::info!("Maybe file is not exist, error: {e}");
         }
     });
@@ -201,7 +213,7 @@ pub async fn backend(
 
     let signal_context =
         SignalEmitter::new(&connection, "/org/freedesktop/portal/desktop").unwrap();
-    update_settings(&signal_context).await;
+    update_settings(&signal_context, &mut settings_dialog_sender).await;
     pending::<()>().await;
 
     Ok(())
