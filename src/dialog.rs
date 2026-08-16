@@ -18,6 +18,8 @@ use iced_layershell::to_layer_message;
 use libwayshot::output::OutputInfo;
 use libwayshot::region::TopLevel;
 
+use crate::settings::SettingsConfig;
+
 const BACKGROUND_PROMPT_QUEUE_CAPACITY: usize = 8;
 const BACKGROUND_PROMPT_TOMBSTONE_CAPACITY: usize = 64;
 const CHOOSER_WIDTH: u32 = 1000;
@@ -33,6 +35,7 @@ const FOOTER_HEIGHT: f32 = 81.0;
 const FOOTER_BOX_HEIGHT: f32 = 33.0;
 
 const ACCENT: Color = Color::from_rgb8(56, 132, 228);
+const DARK_ACCENT: Color = Color::from_rgb8(21, 83, 158);
 
 const FONT_MEDIUM: Font = Font {
     weight: iced::font::Weight::Medium,
@@ -99,6 +102,7 @@ struct AreaSelectorGUI {
     active_background_handle: Option<String>,
     background_queue: VecDeque<BackgroundPromptRequest>,
     tombstoned_background_handles: VecDeque<String>,
+    prefers_dark: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -168,15 +172,21 @@ pub enum Message {
     CloseBackgroundPrompt {
         handle: String,
     },
+    ColorSchemeChanged(bool),
 }
 
 fn dialog_style(outlined: bool) -> impl Fn(&iced::Theme) -> container::Style + Copy {
     move |theme| {
         let palette = theme.extended_palette();
+        let base_palette = if palette.is_dark {
+            iced::theme::Palette::DARK
+        } else {
+            iced::theme::Palette::LIGHT
+        };
 
         container::Style {
-            background: Some(Background::Color(iced::theme::Palette::LIGHT.background)),
-            text_color: Some(iced::theme::Palette::LIGHT.text),
+            background: Some(Background::Color(base_palette.background)),
+            text_color: Some(base_palette.text),
             border: Border {
                 color: if outlined {
                     palette.background.strong.color
@@ -215,7 +225,12 @@ fn tab_style(selected: bool) -> impl Fn(&iced::Theme, button::Status) -> button:
 }
 
 fn bordered_button_style(theme: &iced::Theme, status: button::Status) -> button::Style {
-    let mut style = button::background(&iced::Theme::Light, status);
+    let button_theme = if theme.extended_palette().is_dark {
+        iced::Theme::Dark
+    } else {
+        iced::Theme::Light
+    };
+    let mut style = button::background(&button_theme, status);
     style.border = Border {
         color: theme.extended_palette().background.strong.color,
         width: 1.0,
@@ -262,10 +277,15 @@ fn permission_layer_settings() -> NewLayerShellSettings {
     }
 }
 
-fn dialog_theme() -> iced::Theme {
+fn dialog_theme(prefers_dark: bool) -> iced::Theme {
+    let base_palette = if prefers_dark {
+        iced::theme::Palette::DARK
+    } else {
+        iced::theme::Palette::LIGHT
+    };
     let widget_palette = iced::theme::Palette {
-        primary: ACCENT,
-        ..iced::theme::Palette::LIGHT
+        primary: if prefers_dark { DARK_ACCENT } else { ACCENT },
+        ..base_palette
     };
     let mut widget_colors = iced::theme::palette::Extended::generate(widget_palette);
     widget_colors.background.base.color = Color::TRANSPARENT;
@@ -477,6 +497,7 @@ impl AreaSelectorGUI {
             active_background_handle: None,
             background_queue: VecDeque::new(),
             tombstoned_background_handles: VecDeque::new(),
+            prefers_dark: SettingsConfig::config_from_file().prefers_dark(),
         }
     }
 
@@ -501,13 +522,7 @@ impl AreaSelectorGUI {
         let id = iced::window::Id::unique();
         self.window_id = Some(id);
         Task::done(Message::NewLayerShell {
-            settings: NewLayerShellSettings {
-                size: Some((360, 128)),
-                anchor: Anchor::Top | Anchor::Bottom,
-                keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                output_option: OutputOption::Active,
-                ..Default::default()
-            },
+            settings: permission_layer_settings(),
             id,
         })
     }
@@ -765,8 +780,43 @@ impl AreaSelectorGUI {
                     self.show_next_background_prompt()
                 }
             }
+            Message::ColorSchemeChanged(prefers_dark) => {
+                self.prefers_dark = prefers_dark;
+                Task::none()
+            }
             _ => unreachable!(),
         }
+    }
+
+    fn view_prompt<'a>(&'a self, button_row: Element<'a, Message>) -> Element<'a, Message> {
+        let dialog = container(
+            column![
+                text(self.prompt_text.as_deref().unwrap_or_default())
+                    .width(Length::Fill)
+                    .height(Length::Fixed(60.0))
+                    .size(20)
+                    .line_height(Pixels(24.0))
+                    .font(FONT_SEMIBOLD),
+                Space::new().height(Length::Fixed(16.0)),
+                divider(),
+                Space::new().height(Length::Fixed(15.0)),
+                button_row,
+            ]
+            .width(Length::Fill)
+            .height(Length::Fill),
+        )
+        .padding(24)
+        .width(Length::Fixed(PERMISSION_DIALOG_WIDTH as f32))
+        .height(Length::Fixed(PERMISSION_DIALOG_HEIGHT as f32))
+        .style(dialog_style(false));
+
+        container(dialog)
+            .padding(PERMISSION_DIALOG_SHADOW_MARGIN as f32)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
     }
 
     fn view_permission_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
@@ -805,79 +855,73 @@ impl AreaSelectorGUI {
             .width(Length::Fill)
             .height(Length::Fixed(60.0));
 
-        let dialog = container(
-            column![
-                text(self.prompt_text.as_deref().unwrap_or_default())
-                    .width(Length::Fill)
-                    .height(Length::Fixed(60.0))
-                    .size(20)
-                    .line_height(Pixels(24.0))
-                    .font(FONT_SEMIBOLD),
-                Space::new().height(Length::Fixed(16.0)),
-                divider(),
-                Space::new().height(Length::Fixed(15.0)),
-                button_row,
-            ]
-            .width(Length::Fill)
-            .height(Length::Fill),
-        )
-        .padding(24)
-        .width(Length::Fixed(PERMISSION_DIALOG_WIDTH as f32))
-        .height(Length::Fixed(PERMISSION_DIALOG_HEIGHT as f32))
-        .style(dialog_style(false));
-
-        container(dialog)
-            .padding(PERMISSION_DIALOG_SHADOW_MARGIN as f32)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        self.view_prompt(button_row.into())
     }
 
     fn view_background_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
         let handle = self.active_background_handle.clone().unwrap_or_default();
 
-        column![
-            container(text(self.prompt_text.as_ref().unwrap()))
-                .center_x(Length::Fill)
-                .center_y(Length::Fill)
-                .height(Length::Fill),
-            Space::new().height(Length::Fill),
-            row![
-                button("Allow")
-                    .on_press(Message::Selected {
-                        id,
-                        select: CopySelect::BackgroundPermission {
-                            handle: handle.clone(),
-                            result: 1
-                        }
-                    })
-                    .width(Length::Fill),
-                button("Allow once")
-                    .on_press(Message::Selected {
-                        id,
-                        select: CopySelect::BackgroundPermission {
-                            handle: handle.clone(),
-                            result: 2
-                        }
-                    })
-                    .width(Length::Fill),
-                button("Deny")
-                    .style(button::text)
-                    .on_press(Message::Selected {
-                        id,
-                        select: CopySelect::BackgroundPermission { handle, result: 0 }
-                    })
-                    .width(Length::Fill),
-            ]
-            .padding(2.)
-            .spacing(5.)
-            .width(Length::Fill)
+        let deny_button = button(
+            text("Deny")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::BackgroundPermission {
+                handle: handle.clone(),
+                result: 0,
+            },
+        })
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(bordered_button_style);
+
+        let allow_once_button = button(
+            text("Allow once")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::BackgroundPermission {
+                handle: handle.clone(),
+                result: 2,
+            },
+        })
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(bordered_button_style);
+
+        let allow_button = button(
+            text("Allow")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::BackgroundPermission { handle, result: 1 },
+        })
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(primary_button_style);
+
+        let button_row = row![
+            Space::new().width(Length::Fill),
+            deny_button,
+            allow_once_button,
+            allow_button,
         ]
+        .align_y(Alignment::Center)
+        .spacing(10)
+        .padding(10)
         .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+        .height(Length::Fixed(60.0));
+
+        self.view_prompt(button_row.into())
     }
 
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
@@ -1035,9 +1079,6 @@ impl AreaSelectorGUI {
         })
     }
     fn theme(&self, _id: iced::window::Id) -> Option<iced::Theme> {
-        if self.gui_mode == GuiMode::BackgroundPrompt {
-            return Some(iced::Theme::TokyoNight);
-        }
-        Some(dialog_theme())
+        Some(dialog_theme(self.prefers_dark))
     }
 }
