@@ -302,11 +302,12 @@ impl InputCapture {
     }
 
     async fn disable(
-        &self,
+        &mut self,
         session_handle: ObjectPath<'_>,
         _options: HashMap<String, Value<'_>>,
         #[zbus(signal_emitter)] cxts: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<PortalResponse<EnDisableRet>> {
+        self.clients.remove(session_handle.as_str());
         disable_eis_listener(session_handle.clone()).await;
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         let session = remote_sessions
