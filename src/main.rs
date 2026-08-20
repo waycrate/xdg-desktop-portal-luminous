@@ -3,6 +3,7 @@ mod backend;
 mod background;
 mod clipboard;
 mod dialog;
+#[allow(unused)]
 mod input_capture;
 mod remotedesktop;
 mod request;

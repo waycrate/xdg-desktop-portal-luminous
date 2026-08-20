@@ -11,7 +11,6 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 1. org.freedesktop.impl.portal.ScreenCast
 1. org.freedesktop.impl.portal.ScreenShot
 1. org.freedesktop.impl.portal.Settings
-1. org.freedesktop.impl.portal.InputCapture
 1. org.freedesktop.impl.portal.Background
 1. org.freedesktop.impl.portal.Clipboard
 
