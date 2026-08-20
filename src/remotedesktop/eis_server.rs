@@ -11,10 +11,13 @@ use reis::{
 use std::{
     collections::HashMap,
     io,
+    os::fd::AsFd,
     sync::mpsc::{self, Receiver},
     thread,
     time::Duration,
 };
+
+use super::dispatch::{get_keymap_as_file, init_xkb_objects};
 
 #[derive(Default)]
 struct ContextState {
@@ -46,7 +49,7 @@ impl ContextState {
                     self.device_keyboard = Some(add_device(
                         "keyboard",
                         BitFlags::from_flag(DeviceCapability::Keyboard),
-                        |_| {},
+                        advertise_keyboard_keymap,
                         &request.seat,
                         connection,
                         &mut self.sequence,
@@ -108,6 +111,17 @@ impl ContextState {
         }
 
         calloop::PostAction::Continue
+    }
+}
+
+fn advertise_keyboard_keymap(device: &reis::request::Device) {
+    let (_, _, state) = init_xkb_objects();
+    let (file, size) = get_keymap_as_file(&state);
+
+    if let Some(keyboard) = device.interface::<eis::Keyboard>() {
+        keyboard.keymap(eis::keyboard::KeymapType::Xkb, size, file.as_fd());
+    } else {
+        tracing::error!("Keyboard device is missing its EIS keyboard interface");
     }
 }
 
