@@ -144,17 +144,11 @@ use std::hash::Hash;
 use std::sync::atomic::{self, AtomicU32};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// The id of the window.
-///
-/// Internally Iced reserves `window::Id::MAIN` for the first window spawned.
 pub struct Id(u32);
 
 static COUNT: AtomicU32 = AtomicU32::new(0);
 
 impl Id {
-    /// The reserved window [`Id`] for the first window in an Iced application.
-
-    /// Creates a new unique window [`Id`].
     pub fn unique() -> Id {
         Id(COUNT.fetch_add(1, atomic::Ordering::Relaxed))
     }
