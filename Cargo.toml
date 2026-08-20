@@ -5,7 +5,7 @@ members = [".", "./stream_message", "./lumious_headless_helper"]
 [workspace.package]
 version = "0.1.21"
 edition = "2024"
-license = "MIT"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/waycrate/xdg-desktop-portal-luminous"
 keywords = ["wayland"]
 
