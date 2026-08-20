@@ -170,9 +170,12 @@ pub async fn backend(
                 pending_responses: pending_background_responses.clone(),
             },
         )?
-        .serve_at("/org/freedesktop/portal/desktop", RemoteDesktopBackend)?
+        .serve_at(
+            "/org/freedesktop/portal/desktop",
+            RemoteDesktopBackend::default(),
+        )?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
-        .serve_at("/org/freedesktop/portal/desktop", InputCapture)?
+        .serve_at("/org/freedesktop/portal/desktop", InputCapture::default())?
         .serve_at("/org/freedesktop/portal/desktop", Clipboard)?
         .build()
         .await?;

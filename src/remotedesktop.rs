@@ -10,14 +10,14 @@ use stream_message::SERVER_SOCK;
 use wayland_client::protocol::wl_output;
 
 use std::collections::HashMap;
+use std::os::fd::AsFd;
+use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, LazyLock, Mutex as StdMutex};
 
 use calloop::channel::Sender;
 use enumflags2::BitFlags;
 use reis::eis;
-use rustix::fd::AsFd;
-use rustix::io;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use zbus::zvariant::{
@@ -364,7 +364,10 @@ pub async fn handle_input_event(event: InputEvent) {
     }
 }
 
-pub struct RemoteDesktopBackend;
+#[derive(Default)]
+pub struct RemoteDesktopBackend {
+    last_file: Option<UnixStream>,
+}
 
 #[interface(name = "org.freedesktop.impl.portal.RemoteDesktop")]
 impl RemoteDesktopBackend {
@@ -674,7 +677,7 @@ impl RemoteDesktopBackend {
 
     #[zbus(name = "ConnectToEIS")]
     fn connect_to_eis(
-        &self,
+        &mut self,
         session_handle: ObjectPath<'_>,
         _app_id: String,
         _options: HashMap<String, Value<'_>>,
@@ -682,7 +685,13 @@ impl RemoteDesktopBackend {
         let listener = eis::Listener::bind_auto()
             .map_err(|e| zbus::Error::Failure(format!("Failed to create EIS listener: {}", e)))?;
 
-        let fd = io::dup(listener.as_fd()).map_err(|e| zbus::Error::Failure(e.to_string()))?;
+        let path = listener.path();
+        use std::os::unix::net::UnixStream;
+        let stream = UnixStream::connect(path).map_err(|e| {
+            zbus::Error::Failure(format!("Failed to open unix stream: {path:?} with {e}"))
+        })?;
+        self.last_file = Some(stream);
+
         EIS_SERVER
             .0
             .send(EisServerMsg::NewListener(
@@ -691,7 +700,7 @@ impl RemoteDesktopBackend {
             ))
             .unwrap();
 
-        Ok(Fd::from(fd))
+        Ok(Fd::from(self.last_file.as_ref().unwrap().as_fd()))
     }
 }
 

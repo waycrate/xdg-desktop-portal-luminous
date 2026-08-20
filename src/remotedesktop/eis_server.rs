@@ -23,6 +23,7 @@ struct ContextState {
     device_pointer: Option<reis::request::Device>,
     device_pointer_absolute: Option<reis::request::Device>,
     device_touch: Option<reis::request::Device>,
+    device_text: Option<reis::request::Device>,
     sequence: u32,
 }
 
@@ -40,7 +41,7 @@ impl ContextState {
                 let capabilities = request.capabilities;
 
                 if self.device_keyboard.is_none()
-                    && (capabilities & DeviceCapability::Keyboard).bits() != 0
+                    && capabilities.contains(DeviceCapability::Keyboard)
                 {
                     self.device_keyboard = Some(add_device(
                         "keyboard",
@@ -52,8 +53,7 @@ impl ContextState {
                     ));
                 }
 
-                if self.device_pointer.is_none()
-                    && (capabilities & DeviceCapability::Pointer).bits() != 0
+                if self.device_pointer.is_none() && capabilities.contains(DeviceCapability::Pointer)
                 {
                     self.device_pointer = Some(add_device(
                         "pointer",
@@ -67,9 +67,7 @@ impl ContextState {
                     ));
                 }
 
-                if self.device_touch.is_none()
-                    && (capabilities & DeviceCapability::Touch).bits() != 0
-                {
+                if self.device_touch.is_none() && capabilities.contains(DeviceCapability::Touch) {
                     self.device_touch = Some(add_device(
                         "touch",
                         BitFlags::from_flag(DeviceCapability::Touch),
@@ -81,13 +79,24 @@ impl ContextState {
                 }
 
                 if self.device_pointer_absolute.is_none()
-                    && (capabilities & DeviceCapability::PointerAbsolute).bits() != 0
+                    && capabilities.contains(DeviceCapability::PointerAbsolute)
                 {
                     self.device_pointer_absolute = Some(add_device(
                         "pointer-abs",
                         DeviceCapability::PointerAbsolute
                             | DeviceCapability::Button
                             | DeviceCapability::Scroll,
+                        |_| {},
+                        &request.seat,
+                        connection,
+                        &mut self.sequence,
+                    ));
+                }
+
+                if self.device_text.is_none() && capabilities.contains(DeviceCapability::Text) {
+                    self.device_text = Some(add_device(
+                        "text",
+                        DeviceCapability::Text.into(),
                         |_| {},
                         &request.seat,
                         connection,
@@ -130,6 +139,27 @@ struct State {
     clients: HashMap<String, RegistrationToken>,
 }
 
+use std::hash::Hash;
+
+use std::sync::atomic::{self, AtomicU32};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// The id of the window.
+///
+/// Internally Iced reserves `window::Id::MAIN` for the first window spawned.
+pub struct Id(u32);
+
+static COUNT: AtomicU32 = AtomicU32::new(0);
+
+impl Id {
+    /// The reserved window [`Id`] for the first window in an Iced application.
+
+    /// Creates a new unique window [`Id`].
+    pub fn unique() -> Id {
+        Id(COUNT.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+}
+
 impl State {
     fn handle_new_connection(
         &mut self,
@@ -142,7 +172,7 @@ impl State {
             context
         );
 
-        let source = EisRequestSource::new(context, 1);
+        let source = EisRequestSource::new(context, Id::unique().0);
         let mut context_state = ContextState::default();
         let session_handle_clone = session_handle.clone();
         self.handle

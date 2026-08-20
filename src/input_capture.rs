@@ -1,4 +1,7 @@
-use std::{collections::HashMap, os::fd::AsFd};
+use std::{
+    collections::HashMap,
+    os::{fd::AsFd, unix::net::UnixStream},
+};
 
 use crate::{
     PortalResponse,
@@ -12,7 +15,6 @@ use crate::{
 };
 use enumflags2::BitFlags;
 use reis::eis;
-use rustix::io;
 use serde::{Deserialize, Serialize};
 use zbus::{
     interface,
@@ -119,7 +121,10 @@ async fn remote_zones(session_handle: ObjectPath<'_>) -> Option<(u32, Vec<Zone>)
     Some((session.zone_id.value(), session.zones.clone()))
 }
 
-pub struct InputCapture;
+#[derive(Default)]
+pub struct InputCapture {
+    clients: HashMap<String, UnixStream>,
+}
 
 impl InputCapture {
     fn capabilities(&self) -> BitFlags<SupportedCapabilities> {
@@ -242,7 +247,7 @@ impl InputCapture {
 
     #[zbus(name = "ConnectToEIS")]
     fn connect_to_eis(
-        &self,
+        &mut self,
         session_handle: ObjectPath<'_>,
         _app_id: &str,
         _options: HashMap<String, Value<'_>>,
@@ -250,7 +255,13 @@ impl InputCapture {
         let listener = eis::Listener::bind_auto()
             .map_err(|e| zbus::Error::Failure(format!("Failed to create EIS listener: {}", e)))?;
 
-        let fd = io::dup(listener.as_fd()).map_err(|e| zbus::Error::Failure(e.to_string()))?;
+        let path = listener.path();
+        use std::os::unix::net::UnixStream;
+        let stream = UnixStream::connect(path).map_err(|e| {
+            zbus::Error::Failure(format!("Failed to open unix stream: {path:?} with {e}"))
+        })?;
+        self.clients.insert(session_handle.to_string(), stream);
+
         EIS_SERVER
             .0
             .send(EisServerMsg::NewListener(
@@ -259,7 +270,7 @@ impl InputCapture {
             ))
             .unwrap();
 
-        Ok(Fd::from(fd))
+        Ok(Fd::from(self.clients[session_handle.as_str()].as_fd()))
     }
 
     async fn enable(
