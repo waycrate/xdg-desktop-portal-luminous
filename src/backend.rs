@@ -205,10 +205,11 @@ pub async fn backend(
     });
 
     let receiver = remotedesktop::get_input_receiver();
+    let runtime = tokio::runtime::Handle::current();
     std::thread::spawn(move || {
         loop {
             let event = receiver.lock().unwrap().recv().unwrap();
-            tokio::spawn(remotedesktop::handle_input_event(event));
+            runtime.block_on(remotedesktop::handle_input_event(event));
         }
     });
 
