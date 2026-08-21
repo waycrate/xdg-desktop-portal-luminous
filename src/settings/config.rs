@@ -54,7 +54,7 @@ impl From<SettingsConfigRead> for SettingsConfig {
                 .reduced_motion
                 .unwrap_or(DEFAULT_REDUCED_MOTION.to_string()),
             screenshot_permission_check: value.screenshot_permission_check.unwrap_or(true),
-            remote_permission_check: value.screenshot_permission_check.unwrap_or(true),
+            remote_permission_check: value.remote_permission_check.unwrap_or(true),
             background_permission_default: match value
                 .background_permission_default
                 .unwrap_or(DEFAULT_BACKGROUND_PERMISSION.to_string())
