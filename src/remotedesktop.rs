@@ -139,6 +139,7 @@ fn remote_start_other() -> ResponseDispatchNotifier<PortalResponse<RemoteStartRe
 pub struct RestoreData {
     vendor_name: String,
     version: u32,
+    #[serde(with = "as_value")]
     data: LuminousData,
 }
 
