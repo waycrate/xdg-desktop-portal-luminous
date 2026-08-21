@@ -69,11 +69,20 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Err
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PermissionMode {
+    #[default]
+    ScreenShot,
+    Remote,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum GuiMode {
     ScreenCast,
     #[default]
     ScreenShot,
-    PermissionPrompt,
+    PermissionPrompt {
+        mode: PermissionMode,
+    },
     BackgroundPrompt,
 }
 
@@ -92,8 +101,9 @@ struct AreaSelectorGUI {
     window_show: bool,
     window_id: Option<iced::window::Id>,
     toplevel_capture_support: bool,
-    sender: Option<Sender<CopySelect>>,
+    sender_shot: Option<Sender<CopySelect>>,
     sender_cast: Option<Sender<CopySelect>>,
+    sender_remote: Option<Sender<CopySelect>>,
     sender_background: Option<UnboundedSender<CopySelect>>,
     toplevels: Vec<TopLevelInfo>,
     screens: Vec<WlOutputInfo>,
@@ -112,6 +122,13 @@ struct BackgroundPromptRequest {
     name: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum PermissionResult {
+    AllowOnce,
+    AlwaysAllow,
+    Reject,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum CopySelect {
     Window { index: usize, show_cursor: bool },
@@ -119,7 +136,7 @@ pub enum CopySelect {
     All,
     Slurp,
     Cancel,
-    Permission(bool),
+    Permission(PermissionResult),
     BackgroundPermission { handle: String, result: u32 },
 }
 
@@ -159,11 +176,15 @@ pub enum Message {
         select: CopySelect,
     },
     ShowModeChange(ShowMode),
-    ReadyShoot(Sender<CopySelect>),
+    ReadyShot(Sender<CopySelect>),
     ReadyCast(Sender<CopySelect>),
+    ReadyRemote(Sender<CopySelect>),
     ReadyBackground(UnboundedSender<CopySelect>),
     ToggleCursor(bool),
-    PermissionDialog(String),
+    PermissionDialog {
+        message: String,
+        mode: PermissionMode,
+    },
     BackgroundPrompt {
         handle: String,
         app_id: String,
@@ -487,8 +508,9 @@ impl AreaSelectorGUI {
             window_show: false,
             window_id: None,
             toplevel_capture_support,
-            sender: None,
+            sender_shot: None,
             sender_cast: None,
+            sender_remote: None,
             sender_background: None,
             toplevels: Vec::new(),
             screens: Vec::new(),
@@ -631,11 +653,24 @@ impl AreaSelectorGUI {
                         }
                         _ => return Task::none(),
                     },
-                    GuiMode::ScreenShot | GuiMode::PermissionPrompt => {
+                    GuiMode::ScreenShot => {
                         if matches!(select, CopySelect::BackgroundPermission { .. }) {
                             return Task::none();
                         }
-                        let _ = self.sender.as_mut().unwrap().try_send(select);
+                        let _ = self.sender_shot.as_mut().unwrap().try_send(select);
+                    }
+                    GuiMode::PermissionPrompt { mode } => {
+                        if matches!(select, CopySelect::BackgroundPermission { .. }) {
+                            return Task::none();
+                        }
+                        match mode {
+                            PermissionMode::Remote => {
+                                let _ = self.sender_remote.as_mut().unwrap().try_send(select);
+                            }
+                            PermissionMode::ScreenShot => {
+                                let _ = self.sender_shot.as_mut().unwrap().try_send(select);
+                            }
+                        }
                     }
                 }
 
@@ -654,7 +689,11 @@ impl AreaSelectorGUI {
                 screens,
             } => {
                 if self.window_show {
-                    let _ = self.sender.as_mut().unwrap().try_send(CopySelect::Cancel);
+                    let _ = self
+                        .sender_shot
+                        .as_mut()
+                        .unwrap()
+                        .try_send(CopySelect::Cancel);
                     return Task::none();
                 }
                 if self.gui_mode != GuiMode::ScreenShot {
@@ -699,12 +738,16 @@ impl AreaSelectorGUI {
                     id,
                 })
             }
-            Message::ReadyShoot(sender) => {
-                self.sender = Some(sender);
+            Message::ReadyShot(sender) => {
+                self.sender_shot = Some(sender);
                 Task::none()
             }
             Message::ReadyCast(sender) => {
                 self.sender_cast = Some(sender);
+                Task::none()
+            }
+            Message::ReadyRemote(sender) => {
+                self.sender_remote = Some(sender);
                 Task::none()
             }
             Message::ReadyBackground(sender) => {
@@ -715,13 +758,29 @@ impl AreaSelectorGUI {
                 self.use_cursor = cursor;
                 Task::none()
             }
-            Message::PermissionDialog(message) => {
+            Message::PermissionDialog { message, mode } => {
                 if self.window_show {
-                    let _ = self.sender.as_mut().unwrap().try_send(CopySelect::Cancel);
+                    match mode {
+                        PermissionMode::ScreenShot => {
+                            let _ = self
+                                .sender_shot
+                                .as_mut()
+                                .unwrap()
+                                .try_send(CopySelect::Cancel);
+                        }
+                        PermissionMode::Remote => {
+                            let _ = self
+                                .sender_remote
+                                .as_mut()
+                                .unwrap()
+                                .try_send(CopySelect::Cancel);
+                        }
+                    }
+
                     return Task::none();
                 }
                 self.window_show = true;
-                self.gui_mode = GuiMode::PermissionPrompt;
+                self.gui_mode = GuiMode::PermissionPrompt { mode };
                 self.prompt_text = Some(message);
                 let id = iced::window::Id::unique();
                 self.window_id = Some(id);
@@ -828,32 +887,49 @@ impl AreaSelectorGUI {
         )
         .on_press(Message::Selected {
             id,
-            select: CopySelect::Permission(false),
+            select: CopySelect::Permission(PermissionResult::Reject),
         })
         .height(Length::Fixed(33.0))
         .padding([8, 16])
         .style(bordered_button_style);
 
-        let allow_button = button(
-            text("Allow")
+        let allow_once_button = button(
+            text("AllowOnce")
                 .size(14)
                 .line_height(Pixels(17.0))
                 .font(FONT_MEDIUM),
         )
         .on_press(Message::Selected {
             id,
-            select: CopySelect::Permission(true),
+            select: CopySelect::Permission(PermissionResult::AllowOnce),
         })
         .height(Length::Fixed(33.0))
         .padding([8, 16])
         .style(primary_button_style);
-
-        let button_row = row![Space::new().width(Length::Fill), deny_button, allow_button]
-            .align_y(Alignment::Center)
-            .spacing(10)
-            .padding(10)
-            .width(Length::Fill)
-            .height(Length::Fixed(60.0));
+        let always_allow_button = button(
+            text("AlwaysAllow")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::Permission(PermissionResult::AlwaysAllow),
+        })
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(primary_button_style);
+        let button_row = row![
+            Space::new().width(Length::Fill),
+            deny_button,
+            allow_once_button,
+            always_allow_button
+        ]
+        .align_y(Alignment::Center)
+        .spacing(10)
+        .padding(10)
+        .width(Length::Fill)
+        .height(Length::Fixed(60.0));
 
         self.view_prompt(button_row.into())
     }
@@ -925,7 +1001,7 @@ impl AreaSelectorGUI {
     }
 
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
-        if self.gui_mode == GuiMode::PermissionPrompt {
+        if matches!(self.gui_mode, GuiMode::PermissionPrompt { .. }) {
             return self.view_permission_prompt(id);
         }
         if self.gui_mode == GuiMode::BackgroundPrompt {
@@ -1063,18 +1139,25 @@ impl AreaSelectorGUI {
             iced::stream::channel(100, |mut output: Sender<Message>| async move {
                 use iced::futures::channel::mpsc::{channel, unbounded};
                 use iced::futures::sink::SinkExt;
-                let (sender, receiver) = channel(100);
+                let (sender_shot, receiver_shot) = channel(100);
                 let (sender_cast, receiver_cast) = channel(100);
+                let (sender_remote, receiver_remote) = channel(100);
                 let (sender_background, receiver_background) = unbounded();
-                let _ = output.send(Message::ReadyShoot(sender)).await;
+                let _ = output.send(Message::ReadyShot(sender_shot)).await;
                 let _ = output.send(Message::ReadyCast(sender_cast)).await;
+                let _ = output.send(Message::ReadyRemote(sender_remote)).await;
                 let _ = output
                     .send(Message::ReadyBackground(sender_background))
                     .await;
 
-                let _ =
-                    crate::backend::backend(output, receiver, receiver_cast, receiver_background)
-                        .await;
+                let _ = crate::backend::backend(
+                    output,
+                    receiver_shot,
+                    receiver_cast,
+                    receiver_remote,
+                    receiver_background,
+                )
+                .await;
             })
         })
     }

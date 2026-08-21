@@ -135,8 +135,9 @@ use crate::remotedesktop;
 
 pub async fn backend(
     sender: Sender<Message>,
-    receiver: Receiver<CopySelect>,
+    receiver_shot: Receiver<CopySelect>,
     receiver_cast: Receiver<CopySelect>,
+    receiver_remote: Receiver<CopySelect>,
     receiver_background: UnboundedReceiver<CopySelect>,
 ) -> anyhow::Result<()> {
     let mut settings_dialog_sender = sender.clone();
@@ -152,7 +153,7 @@ pub async fn backend(
             "/org/freedesktop/portal/desktop",
             ScreenShotBackend {
                 sender: sender.clone(),
-                receiver,
+                receiver: receiver_shot,
             },
         )?
         .serve_at(
@@ -166,13 +167,13 @@ pub async fn backend(
         .serve_at(
             "/org/freedesktop/portal/desktop",
             BackgroundBackend {
-                sender,
+                sender: sender.clone(),
                 pending_responses: pending_background_responses.clone(),
             },
         )?
         .serve_at(
             "/org/freedesktop/portal/desktop",
-            RemoteDesktopBackend::default(),
+            RemoteDesktopBackend::new(sender, receiver_remote),
         )?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
         .serve_at("/org/freedesktop/portal/desktop", InputCapture::default())?

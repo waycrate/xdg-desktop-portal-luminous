@@ -1,4 +1,5 @@
 mod config;
+mod white_list;
 use tokio::sync::Mutex;
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
@@ -25,8 +26,8 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 
 pub use self::config::SettingsConfig;
-
 pub use self::config::XDG_CONFIG_HOME_DIR;
+pub use self::white_list::WHITE_LIST_MAINTAINER;
 
 pub static SETTING_CONFIG: LazyLock<Arc<Mutex<SettingsConfig>>> =
     LazyLock::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));

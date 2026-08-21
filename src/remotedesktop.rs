@@ -27,6 +27,7 @@ use zbus::zvariant::{
 use zbus::{interface, object_server::ResponseDispatchNotifier};
 
 use crate::PortalResponse;
+use crate::dialog::{CopySelect, Message, PermissionMode, PermissionResult};
 use crate::input_capture::BarrierInfo;
 use crate::pipewirethread::CastTarget;
 use crate::pipewirethread::ScreencastThread;
@@ -34,6 +35,7 @@ use crate::request::RequestInterface;
 use crate::session::{
     DeviceType, PersistMode, SESSIONS, Session, SessionType, SourceType, append_session,
 };
+use crate::settings::WHITE_LIST_MAINTAINER;
 use crate::utils::get_selection_from_socket;
 
 pub use self::eis_server::{EisServerMsg, InputEvent};
@@ -42,8 +44,11 @@ use std::hash::Hash;
 
 use crate::settings::SETTING_CONFIG;
 
+use futures::{
+    SinkExt, StreamExt,
+    channel::mpsc::{Receiver as FutReceiver, Sender as FutSender},
+};
 use std::sync::atomic::{self, AtomicU32};
-
 type EisServerSender = Sender<EisServerMsg>;
 type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
 
@@ -398,9 +403,21 @@ pub async fn handle_input_event(event: InputEvent) {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct RemoteDesktopBackend {
     last_file: Option<UnixStream>,
+    sender: FutSender<Message>,
+    receiver: FutReceiver<CopySelect>,
+}
+
+impl RemoteDesktopBackend {
+    pub fn new(sender: FutSender<Message>, receiver: FutReceiver<CopySelect>) -> Self {
+        Self {
+            last_file: None,
+            sender,
+            receiver,
+        }
+    }
 }
 
 #[interface(name = "org.freedesktop.impl.portal.RemoteDesktop")]
@@ -416,7 +433,7 @@ impl RemoteDesktopBackend {
     }
 
     async fn create_session(
-        &self,
+        &mut self,
         request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         app_id: String,
@@ -428,6 +445,30 @@ impl RemoteDesktopBackend {
             request_handle.as_str(),
             app_id
         );
+        if SETTING_CONFIG.lock().await.remote_permission_check
+            // If it is failed
+            && !WHITE_LIST_MAINTAINER.check_remote(&app_id).await
+        {
+            self.sender
+                .send(Message::PermissionDialog {
+                    message: format!("Allow '{}' to make remote?", app_id),
+                    mode: PermissionMode::Remote,
+                })
+                .await
+                .map_err(|e| zbus::Error::Failure(e.to_string()))?;
+
+            match self.receiver.next().await {
+                Some(CopySelect::Permission(PermissionResult::AlwaysAllow)) => {
+                    WHITE_LIST_MAINTAINER.add_remote_whitelist(&app_id).await;
+                }
+                Some(CopySelect::Permission(PermissionResult::AllowOnce)) => {}
+                _ => {
+                    return Ok(PortalResponse::Cancelled);
+                }
+            }
+            // reserve time to let dialog disappear
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
         server
             .at(
                 request_handle.clone(),
@@ -524,7 +565,6 @@ impl RemoteDesktopBackend {
         let mut streams = vec![];
         let mut cast_thread = None;
         let connection = libwayshot::WayshotConnection::new().unwrap();
-        let remote_check = SETTING_CONFIG.lock().await.remote_permission_check;
         let RemoteInfo {
             width,
             height,
@@ -557,7 +597,7 @@ impl RemoteDesktopBackend {
                 wl_output: display.wl_output.clone(),
             }
         } else {
-            get_monitor_info_from_socket(&connection, remote_check)?
+            get_monitor_info_from_socket(&connection)?
         };
         if screen_share_enabled {
             let show_cursor = current_session.cursor_mode.show_cursor();
@@ -804,11 +844,10 @@ fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
 
 pub fn get_monitor_info_from_socket(
     connection: &WayshotConnection,
-    remove_check: bool,
 ) -> zbus::fdo::Result<RemoteInfo> {
     let libwayshot::Size { width, height } = space_size(connection);
     let outputs = connection.get_all_outputs();
-    if !remove_check && outputs.len() == 1 {
+    if outputs.len() == 1 {
         let output = &outputs[0];
 
         let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
