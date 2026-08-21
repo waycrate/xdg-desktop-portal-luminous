@@ -7,8 +7,8 @@ use crate::{
     PortalResponse,
     remotedesktop::{
         CursorPosition, EIS_SERVER, EisServerMsg, REMOTE_SESSIONS, RemoteControl, RemoteInfo,
-        RemoteSessionData, Zone, append_remote_session, disable_eis_listener, enable_eis_listener,
-        get_monitor_info_from_socket,
+        RemoteSessionData, RestoreData, Zone, append_remote_session, disable_eis_listener,
+        enable_eis_listener, get_monitor_info_from_socket,
     },
     request::RequestInterface,
     session::{DeviceType, Session, SessionType, append_session},
@@ -162,6 +162,7 @@ impl InputCapture {
             height,
             x,
             y,
+            output_name,
             ..
         } = get_monitor_info_from_socket(&connection)?;
         let capabilities = options.capabilities & self.capabilities();
@@ -191,6 +192,9 @@ impl InputCapture {
                 width: width as u32,
                 height: height as u32,
             }],
+            RestoreData::new(crate::remotedesktop::LuminousData {
+                display: output_name,
+            }),
         ))
         .await;
         Ok(PortalResponse::Success(CreateSessionRet {

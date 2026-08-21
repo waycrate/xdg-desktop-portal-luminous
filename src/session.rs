@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     clipboard::remove_clipboard_session,
-    remotedesktop::{SelectDevicesOptions, remove_remote_session},
+    remotedesktop::{RestoreData, SelectDevicesOptions, remove_remote_session},
     screencast::{SelectSourcesOptions, remove_cast_session},
 };
 
@@ -22,18 +22,24 @@ pub async fn append_session(session: Session) {
     sessions.push(session)
 }
 
-pub async fn remove_session(session: &Session) {
+#[must_use]
+pub async fn remove_session(session: &Session) -> bool {
+    // It will always alive
+    if matches!(session.persist_mode, PersistMode::Application) {
+        return false;
+    }
     let mut sessions = SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
         .position(|the_session| the_session.handle_path == session.handle_path)
     else {
-        return;
+        return true;
     };
     remove_cast_session(&session.handle_path.to_string()).await;
     remove_remote_session(&session.handle_path.to_string()).await;
     remove_clipboard_session(session.handle_path.as_ref()).await;
     sessions.remove(index);
+    true
 }
 
 #[bitflags]
@@ -107,6 +113,12 @@ pub enum PersistMode {
     ExplicitlyRevoked = 2,
 }
 
+impl PersistMode {
+    pub fn is_persist(&self) -> bool {
+        matches!(self, Self::Application | Self::ExplicitlyRevoked)
+    }
+}
+
 #[derive(Debug, Clone)]
 // TODO: when is remote?
 pub struct Session {
@@ -120,6 +132,7 @@ pub struct Session {
     pub device_type: BitFlags<DeviceType>,
     pub screen_share_enabled: bool,
     pub clipboard_requested: bool,
+    pub restore_data: Option<RestoreData>,
 }
 
 impl Session {
@@ -134,6 +147,7 @@ impl Session {
             device_type: DeviceType::Keyboard.into(),
             screen_share_enabled: false,
             clipboard_requested: false,
+            restore_data: None,
         }
     }
     pub fn set_screencast_options(&mut self, options: SelectSourcesOptions) {
@@ -157,6 +171,7 @@ impl Session {
         if let Some(persist_mode) = options.persist_mode {
             self.persist_mode = persist_mode;
         }
+        self.restore_data = options.restore_data;
     }
 }
 
@@ -167,10 +182,13 @@ impl Session {
         #[zbus(signal_emitter)] cxts: SignalEmitter<'_>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<()> {
+        if !remove_session(self).await {
+            tracing::info!("Session should not be closed at this time");
+            return Ok(());
+        }
         server
             .remove::<Self, &OwnedObjectPath>(&self.handle_path)
             .await?;
-        remove_session(self).await;
         Self::closed(&cxts, "Closed").await?;
         Ok(())
     }
