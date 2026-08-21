@@ -11,9 +11,13 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 1. org.freedesktop.impl.portal.ScreenCast
 1. org.freedesktop.impl.portal.ScreenShot
 1. org.freedesktop.impl.portal.Settings
-1. org.freedesktop.impl.portal.InputCapture
 1. org.freedesktop.impl.portal.Background
 1. org.freedesktop.impl.portal.Clipboard
+
+# TODO:
+1. org.freedesktop.impl.portal.InputCapture
+
+Now InputCapture is implemented with the wrong way. But we have know how to fix it. Now it is broken, won't work
 
 # Settings:
 
@@ -27,7 +31,7 @@ accent_color = "#880022"
 contrast = "higher" # enable higher contrast
 reduced_motion = "reduced" # enable reduced motion
 screenshot_permission_check = false # disable the permission check dialog
-remote_permission_check = true, # if set as fault, will always try to skip the dialog, if there is only one screen
+remote_permission_check = true # if set as fault, will always try to skip the dialog, if there is only one screen
 ```
 
 # How to set priority of portal backend:
