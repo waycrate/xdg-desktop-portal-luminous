@@ -25,6 +25,7 @@ pub struct SettingsConfig {
     pub contrast: String,
     pub reduced_motion: String,
     pub screenshot_permission_check: bool,
+    pub remote_permission_check: bool,
     pub background_permission_default: String,
 }
 
@@ -35,6 +36,9 @@ struct SettingsConfigRead {
     pub contrast: Option<String>,
     pub reduced_motion: Option<String>,
     pub screenshot_permission_check: Option<bool>,
+    // when it is set as false, will stop popping dialog if possible
+    // This means only one screen
+    pub remote_permission_check: Option<bool>,
     pub background_permission_default: Option<String>,
 }
 
@@ -50,6 +54,7 @@ impl From<SettingsConfigRead> for SettingsConfig {
                 .reduced_motion
                 .unwrap_or(DEFAULT_REDUCED_MOTION.to_string()),
             screenshot_permission_check: value.screenshot_permission_check.unwrap_or(true),
+            remote_permission_check: value.screenshot_permission_check.unwrap_or(true),
             background_permission_default: match value
                 .background_permission_default
                 .unwrap_or(DEFAULT_BACKGROUND_PERMISSION.to_string())
@@ -113,6 +118,7 @@ impl Default for SettingsConfig {
             contrast: DEFAULT_CONTRAST.to_string(),
             reduced_motion: DEFAULT_REDUCED_MOTION.to_string(),
             screenshot_permission_check: true,
+            remote_permission_check: true,
             background_permission_default: DEFAULT_BACKGROUND_PERMISSION.to_string(),
         }
     }

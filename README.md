@@ -27,6 +27,7 @@ accent_color = "#880022"
 contrast = "higher" # enable higher contrast
 reduced_motion = "reduced" # enable reduced motion
 screenshot_permission_check = false # disable the permission check dialog
+remote_permission_check = true, # if set as fault, will always try to skip the dialog, if there is only one screen
 ```
 
 # How to set priority of portal backend:

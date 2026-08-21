@@ -3,6 +3,7 @@ use std::{
     os::{fd::AsFd, unix::net::UnixStream},
 };
 
+use crate::settings::SETTING_CONFIG;
 use crate::{
     PortalResponse,
     remotedesktop::{
@@ -156,6 +157,7 @@ impl InputCapture {
         if (options.capabilities | self.capabilities()) != self.capabilities() {
             return Err(zbus::Error::Failure("Unsupported capability".to_owned()).into());
         }
+        let remote_check = SETTING_CONFIG.lock().await.remote_permission_check;
         let connection = libwayshot::WayshotConnection::new().unwrap();
         let RemoteInfo {
             width,
@@ -164,7 +166,7 @@ impl InputCapture {
             y,
             output_name,
             ..
-        } = get_monitor_info_from_socket(&connection)?;
+        } = get_monitor_info_from_socket(&connection, remote_check)?;
         let capabilities = options.capabilities & self.capabilities();
         tracing::info!("Start shot: path :{}, appid: {}", handle.as_str(), app_id);
         server

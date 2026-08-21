@@ -40,6 +40,8 @@ pub use self::eis_server::{EisServerMsg, InputEvent};
 pub use self::remote_thread::InputRequest;
 use std::hash::Hash;
 
+use crate::settings::SETTING_CONFIG;
+
 use std::sync::atomic::{self, AtomicU32};
 
 type EisServerSender = Sender<EisServerMsg>;
@@ -522,6 +524,7 @@ impl RemoteDesktopBackend {
         let mut streams = vec![];
         let mut cast_thread = None;
         let connection = libwayshot::WayshotConnection::new().unwrap();
+        let remote_check = SETTING_CONFIG.lock().await.remote_permission_check;
         let RemoteInfo {
             width,
             height,
@@ -554,7 +557,7 @@ impl RemoteDesktopBackend {
                 wl_output: display.wl_output.clone(),
             }
         } else {
-            get_monitor_info_from_socket(&connection)?
+            get_monitor_info_from_socket(&connection, remote_check)?
         };
         if screen_share_enabled {
             let show_cursor = current_session.cursor_mode.show_cursor();
@@ -801,10 +804,25 @@ fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
 
 pub fn get_monitor_info_from_socket(
     connection: &WayshotConnection,
+    remove_check: bool,
 ) -> zbus::fdo::Result<RemoteInfo> {
     let libwayshot::Size { width, height } = space_size(connection);
+    let outputs = connection.get_all_outputs();
+    if !remove_check && outputs.len() == 1 {
+        let output = &outputs[0];
+
+        let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
+        //let libwayshot::Size { width, height } = output.physical_size;
+        return Ok(RemoteInfo {
+            x,
+            y,
+            width,
+            height,
+            output_name: output.name.to_owned(),
+            wl_output: output.wl_output.clone(),
+        });
+    }
     if SERVER_SOCK.exists() {
-        let outputs = connection.get_all_outputs();
         let monitors: Vec<String> = outputs.iter().map(|output| output.name.clone()).collect();
         let index = get_selection_from_socket(monitors)?;
         let output = &outputs[index as usize];
