@@ -5,7 +5,7 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 
 ![https://github.com/waycrate/xdg-desktop-portal-luminous/actions](https://github.com/waycrate/xdg-desktop-portal-luminous/actions/workflows/ci.yaml/badge.svg)
 
-# Exposed interfaces:
+## Exposed interfaces:
 
 1. org.freedesktop.impl.portal.RemoteDesktop
 1. org.freedesktop.impl.portal.ScreenCast
@@ -14,12 +14,12 @@ An alternative to xdg-desktop-portal-wlr for wlroots compositors. This project i
 1. org.freedesktop.impl.portal.Background
 1. org.freedesktop.impl.portal.Clipboard
 
-# TODO:
+## TODO:
 1. org.freedesktop.impl.portal.InputCapture
 
-Now InputCapture is implemented with the wrong way. But we have know how to fix it. Now it is broken, won't work
+Now InputCapture is implemented with the wrong way. But we already know how to fix it. Now it is broken, won't work
 
-# Settings:
+## Settings:
 
 Luminous is configured through the following auto hot-reloaded file: `$XDG_CONFIG_FILE/xdg-desktop-portal-luminous/config.toml`.
 
@@ -34,7 +34,7 @@ screenshot_permission_check = false # disable the permission check dialog
 remote_permission_check = true # if set as fault, will always try to skip the dialog, if there is only one screen
 ```
 
-# How to set priority of portal backend:
+## How to set priority of portal backend:
 
 The following file needs to be created `~/.config/xdg-desktop-portal/CURRENT_DESKTOP_NAME-portals.conf`.
 (eg: For the `sway` desktop, `sway-portals.conf` must exist.)
@@ -46,7 +46,7 @@ default=luminous
 org.freedesktop.impl.portal.Settings=luminous;gtk
 ```
 
-# Background autostart:
+## Background autostart:
 
 Applications that use `org.freedesktop.portal.Background.RequestBackground` can be autostarted by `xdg-desktop-portal`: when the request is granted, the frontend writes an XDG autostart desktop entry, which `systemd-xdg-autostart-generator` turns into an `app-*@autostart.service` unit on the next login.
 
@@ -67,18 +67,14 @@ PATH=${HOME}/.local/bin:${PATH}
 
 After changing `environment.d`, log out and back in or reboot so the user manager re-runs its generators and the autostart target starts the generated unit. `systemctl --user daemon-reload` re-runs the generators too, but it does not start a newly generated autostart unit; start that unit or restart the autostart target if you want to test it in the current session.
 
-# Future goals:
-
-* Do not rely on slurp binary. We feel calling binaries is a hack to achieve some end goal, it is almost always better to programmatically invoke the given API.
-
-# Building:
+## Building:
 
 ```sh
 meson build
 ninja -C build install
 ```
 
-# Requirements:
+## Requirements:
 
 Build time requirements are marked with `*`.
 
@@ -90,7 +86,5 @@ Build time requirements are marked with `*`.
 1. pkg-config *
 1. rustc *
 1. xkbcommon *
-1. slurp
 1. wayland
 1. wayland-protocols *
-1. glib-2.0 *
