@@ -12,7 +12,9 @@ static WHIT_LIST_FILE: LazyLock<Option<PathBuf>> =
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct WhiteList {
+    #[serde(default)]
     screen_shot: Vec<String>,
+    #[serde(default)]
     remote: Vec<String>,
 }
 
