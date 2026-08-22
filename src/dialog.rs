@@ -920,10 +920,10 @@ impl AreaSelectorGUI {
         .padding([8, 16])
         .style(primary_button_style);
         let button_row = row![
+            always_allow_button,
             Space::new().width(Length::Fill),
             deny_button,
             allow_once_button,
-            always_allow_button
         ]
         .align_y(Alignment::Center)
         .spacing(10)
