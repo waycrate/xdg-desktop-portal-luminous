@@ -102,6 +102,7 @@ impl ScreenShotBackend {
                 .send(Message::PermissionDialog {
                     message: format!("Allow '{}' to take a screenshot?", app_id),
                     mode: PermissionMode::ScreenShot,
+                    id_valid: !app_id.is_empty(),
                 })
                 .await
                 .map_err(|e| zbus::Error::Failure(e.to_string()))?;

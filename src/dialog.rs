@@ -82,6 +82,7 @@ pub enum GuiMode {
     ScreenShot,
     PermissionPrompt {
         mode: PermissionMode,
+        id_valid: bool,
     },
     BackgroundPrompt,
 }
@@ -184,6 +185,7 @@ pub enum Message {
     PermissionDialog {
         message: String,
         mode: PermissionMode,
+        id_valid: bool,
     },
     BackgroundPrompt {
         handle: String,
@@ -659,7 +661,7 @@ impl AreaSelectorGUI {
                         }
                         let _ = self.sender_shot.as_mut().unwrap().try_send(select);
                     }
-                    GuiMode::PermissionPrompt { mode } => {
+                    GuiMode::PermissionPrompt { mode, .. } => {
                         if matches!(select, CopySelect::BackgroundPermission { .. }) {
                             return Task::none();
                         }
@@ -758,7 +760,11 @@ impl AreaSelectorGUI {
                 self.use_cursor = cursor;
                 Task::none()
             }
-            Message::PermissionDialog { message, mode } => {
+            Message::PermissionDialog {
+                message,
+                mode,
+                id_valid,
+            } => {
                 if self.window_show {
                     match mode {
                         PermissionMode::ScreenShot => {
@@ -780,7 +786,7 @@ impl AreaSelectorGUI {
                     return Task::none();
                 }
                 self.window_show = true;
-                self.gui_mode = GuiMode::PermissionPrompt { mode };
+                self.gui_mode = GuiMode::PermissionPrompt { mode, id_valid };
                 self.prompt_text = Some(message);
                 let id = iced::window::Id::unique();
                 self.window_id = Some(id);
@@ -878,7 +884,7 @@ impl AreaSelectorGUI {
             .into()
     }
 
-    fn view_permission_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
+    fn view_permission_prompt(&self, id: iced::window::Id, id_valid: bool) -> Element<'_, Message> {
         let deny_button = button(
             text("Deny")
                 .size(14)
@@ -912,10 +918,10 @@ impl AreaSelectorGUI {
                 .line_height(Pixels(17.0))
                 .font(FONT_MEDIUM),
         )
-        .on_press(Message::Selected {
+        .on_press_maybe(id_valid.then_some(Message::Selected {
             id,
             select: CopySelect::Permission(PermissionResult::AlwaysAllow),
-        })
+        }))
         .height(Length::Fixed(33.0))
         .padding([8, 16])
         .style(primary_button_style);
@@ -1001,8 +1007,8 @@ impl AreaSelectorGUI {
     }
 
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
-        if matches!(self.gui_mode, GuiMode::PermissionPrompt { .. }) {
-            return self.view_permission_prompt(id);
+        if let GuiMode::PermissionPrompt { id_valid, .. } = self.gui_mode {
+            return self.view_permission_prompt(id, id_valid);
         }
         if self.gui_mode == GuiMode::BackgroundPrompt {
             return self.view_background_prompt(id);
