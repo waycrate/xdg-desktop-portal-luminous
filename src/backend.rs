@@ -2,7 +2,7 @@ use crate::access::AccessBackend;
 use crate::background::{BackgroundBackend, PendingBackgroundResponses};
 use crate::clipboard::Clipboard;
 use crate::dialog::{CopySelect, Message};
-use crate::input_capture::InputCapture;
+//use crate::input_capture::InputCapture;
 use crate::remotedesktop::RemoteDesktopBackend;
 use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
@@ -176,7 +176,12 @@ pub async fn backend(
             RemoteDesktopBackend::new(sender, receiver_remote),
         )?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
-        .serve_at("/org/freedesktop/portal/desktop", InputCapture::default())?
+        // NOTE: it is impossible to implement it just with portal. only if we are using udev, then
+        // wen cannot get the keyboard event and mouse click event. Should wait for wm to implement
+        // this part
+        // But still we can let it become the controlled part, with the ConnectToEIS on the Remote
+        // part
+        //.serve_at("/org/freedesktop/portal/desktop", InputCapture::default())?
         .serve_at("/org/freedesktop/portal/desktop", Clipboard)?
         .build()
         .await?;
