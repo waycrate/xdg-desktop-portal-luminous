@@ -14,10 +14,12 @@ use zbus::{
     },
 };
 
-use crate::PortalResponse;
-use crate::dialog::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
+use crate::dialog::{
+    CopySelect, Message, PermissionMode, PermissionResult, TopLevelInfo, WlOutputInfo,
+};
 use crate::settings::SETTING_CONFIG;
 use crate::utils::USER_RUNNING_DIR;
+use crate::{PortalResponse, settings::WHITE_LIST_MAINTAINER};
 use futures::{
     SinkExt, StreamExt,
     channel::mpsc::{Receiver, Sender},
@@ -92,18 +94,28 @@ impl ScreenShotBackend {
         options: ScreenshotOption,
     ) -> fdo::Result<PortalResponse<Screenshot>> {
         if SETTING_CONFIG.lock().await.screenshot_permission_check
+            // If it is failed
+            && !WHITE_LIST_MAINTAINER.check_shot(&app_id).await
             && !options.permission_store_checked
         {
             self.sender
-                .send(Message::PermissionDialog(format!(
-                    "Allow '{}' to take a screenshot?",
-                    app_id
-                )))
+                .send(Message::PermissionDialog {
+                    message: format!("Allow '{}' to take a screenshot?", app_id),
+                    mode: PermissionMode::ScreenShot,
+                })
                 .await
                 .map_err(|e| zbus::Error::Failure(e.to_string()))?;
 
-            if self.receiver.next().await != Some(CopySelect::Permission(true)) {
-                return Ok(PortalResponse::Cancelled);
+            match self.receiver.next().await {
+                Some(CopySelect::Permission(PermissionResult::AlwaysAllow)) => {
+                    WHITE_LIST_MAINTAINER
+                        .add_screenshot_whitelist(&app_id)
+                        .await;
+                }
+                Some(CopySelect::Permission(PermissionResult::AllowOnce)) => {}
+                _ => {
+                    return Ok(PortalResponse::Cancelled);
+                }
             }
             // reserve time to let dialog disappear
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
