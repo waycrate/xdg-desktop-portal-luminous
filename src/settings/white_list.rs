@@ -13,7 +13,7 @@ static WHIT_LIST_FILE: LazyLock<Option<PathBuf>> =
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct WhiteList {
     #[serde(default)]
-    screen_shot: Vec<String>,
+    screenshot: Vec<String>,
     #[serde(default)]
     remote: Vec<String>,
 }
@@ -34,7 +34,7 @@ impl WhiteListMaintainer {
     }
     pub async fn check_shot(&self, app: &str) -> bool {
         let list = self.list.lock().await;
-        list.screen_shot.contains(&app.to_string())
+        list.screenshot.contains(&app.to_string())
     }
     pub async fn check_remote(&self, app: &str) -> bool {
         let list = self.list.lock().await;
@@ -42,7 +42,7 @@ impl WhiteListMaintainer {
     }
     pub async fn add_screenshot_whitelist(&self, app: &str) {
         let mut list = self.list.lock().await;
-        list.screen_shot.push(app.to_string());
+        list.screenshot.push(app.to_string());
         list.save_to_file();
     }
     pub async fn add_remote_whitelist(&self, app: &str) {
