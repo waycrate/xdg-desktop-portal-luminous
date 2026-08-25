@@ -11,6 +11,7 @@ mod screenshot;
 mod session;
 mod settings;
 mod systemd;
+mod usb;
 mod utils;
 
 use std::collections::HashMap;
