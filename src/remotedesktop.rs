@@ -69,6 +69,7 @@ pub struct ZoneId(u32);
 
 static COUNT: AtomicU32 = AtomicU32::new(0);
 
+#[allow(unused)]
 impl ZoneId {
     /// Creates a new unique window [`Id`].
     pub fn unique() -> ZoneId {
@@ -188,6 +189,7 @@ pub struct CursorPosition {
     y: f64,
 }
 
+#[allow(unused)]
 pub struct RemoteSessionData {
     pub session_handle: String,
     pub cast_thread: Option<ScreencastThread>,
@@ -220,12 +222,15 @@ impl RemoteSessionData {
             restore_data: restore_data.into(),
         }
     }
+    #[allow(unused)]
     pub fn step(&mut self) {
         self.activation_id += 1;
     }
+    #[allow(unused)]
     pub fn activation_id(&self) -> u32 {
         self.activation_id
     }
+    #[allow(unused)]
     pub fn cursor_position(&self) -> CursorPosition {
         self.cursor
     }
@@ -292,12 +297,14 @@ pub async fn remove_remote_session(path: &str) {
     sessions.remove(index);
 }
 
+#[allow(unused)]
 pub async fn enable_eis_listener(session_handle: ObjectPath<'_>) {
     EIS_SERVER
         .0
         .send(EisServerMsg::ActiveListener(session_handle.to_string()))
         .unwrap();
 }
+#[allow(unused)]
 pub async fn disable_eis_listener(session_handle: ObjectPath<'_>) {
     EIS_SERVER
         .0

@@ -97,6 +97,7 @@ impl CursorMode {
 pub enum SessionType {
     ScreenCast,
     Remote,
+    #[allow(unused)]
     InputCapture,
 }
 
