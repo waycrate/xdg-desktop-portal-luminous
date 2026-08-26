@@ -28,6 +28,8 @@ const CHOOSER_SHADOW_MARGIN: u32 = 24;
 const PERMISSION_DIALOG_WIDTH: u32 = 420;
 const PERMISSION_DIALOG_HEIGHT: u32 = 200;
 const PERMISSION_DIALOG_SHADOW_MARGIN: u32 = 16;
+const USB_DIALOG_WIDTH: u32 = 460;
+const USB_DIALOG_HEIGHT: u32 = 420;
 const PREVIEW_BUTTON_HEIGHT: f32 = 320.0;
 const PREVIEW_BUTTON_PADDING: u16 = 8;
 const PREVIEW_BUTTON_LINE_HEIGHT: f32 = 17.0;
@@ -85,6 +87,7 @@ pub enum GuiMode {
         id_valid: bool,
     },
     BackgroundPrompt,
+    UsbPrompt,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -106,6 +109,7 @@ struct AreaSelectorGUI {
     sender_cast: Option<Sender<CopySelect>>,
     sender_remote: Option<Sender<CopySelect>>,
     sender_background: Option<UnboundedSender<CopySelect>>,
+    sender_usb: Option<Sender<CopySelect>>,
     toplevels: Vec<TopLevelInfo>,
     screens: Vec<WlOutputInfo>,
     use_cursor: bool,
@@ -113,6 +117,7 @@ struct AreaSelectorGUI {
     active_background_handle: Option<String>,
     background_queue: VecDeque<BackgroundPromptRequest>,
     tombstoned_background_handles: VecDeque<String>,
+    usb_entries: Vec<UsbDeviceEntry>,
     prefers_dark: bool,
 }
 
@@ -132,13 +137,31 @@ pub enum PermissionResult {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CopySelect {
-    Window { index: usize, show_cursor: bool },
-    Screen { index: usize, show_cursor: bool },
+    Window {
+        index: usize,
+        show_cursor: bool,
+    },
+    Screen {
+        index: usize,
+        show_cursor: bool,
+    },
     All,
     Slurp,
     Cancel,
     Permission(PermissionResult),
-    BackgroundPermission { handle: String, result: u32 },
+    BackgroundPermission {
+        handle: String,
+        result: u32,
+    },
+    /// Ids of the USB devices the user allowed acquiring.
+    Usb(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UsbDeviceEntry {
+    pub id: String,
+    pub label: String,
+    pub checked: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -181,6 +204,7 @@ pub enum Message {
     ReadyCast(Sender<CopySelect>),
     ReadyRemote(Sender<CopySelect>),
     ReadyBackground(UnboundedSender<CopySelect>),
+    ReadyUsb(Sender<CopySelect>),
     ToggleCursor(bool),
     PermissionDialog {
         message: String,
@@ -195,6 +219,15 @@ pub enum Message {
     CloseBackgroundPrompt {
         handle: String,
     },
+    UsbAcquireDialog {
+        app_id: String,
+        entries: Vec<UsbDeviceEntry>,
+    },
+    UsbToggle {
+        index: usize,
+        checked: bool,
+    },
+    CloseUsbPrompt,
     ColorSchemeChanged(bool),
 }
 
@@ -298,6 +331,27 @@ fn permission_layer_settings() -> NewLayerShellSettings {
         output_option: OutputOption::Active,
         ..Default::default()
     }
+}
+
+fn usb_layer_settings() -> NewLayerShellSettings {
+    NewLayerShellSettings {
+        size: Some((
+            USB_DIALOG_WIDTH + PERMISSION_DIALOG_SHADOW_MARGIN * 2,
+            USB_DIALOG_HEIGHT + PERMISSION_DIALOG_SHADOW_MARGIN * 2,
+        )),
+        exclusive_zone: None,
+        anchor: Anchor::Top | Anchor::Bottom,
+        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+        output_option: OutputOption::Active,
+        ..Default::default()
+    }
+}
+
+fn close_window(id: iced::window::Id) -> Task<Message> {
+    use iced_runtime::Action;
+    use iced_runtime::window::Action as WindowAction;
+
+    iced_runtime::task::effect(Action::Window(WindowAction::Close(id)))
 }
 
 fn dialog_theme(prefers_dark: bool) -> iced::Theme {
@@ -514,6 +568,7 @@ impl AreaSelectorGUI {
             sender_cast: None,
             sender_remote: None,
             sender_background: None,
+            sender_usb: None,
             toplevels: Vec::new(),
             screens: Vec::new(),
             use_cursor: false,
@@ -521,6 +576,7 @@ impl AreaSelectorGUI {
             active_background_handle: None,
             background_queue: VecDeque::new(),
             tombstoned_background_handles: VecDeque::new(),
+            usb_entries: Vec::new(),
             prefers_dark: SettingsConfig::config_from_file().prefers_dark(),
         }
     }
@@ -616,10 +672,7 @@ impl AreaSelectorGUI {
         &mut self,
         id: iced::window::Id,
     ) -> Task<Message> {
-        use iced_runtime::Action;
-        use iced_runtime::window::Action as WindowAction;
-
-        let close_task = iced_runtime::task::effect(Action::Window(WindowAction::Close(id)));
+        let close_task = close_window(id);
         let next_prompt_task = self.show_next_background_prompt();
         Task::batch([close_task, next_prompt_task])
     }
@@ -645,6 +698,9 @@ impl AreaSelectorGUI {
 
                 match self.gui_mode {
                     GuiMode::ScreenCast => {
+                        if matches!(select, CopySelect::Usb(_)) {
+                            return Task::none();
+                        }
                         let _ = self.sender_cast.as_mut().unwrap().try_send(select);
                     }
                     GuiMode::BackgroundPrompt => match &select {
@@ -656,13 +712,19 @@ impl AreaSelectorGUI {
                         _ => return Task::none(),
                     },
                     GuiMode::ScreenShot => {
-                        if matches!(select, CopySelect::BackgroundPermission { .. }) {
+                        if matches!(
+                            select,
+                            CopySelect::BackgroundPermission { .. } | CopySelect::Usb(_)
+                        ) {
                             return Task::none();
                         }
                         let _ = self.sender_shot.as_mut().unwrap().try_send(select);
                     }
                     GuiMode::PermissionPrompt { mode, .. } => {
-                        if matches!(select, CopySelect::BackgroundPermission { .. }) {
+                        if matches!(
+                            select,
+                            CopySelect::BackgroundPermission { .. } | CopySelect::Usb(_)
+                        ) {
                             return Task::none();
                         }
                         match mode {
@@ -673,6 +735,12 @@ impl AreaSelectorGUI {
                                 let _ = self.sender_shot.as_mut().unwrap().try_send(select);
                             }
                         }
+                    }
+                    GuiMode::UsbPrompt => {
+                        let CopySelect::Usb(_) = &select else {
+                            return Task::none();
+                        };
+                        let _ = self.sender_usb.as_mut().unwrap().try_send(select);
                     }
                 }
 
@@ -754,6 +822,10 @@ impl AreaSelectorGUI {
             }
             Message::ReadyBackground(sender) => {
                 self.sender_background = Some(sender);
+                Task::none()
+            }
+            Message::ReadyUsb(sender) => {
+                self.sender_usb = Some(sender);
                 Task::none()
             }
             Message::ToggleCursor(cursor) => {
@@ -843,6 +915,48 @@ impl AreaSelectorGUI {
                     self.close_window_and_show_next_background_prompt(id)
                 } else {
                     self.show_next_background_prompt()
+                }
+            }
+            Message::UsbAcquireDialog { app_id, entries } => {
+                if self.window_show {
+                    if let Some(sender) = self.sender_usb.as_mut() {
+                        let _ = sender.try_send(CopySelect::Cancel);
+                    }
+                    return Task::none();
+                }
+                self.window_show = true;
+                self.gui_mode = GuiMode::UsbPrompt;
+                self.usb_entries = entries;
+                self.prompt_text = Some(format!(
+                    "Allow '{app_id}' to access the following USB devices?"
+                ));
+                let id = iced::window::Id::unique();
+                self.window_id = Some(id);
+                Task::done(Message::NewLayerShell {
+                    settings: usb_layer_settings(),
+                    id,
+                })
+            }
+            Message::UsbToggle { index, checked } => {
+                if self.gui_mode == GuiMode::UsbPrompt
+                    && let Some(entry) = self.usb_entries.get_mut(index)
+                {
+                    entry.checked = checked;
+                }
+                Task::none()
+            }
+            Message::CloseUsbPrompt => {
+                if self.gui_mode != GuiMode::UsbPrompt || !self.window_show {
+                    return Task::none();
+                }
+                self.window_show = false;
+                self.gui_mode = GuiMode::ScreenShot;
+                self.prompt_text = None;
+                self.usb_entries = Vec::new();
+                if let Some(id) = self.window_id.take() {
+                    close_window(id)
+                } else {
+                    Task::none()
                 }
             }
             Message::ColorSchemeChanged(prefers_dark) => {
@@ -1006,12 +1120,119 @@ impl AreaSelectorGUI {
         self.view_prompt(button_row.into())
     }
 
+    fn view_usb_prompt(&self, id: iced::window::Id) -> Element<'_, Message> {
+        let deny_button = button(
+            text("Deny")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press(Message::Selected {
+            id,
+            select: CopySelect::Usb(Vec::new()),
+        })
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(bordered_button_style);
+
+        let allow_button = button(
+            text("Allow")
+                .size(14)
+                .line_height(Pixels(17.0))
+                .font(FONT_MEDIUM),
+        )
+        .on_press_maybe(
+            self.usb_entries
+                .iter()
+                .any(|entry| entry.checked)
+                .then_some(Message::Selected {
+                    id,
+                    select: CopySelect::Usb(
+                        self.usb_entries
+                            .iter()
+                            .filter(|entry| entry.checked)
+                            .map(|entry| entry.id.clone())
+                            .collect(),
+                    ),
+                }),
+        )
+        .height(Length::Fixed(33.0))
+        .padding([8, 16])
+        .style(primary_button_style);
+
+        let button_row = row![deny_button, Space::new().width(Length::Fill), allow_button]
+            .align_y(Alignment::Center)
+            .spacing(10)
+            .padding(10)
+            .width(Length::Fill)
+            .height(Length::Fixed(60.0));
+
+        let device_list: Element<'_, Message> = if self.usb_entries.is_empty() {
+            text("No devices requested.")
+                .size(14)
+                .width(Length::Fill)
+                .into()
+        } else {
+            column(
+                self.usb_entries
+                    .iter()
+                    .enumerate()
+                    .map(|(index, entry)| {
+                        checkbox(entry.checked)
+                            .label(&entry.label)
+                            .on_toggle(move |checked| Message::UsbToggle { index, checked })
+                            .width(Length::Fill)
+                            .into()
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .spacing(8)
+            .into()
+        };
+
+        let dialog = container(
+            column![
+                text(self.prompt_text.as_deref().unwrap_or_default())
+                    .width(Length::Fill)
+                    .height(Length::Fixed(60.0))
+                    .size(20)
+                    .line_height(Pixels(24.0))
+                    .font(FONT_SEMIBOLD),
+                Space::new().height(Length::Fixed(16.0)),
+                divider(),
+                Space::new().height(Length::Fixed(15.0)),
+                scrollable(device_list).height(Length::Fill),
+                Space::new().height(Length::Fixed(15.0)),
+                divider(),
+                Space::new().height(Length::Fixed(15.0)),
+                button_row,
+            ]
+            .width(Length::Fill)
+            .height(Length::Fill),
+        )
+        .padding(24)
+        .width(Length::Fixed(USB_DIALOG_WIDTH as f32))
+        .height(Length::Fixed(USB_DIALOG_HEIGHT as f32))
+        .style(dialog_style(false));
+
+        container(dialog)
+            .padding(PERMISSION_DIALOG_SHADOW_MARGIN as f32)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
         if let GuiMode::PermissionPrompt { id_valid, .. } = self.gui_mode {
             return self.view_permission_prompt(id, id_valid);
         }
         if self.gui_mode == GuiMode::BackgroundPrompt {
             return self.view_background_prompt(id);
+        }
+        if self.gui_mode == GuiMode::UsbPrompt {
+            return self.view_usb_prompt(id);
         }
 
         let selector = self.selector();
@@ -1149,12 +1370,14 @@ impl AreaSelectorGUI {
                 let (sender_cast, receiver_cast) = channel(100);
                 let (sender_remote, receiver_remote) = channel(100);
                 let (sender_background, receiver_background) = unbounded();
+                let (sender_usb, receiver_usb) = channel(100);
                 let _ = output.send(Message::ReadyShot(sender_shot)).await;
                 let _ = output.send(Message::ReadyCast(sender_cast)).await;
                 let _ = output.send(Message::ReadyRemote(sender_remote)).await;
                 let _ = output
                     .send(Message::ReadyBackground(sender_background))
                     .await;
+                let _ = output.send(Message::ReadyUsb(sender_usb)).await;
 
                 let _ = crate::backend::backend(
                     output,
@@ -1162,6 +1385,7 @@ impl AreaSelectorGUI {
                     receiver_cast,
                     receiver_remote,
                     receiver_background,
+                    receiver_usb,
                 )
                 .await;
             })

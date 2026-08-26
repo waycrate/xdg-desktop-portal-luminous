@@ -8,6 +8,7 @@ use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
 use crate::settings::XDG_CONFIG_HOME_DIR;
 use crate::settings::{AccentColor, SETTING_CONFIG, SettingsBackend, SettingsConfig};
+use crate::usb::UsbBackend;
 use futures::{
     SinkExt, StreamExt,
     channel::mpsc::{Receiver, Sender, UnboundedReceiver, channel},
@@ -139,6 +140,7 @@ pub async fn backend(
     receiver_cast: Receiver<CopySelect>,
     receiver_remote: Receiver<CopySelect>,
     receiver_background: UnboundedReceiver<CopySelect>,
+    receiver_usb: Receiver<CopySelect>,
 ) -> anyhow::Result<()> {
     let mut settings_dialog_sender = sender.clone();
     let toplevel_capture_support = libwayshot::WayshotConnection::new()
@@ -146,6 +148,12 @@ pub async fn backend(
         .unwrap_or(false);
     let pending_background_responses: PendingBackgroundResponses =
         Arc::new(Mutex::new(Default::default()));
+    let usb_active_claim: crate::usb::ActiveClaim = Arc::default();
+    tokio::spawn(crate::usb::route_responses(
+        receiver_usb,
+        usb_active_claim.clone(),
+    ));
+
     let conn = connection::Builder::session()?
         .name("org.freedesktop.impl.portal.desktop.luminous")?
         .serve_at("/org/freedesktop/portal/desktop", AccessBackend)?
@@ -173,11 +181,18 @@ pub async fn backend(
         )?
         .serve_at(
             "/org/freedesktop/portal/desktop",
-            RemoteDesktopBackend::new(sender, receiver_remote),
+            RemoteDesktopBackend::new(sender.clone(), receiver_remote),
         )?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
         .serve_at("/org/freedesktop/portal/desktop", InputCapture::default())?
         .serve_at("/org/freedesktop/portal/desktop", Clipboard)?
+        .serve_at(
+            "/org/freedesktop/portal/desktop",
+            UsbBackend {
+                sender: sender.clone(),
+                active_claim: usb_active_claim,
+            },
+        )?
         .build()
         .await?;
 

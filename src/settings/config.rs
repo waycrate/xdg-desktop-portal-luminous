@@ -27,6 +27,7 @@ pub struct SettingsConfig {
     pub screenshot_permission_check: bool,
     pub remote_permission_check: bool,
     pub background_permission_default: String,
+    pub usb_permission_check: bool,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Debug)]
@@ -40,6 +41,7 @@ struct SettingsConfigRead {
     // This means only one screen
     pub remote_permission_check: Option<bool>,
     pub background_permission_default: Option<String>,
+    pub usb_permission_check: Option<bool>,
 }
 
 impl From<SettingsConfigRead> for SettingsConfig {
@@ -64,6 +66,7 @@ impl From<SettingsConfigRead> for SettingsConfig {
                 "deny" => "deny".to_string(),
                 _ => DEFAULT_BACKGROUND_PERMISSION.to_string(),
             },
+            usb_permission_check: value.usb_permission_check.unwrap_or(true),
         }
     }
 }
@@ -120,6 +123,7 @@ impl Default for SettingsConfig {
             screenshot_permission_check: true,
             remote_permission_check: true,
             background_permission_default: DEFAULT_BACKGROUND_PERMISSION.to_string(),
+            usb_permission_check: true,
         }
     }
 }
