@@ -8,12 +8,12 @@ use iced::{
     Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Pixels, Shadow, Task,
     Vector,
 };
-use iced_layershell::daemon;
-use iced_layershell::reexport::{
+use iced_exwlshell::daemon;
+use iced_exwlshell::reexport::{
     Anchor, KeyboardInteractivity, NewLayerShellSettings, OutputOption,
 };
-use iced_layershell::settings::{LayerShellSettings, StartMode};
-use iced_layershell::to_layer_message;
+use iced_exwlshell::settings::{LayerShellSettings, LayerSize, StartMode};
+use iced_exwlshell::to_layer_message;
 
 use libwayshot::output::OutputInfo;
 use libwayshot::region::TopLevel;
@@ -48,7 +48,7 @@ const FONT_SEMIBOLD: Font = Font {
     ..Font::DEFAULT
 };
 
-pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_layershell::Error> {
+pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_exwlshell::Error> {
     unsafe { std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info") }
     tracing_subscriber::fmt().init();
     tracing::info!("luminous Start");
@@ -307,10 +307,10 @@ fn divider() -> Element<'static, Message> {
 
 fn chooser_layer_settings() -> NewLayerShellSettings {
     NewLayerShellSettings {
-        size: Some((
+        size: LayerSize::px(
             CHOOSER_WIDTH + CHOOSER_SHADOW_MARGIN * 2,
             CHOOSER_HEIGHT + CHOOSER_SHADOW_MARGIN * 2,
-        )),
+        ),
         exclusive_zone: None,
         anchor: Anchor::all(),
         keyboard_interactivity: KeyboardInteractivity::OnDemand,
@@ -321,10 +321,10 @@ fn chooser_layer_settings() -> NewLayerShellSettings {
 
 fn permission_layer_settings() -> NewLayerShellSettings {
     NewLayerShellSettings {
-        size: Some((
+        size: LayerSize::px(
             PERMISSION_DIALOG_WIDTH + PERMISSION_DIALOG_SHADOW_MARGIN * 2,
             PERMISSION_DIALOG_HEIGHT + PERMISSION_DIALOG_SHADOW_MARGIN * 2,
-        )),
+        ),
         exclusive_zone: None,
         anchor: Anchor::Top | Anchor::Bottom,
         keyboard_interactivity: KeyboardInteractivity::OnDemand,
