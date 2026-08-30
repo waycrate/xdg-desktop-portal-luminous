@@ -335,10 +335,10 @@ fn permission_layer_settings() -> NewLayerShellSettings {
 
 fn usb_layer_settings() -> NewLayerShellSettings {
     NewLayerShellSettings {
-        size: Some((
+        size: LayerSize::px(
             USB_DIALOG_WIDTH + PERMISSION_DIALOG_SHADOW_MARGIN * 2,
             USB_DIALOG_HEIGHT + PERMISSION_DIALOG_SHADOW_MARGIN * 2,
-        )),
+        ),
         exclusive_zone: None,
         anchor: Anchor::Top | Anchor::Bottom,
         keyboard_interactivity: KeyboardInteractivity::OnDemand,
