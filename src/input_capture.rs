@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     os::{fd::AsFd, unix::net::UnixStream},
 };
-
+mod ei_client;
 use crate::{
     PortalResponse,
     remotedesktop::{
