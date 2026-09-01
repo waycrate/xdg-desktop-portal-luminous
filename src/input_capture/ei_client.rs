@@ -19,18 +19,27 @@ pub enum EiClientMsg {
     StopListener(String),
     ActiveListener(String),
     RemoveListener(String),
+    Input(InputEvent),
 }
+
+pub enum InputEvent {}
+
+const INTERFACES_LIST: &[&'static str] = &[
+    "ei_callback",
+    "ei_connection",
+    "ei_seat",
+    "ei_device",
+    "ei_pingpong",
+    "ei_keyboard",
+    "ei_button",
+    "ei_pointer",
+];
 
 static INTERFACES: LazyLock<HashMap<&'static str, u32>> = LazyLock::new(|| {
     let mut m = HashMap::new();
-    m.insert("ei_callback", 1);
-    m.insert("ei_connection", 1);
-    m.insert("ei_seat", 1);
-    m.insert("ei_device", 1);
-    m.insert("ei_pingpong", 1);
-    m.insert("ei_keyboard", 1);
-    m.insert("ei_button", 1);
-    m.insert("ei_pointer", 1);
+    for interface in INTERFACES_LIST {
+        m.insert(*interface, 1);
+    }
     m
 });
 
@@ -55,7 +64,6 @@ impl DeviceData {
 #[derive(Debug)]
 pub struct State {
     handle: calloop::LoopHandle<'static, Self>,
-    sender: mpsc::Sender<InputEvent>,
     clients: HashMap<String, RegistrationToken>,
     // XXX best way to handle data associated with object?
     seats: HashMap<ei::Seat, SeatData>,
@@ -63,6 +71,10 @@ pub struct State {
     devices: HashMap<ei::Device, DeviceData>,
     sequence: u32,
     last_serial: u32,
+
+    keyboard: Option<ei::Keyboard>,
+    pointer: Option<ei::Pointer>,
+    button: Option<ei::Button>,
 }
 
 impl State {
@@ -124,13 +136,10 @@ impl State {
                             data.capabilities.insert(interface, mask);
                         }
                         ei::seat::Event::Done => {
-                            if let Some(mask) = data.capabilities.get("ei_text") {
-                                seat.bind(*mask);
-                            } else {
-                                tracing::warn!(
-                                    "Server does not advertise the ei_text capability \
-                                     (requires libei 1.6.0 or newer)."
-                                );
+                            for interface in INTERFACES_LIST {
+                                if let Some(mask) = data.capabilities.get(*interface) {
+                                    seat.bind(*mask);
+                                }
                             }
                         }
                         ei::seat::Event::Device { device } => {
@@ -153,15 +162,20 @@ impl State {
                                 .insert(object.interface().to_owned(), object);
                         }
                         ei::device::Event::Done => {
-                            if let Some(text) = data.interface::<ei::Text>() {
-                                // ei_text takes a UTF-8 string directly, so there is no
-                                // need to reverse-map characters to keycodes through a keymap.
-                                device.start_emulating(self.sequence, self.last_serial);
-                                self.sequence += 1;
-                                text.utf8("Hello world!");
-                                device.frame(self.last_serial, 1); // XXX time
-                                device.stop_emulating(self.last_serial);
-                                //self.running = false;
+                            if self.keyboard.is_none()
+                                && let Some(keyboard) = data.interface::<ei::Keyboard>()
+                            {
+                                self.keyboard = Some(keyboard);
+                            }
+                            if self.pointer.is_none()
+                                && let Some(pointer) = data.interface::<ei::Pointer>()
+                            {
+                                self.pointer = Some(pointer);
+                            }
+                            if self.button.is_none()
+                                && let Some(button) = data.interface::<ei::Button>()
+                            {
+                                self.button = Some(button);
                             }
                         }
                         ei::device::Event::Resumed { serial } => {
@@ -180,22 +194,21 @@ impl State {
     }
 }
 
-pub enum InputEvent {}
-
-pub fn start() -> (Sender<EiClientMsg>, Receiver<InputEvent>) {
+pub fn start() -> Sender<EiClientMsg> {
     let (tx, msg_channel) = channel();
-    let (input_tx, input_rx) = mpsc::channel();
     thread::spawn(move || {
         let mut event_loop = calloop::EventLoop::<State>::try_new().unwrap();
         let handle = event_loop.handle();
         let mut state = State {
             handle: handle.clone(),
-            sender: input_tx,
             clients: HashMap::new(),
             seats: HashMap::new(),
             devices: HashMap::new(),
             last_serial: u32::MAX,
             sequence: 0,
+            keyboard: None,
+            button: None,
+            pointer: None,
         };
 
         let _ = handle.insert_source(msg_channel, |event, _, state| {
@@ -236,6 +249,7 @@ pub fn start() -> (Sender<EiClientMsg>, Receiver<InputEvent>) {
                     };
                     state.handle.remove(token);
                 }
+                EiClientMsg::Input(event) => {}
             }
         });
 
@@ -245,5 +259,5 @@ pub fn start() -> (Sender<EiClientMsg>, Receiver<InputEvent>) {
                 .unwrap();
         }
     });
-    (tx, input_rx)
+    tx
 }
