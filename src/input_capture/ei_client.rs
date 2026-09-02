@@ -19,11 +19,11 @@ use crate::utils::InputEvent;
 
 #[derive(Debug, Clone)]
 pub enum EiClientMsg {
-    NewListener(ei::Context, String),
-    StopListener(String),
-    ActiveListener(String),
-    RemoveListener(String),
-    Input(InputEvent),
+    NewContext(ei::Context, String),
+    StopContext(String),
+    ActiveContext(String),
+    RemoveContext(String),
+    Event(InputEvent),
 }
 
 const INTERFACES_LIST: &[&'static str] = &[
@@ -219,7 +219,7 @@ pub fn start() -> Sender<EiClientMsg> {
             };
 
             match msg {
-                EiClientMsg::NewListener(context, session_handle) => {
+                EiClientMsg::NewContext(context, session_handle) => {
                     let session_handle_2 = session_handle.clone();
                     let _handlshake = context.handshake();
                     let _ = context.flush();
@@ -233,25 +233,25 @@ pub fn start() -> Sender<EiClientMsg> {
                         .unwrap();
                     state.clients.insert(session_handle_2, token);
                 }
-                EiClientMsg::StopListener(session) => {
+                EiClientMsg::StopContext(session) => {
                     let Some(token) = state.clients.get(&session) else {
                         return;
                     };
                     let _ = state.handle.disable(token);
                 }
-                EiClientMsg::ActiveListener(session) => {
+                EiClientMsg::ActiveContext(session) => {
                     let Some(token) = state.clients.get(&session) else {
                         return;
                     };
                     let _ = state.handle.enable(token);
                 }
-                EiClientMsg::RemoveListener(session) => {
+                EiClientMsg::RemoveContext(session) => {
                     let Some(token) = state.clients.remove(&session) else {
                         return;
                     };
                     state.handle.remove(token);
                 }
-                EiClientMsg::Input(event) => {}
+                EiClientMsg::Event(event) => {}
             }
         });
 

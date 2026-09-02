@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     clipboard::remove_clipboard_session,
+    input_capture::remove_capture_session,
     remotedesktop::{RestoreData, SelectDevicesOptions, remove_remote_session},
     screencast::{SelectSourcesOptions, remove_cast_session},
 };
@@ -36,7 +37,8 @@ pub async fn remove_session(session: &Session) -> bool {
         return true;
     };
     remove_cast_session(&session.handle_path.to_string()).await;
-    remove_remote_session(&session.handle_path.to_string()).await;
+    remove_remote_session(session.handle_path.as_ref()).await;
+    remove_capture_session(session.handle_path.as_ref()).await;
     remove_clipboard_session(session.handle_path.as_ref()).await;
     sessions.remove(index);
     true

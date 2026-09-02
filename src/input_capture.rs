@@ -3,31 +3,125 @@ use std::{
     os::{fd::AsFd, unix::net::UnixStream},
 };
 mod ei_client;
+use crate::utils::InputRequest;
 use crate::{
     PortalResponse,
-    remotedesktop::{
-        CursorPosition, EIS_SERVER, EisServerMsg, REMOTE_SESSIONS, RemoteControl, RemoteInfo,
-        RemoteSessionData, RestoreData, Zone, append_remote_session, disable_eis_listener,
-        enable_eis_listener, get_monitor_info_from_socket,
-    },
+    remotedesktop::{RemoteInfo, get_monitor_info_from_socket},
     request::RequestInterface,
     session::{DeviceType, Session, SessionType, append_session},
 };
+use calloop::channel::Sender;
+use ei_client::EiClientMsg;
 use enumflags2::BitFlags;
-use reis::eis;
+use reis::{ei, eis};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{self, AtomicU32};
+use std::sync::{Arc, LazyLock};
+use tokio::sync::Mutex;
 use zbus::{
     interface,
     object_server::SignalEmitter,
     zvariant::{DeserializeDict, Fd, ObjectPath, SerializeDict, Type, Value, as_value},
 };
+type EiClientSender = Sender<EiClientMsg>;
+pub static EI_CLIENT: LazyLock<EiClientSender> = LazyLock::new(ei_client::start);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+/// The id of the window.
+///
+/// Internally Iced reserves `window::Id::MAIN` for the first window spawned.
+pub struct ZoneId(u32);
+
+static COUNT: AtomicU32 = AtomicU32::new(0);
+
+impl ZoneId {
+    /// Creates a new unique window [`Id`].
+    pub fn unique() -> ZoneId {
+        ZoneId(COUNT.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+    pub fn value(&self) -> u32 {
+        self.0
+    }
+}
+pub async fn enable_ei_client(session_handle: ObjectPath<'_>) {
+    EI_CLIENT
+        .send(EiClientMsg::ActiveContext(session_handle.to_string()))
+        .unwrap();
+}
+pub async fn disable_ei_client(session_handle: ObjectPath<'_>) {
+    EI_CLIENT
+        .send(EiClientMsg::StopContext(session_handle.to_string()))
+        .unwrap();
+}
 #[derive(Debug, Type, Serialize, Deserialize)]
 pub struct Position {
     x1: i32,
     y1: i32,
     x2: i32,
     y2: i32,
+}
+
+#[derive(Debug, Type, Serialize, Deserialize, Clone, Copy)]
+pub struct Zone {
+    pub width: u32,
+    pub height: u32,
+    pub x_offset: i32,
+    pub y_offset: i32,
+}
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, Type)]
+pub struct CursorPosition {
+    x: f64,
+    y: f64,
+}
+pub struct InputCaptureData {
+    pub session_handle: String,
+    pub zones: Vec<Zone>,
+    pub zone_id: ZoneId,
+    pub barriers: Vec<BarrierInfo>,
+    cursor: CursorPosition,
+    activation_id: u32,
+}
+
+impl InputCaptureData {
+    pub fn step(&mut self) {
+        self.activation_id += 1;
+    }
+    pub fn activation_id(&self) -> u32 {
+        self.activation_id
+    }
+    pub fn cursor_position(&self) -> CursorPosition {
+        self.cursor
+    }
+    #[allow(unused)]
+    pub fn update_cursor(&mut self, event: InputRequest) {
+        match event {
+            InputRequest::PointerMotionAbsolute { x, y } => {
+                self.cursor = CursorPosition { x, y };
+            }
+            InputRequest::PointerMotion { dx, dy } => {
+                self.cursor.x += dx;
+                self.cursor.y += dy;
+            }
+            _ => {}
+        }
+    }
+}
+
+pub static INPUT_CAPTURE_SESSIONS: LazyLock<Arc<Mutex<HashMap<String, InputCaptureData>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(HashMap::new())));
+
+pub async fn append_capture_session(path: &str, session: InputCaptureData) {
+    let mut sessions = INPUT_CAPTURE_SESSIONS.lock().await;
+    sessions.insert(path.to_string(), session);
+}
+
+pub async fn remove_capture_session(session_handle: ObjectPath<'_>) {
+    let mut sessions = INPUT_CAPTURE_SESSIONS.lock().await;
+    let Some(session) = sessions.remove(session_handle.as_str()) else {
+        return;
+    };
+    tracing::info!("session {} is stopped", session.session_handle);
+    disable_ei_client(session_handle).await;
 }
 
 impl Position {
@@ -114,10 +208,8 @@ struct BarrierRet {
 }
 
 async fn remote_zones(session_handle: ObjectPath<'_>) -> Option<(u32, Vec<Zone>)> {
-    let remote_sessions = REMOTE_SESSIONS.lock().await;
-    let session = remote_sessions
-        .iter()
-        .find(|session| session.session_handle == session_handle.to_string())?;
+    let remote_sessions = INPUT_CAPTURE_SESSIONS.lock().await;
+    let session = remote_sessions.get(session_handle.as_str())?;
     Some((session.zone_id.value(), session.zones.clone()))
 }
 
@@ -163,7 +255,6 @@ impl InputCapture {
             height,
             x,
             y,
-            output_name,
             ..
         } = get_monitor_info_from_socket(&connection)?;
         let capabilities = options.capabilities & self.capabilities();
@@ -181,22 +272,22 @@ impl InputCapture {
         append_session(current_session.clone()).await;
         server.at(session_handle.clone(), current_session).await?;
 
-        let remote_control = RemoteControl::init(x as u32, y as u32, width as u32, height as u32);
-
-        append_remote_session(RemoteSessionData::new(
-            session_handle.to_string(),
-            None,
-            remote_control,
-            vec![Zone {
-                x_offset: x,
-                y_offset: y,
-                width: width as u32,
-                height: height as u32,
-            }],
-            RestoreData::new(crate::remotedesktop::LuminousData {
-                display: output_name,
-            }),
-        ))
+        append_capture_session(
+            &session_handle,
+            InputCaptureData {
+                session_handle: session_handle.to_string(),
+                zones: vec![Zone {
+                    x_offset: x,
+                    y_offset: y,
+                    width: width as u32,
+                    height: height as u32,
+                }],
+                zone_id: ZoneId::unique(),
+                barriers: vec![],
+                activation_id: 0,
+                cursor: CursorPosition::default(),
+            },
+        )
         .await;
         Ok(PortalResponse::Success(CreateSessionRet {
             capabilities,
@@ -235,15 +326,15 @@ impl InputCapture {
                 failed_barries.push(barrier.barrier_id);
             }
         }
-        let mut remote_sessions = REMOTE_SESSIONS.lock().await;
-        let session = remote_sessions
-            .iter_mut()
-            .find(|session| {
-                session.session_handle == session_handle.to_string()
-                    // TODO: now we only accept one zone for one connection
-                    && session.zone_id.value() == zone_set
-            })
+        let mut capture_sessions = INPUT_CAPTURE_SESSIONS.lock().await;
+        let session = capture_sessions
+            .get_mut(session_handle.as_str())
             .ok_or(zbus::Error::Failure("no such session".to_owned()))?;
+        if session.zone_id.value() != zone_set {
+            return Err(zbus::fdo::Error::ZBus(zbus::Error::Failure(
+                "no such session".to_owned(),
+            )));
+        }
         // TODO: here we should update the information to backend, and let the barries work
         session.barriers = valid_barries;
 
@@ -262,17 +353,18 @@ impl InputCapture {
 
         let path = listener.path();
         use std::os::unix::net::UnixStream;
-        let stream = UnixStream::connect(path).map_err(|e| {
+        let stream_server = UnixStream::connect(path).map_err(|e| {
             zbus::Error::Failure(format!("Failed to open unix stream: {path:?} with {e}"))
         })?;
-        self.clients.insert(session_handle.to_string(), stream);
+        let stream_client = UnixStream::connect(path).map_err(|e| {
+            zbus::Error::Failure(format!("Failed to open unix stream: {path:?} with {e}"))
+        })?;
+        let context = ei::Context::new(stream_client).unwrap();
+        self.clients
+            .insert(session_handle.to_string(), stream_server);
 
-        EIS_SERVER
-            .0
-            .send(EisServerMsg::NewListener(
-                listener,
-                session_handle.to_string(),
-            ))
+        EI_CLIENT
+            .send(EiClientMsg::NewContext(context, session_handle.to_string()))
             .unwrap();
 
         Ok(Fd::from(self.clients[session_handle.as_str()].as_fd()))
@@ -285,11 +377,10 @@ impl InputCapture {
         _options: HashMap<String, Value<'_>>,
         #[zbus(signal_emitter)] cxts: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<PortalResponse<EnDisableRet>> {
-        enable_eis_listener(session_handle.clone()).await;
-        let mut remote_sessions = REMOTE_SESSIONS.lock().await;
+        enable_ei_client(session_handle.clone()).await;
+        let mut remote_sessions = INPUT_CAPTURE_SESSIONS.lock().await;
         let session = remote_sessions
-            .iter_mut()
-            .find(|session| session.session_handle == session_handle.to_string())
+            .get_mut(session_handle.as_str())
             .ok_or(zbus::Error::Failure("no such session".to_owned()))?;
         session.step();
         Self::activated(
@@ -313,11 +404,10 @@ impl InputCapture {
         #[zbus(signal_emitter)] cxts: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<PortalResponse<EnDisableRet>> {
         self.clients.remove(session_handle.as_str());
-        disable_eis_listener(session_handle.clone()).await;
-        let remote_sessions = REMOTE_SESSIONS.lock().await;
+        disable_ei_client(session_handle.clone()).await;
+        let remote_sessions = INPUT_CAPTURE_SESSIONS.lock().await;
         let session = remote_sessions
-            .iter()
-            .find(|session| session.session_handle == session_handle.to_string())
+            .get(session_handle.as_str())
             .ok_or(zbus::Error::Failure("no such session".to_owned()))?;
         Self::disabled(
             &cxts,
