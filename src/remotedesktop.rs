@@ -38,8 +38,9 @@ use crate::session::{
 use crate::settings::WHITE_LIST_MAINTAINER;
 use crate::utils::get_selection_from_socket;
 
-pub use self::eis_server::{EisServerMsg, InputEvent};
-pub use self::remote_thread::InputRequest;
+pub use self::eis_server::EisServerMsg;
+
+use crate::utils::{InputEvent, InputRequest};
 use std::hash::Hash;
 
 use crate::settings::SETTING_CONFIG;
@@ -332,72 +333,12 @@ fn option_bool(options: &HashMap<String, Value<'_>>, key: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub async fn handle_input_event(event: InputEvent) {
-    let (session_handle, request) = match event {
-        InputEvent::PointerMotion {
-            session_handle,
-            dx,
-            dy,
-        } => (session_handle, InputRequest::PointerMotion { dx, dy }),
-        InputEvent::PointerMotionAbsolute {
-            session_handle,
-            x,
-            y,
-        } => (session_handle, InputRequest::PointerMotionAbsolute { x, y }),
-        InputEvent::PointerButton {
-            session_handle,
-            button,
-            state,
-        } => (
-            session_handle,
-            InputRequest::PointerButton { button, state },
-        ),
-        InputEvent::PointerAxis {
-            session_handle,
-            dx,
-            dy,
-        } => (
-            session_handle,
-            InputRequest::PointerAxis {
-                dx,
-                dy,
-                finish: false,
-            },
-        ),
-        InputEvent::PointerAxisDiscrete {
-            session_handle,
-            axis,
-            steps,
-        } => (
-            session_handle,
-            InputRequest::PointerAxisDiscrete { axis, steps },
-        ),
-        InputEvent::KeyboardKeycode {
-            session_handle,
-            keycode,
-            state,
-        } => (
-            session_handle,
-            InputRequest::KeyboardKeycode { keycode, state },
-        ),
-        InputEvent::TouchDown {
-            session_handle,
-            slot,
-            x,
-            y,
-        } => (session_handle, InputRequest::TouchDown { slot, x, y }),
-        InputEvent::TouchMotion {
-            session_handle,
-            slot,
-            x,
-            y,
-        } => (session_handle, InputRequest::TouchMotion { slot, x, y }),
-        InputEvent::TouchUp {
-            session_handle,
-            slot,
-        } => (session_handle, InputRequest::TouchUp { slot }),
-    };
-
+pub async fn handle_input_event(
+    InputEvent {
+        session_handle,
+        request,
+    }: InputEvent,
+) {
     if let Ok(path) = ObjectPath::try_from(session_handle) {
         let _ = notify_input_event(path, request).await;
     }

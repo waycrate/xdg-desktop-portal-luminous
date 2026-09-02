@@ -14,6 +14,10 @@ use std::{
     thread,
     time::Duration,
 };
+
+use crate::utils::InputEvent;
+
+#[derive(Debug, Clone)]
 pub enum EiClientMsg {
     NewListener(ei::Context, String),
     StopListener(String),
@@ -21,8 +25,6 @@ pub enum EiClientMsg {
     RemoveListener(String),
     Input(InputEvent),
 }
-
-pub enum InputEvent {}
 
 const INTERFACES_LIST: &[&'static str] = &[
     "ei_callback",

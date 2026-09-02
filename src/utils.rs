@@ -52,3 +52,24 @@ pub static XDG_CONFIG_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
     let home = std::env::var("HOME").ok()?;
     Some(PathBuf::from(&home).join(".config"))
 });
+
+#[derive(Debug, Clone)]
+pub struct InputEvent {
+    pub session_handle: String,
+    pub request: InputRequest,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum InputRequest {
+    PointerMotion { dx: f64, dy: f64 },
+    PointerMotionAbsolute { x: f64, y: f64 },
+    PointerButton { button: i32, state: u32 },
+    PointerAxis { dx: f64, dy: f64, finish: bool },
+    PointerAxisDiscrete { axis: u32, steps: i32 },
+    KeyboardKeycode { keycode: i32, state: u32 },
+    KeyboardKeysym { keysym: i32, state: u32 },
+    TouchMotion { slot: u32, x: f64, y: f64 },
+    TouchDown { slot: u32, x: f64, y: f64 },
+    TouchUp { slot: u32 },
+    Exit,
+}
