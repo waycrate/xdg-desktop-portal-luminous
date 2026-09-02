@@ -84,7 +84,7 @@ pub struct InputCaptureData {
 
 impl InputCaptureData {
     fn stop(&self) {
-        EI_CLIENT.send(EiClientMsg::StopContext(self.session_handle.clone()));
+        let _ =EI_CLIENT.send(EiClientMsg::RemoveContext(self.session_handle.clone()));
     }
     pub fn step(&mut self) {
         self.activation_id += 1;
