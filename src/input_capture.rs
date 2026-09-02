@@ -83,6 +83,9 @@ pub struct InputCaptureData {
 }
 
 impl InputCaptureData {
+    fn stop(&self) {
+        EI_CLIENT.send(EiClientMsg::StopContext(self.session_handle.clone()));
+    }
     pub fn step(&mut self) {
         self.activation_id += 1;
     }
@@ -120,8 +123,8 @@ pub async fn remove_capture_session(session_handle: ObjectPath<'_>) {
     let Some(session) = sessions.remove(session_handle.as_str()) else {
         return;
     };
+    session.stop();
     tracing::info!("session {} is stopped", session.session_handle);
-    disable_ei_client(session_handle).await;
 }
 
 impl Position {
@@ -237,6 +240,7 @@ impl InputCapture {
     fn supported_capabilities(&self) -> u32 {
         self.capabilities().bits()
     }
+    // here open a layershell to capture all the events
     async fn create_session(
         &self,
         handle: ObjectPath<'_>,

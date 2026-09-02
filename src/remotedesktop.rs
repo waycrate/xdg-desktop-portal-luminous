@@ -224,14 +224,6 @@ pub async fn remove_remote_session(session_handle: ObjectPath<'_>) {
     sessions[index].stop();
     tracing::info!("session {} is stopped", sessions[index].session_handle);
     sessions.remove(index);
-    disable_eis_listener(session_handle).await;
-}
-
-pub async fn disable_eis_listener(session_handle: ObjectPath<'_>) {
-    EIS_SERVER
-        .0
-        .send(EisServerMsg::StopListener(session_handle.to_string()))
-        .unwrap();
 }
 
 async fn notify_input_event(
