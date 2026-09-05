@@ -84,7 +84,7 @@ pub struct InputCaptureData {
 
 impl InputCaptureData {
     fn stop(&self) {
-        let _ =EI_CLIENT.send(EiClientMsg::RemoveContext(self.session_handle.clone()));
+        let _ = EI_CLIENT.send(EiClientMsg::RemoveContext(self.session_handle.clone()));
     }
     pub fn step(&mut self) {
         self.activation_id += 1;
@@ -156,6 +156,10 @@ struct CreateSessionRet {
     #[serde(with = "as_value")]
     session_id: String,
 }
+
+#[derive(Type, Debug, Default, Serialize, Deserialize)]
+#[zvariant(signature = "dict")]
+struct CreateSessionRet2 {}
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct EnDisableRet {}
@@ -297,6 +301,22 @@ impl InputCapture {
             capabilities,
             session_id: session_handle.to_string(),
         }))
+    }
+
+    // here open a layershell to capture all the events
+    async fn create_session2(
+        &self,
+        session_handle: ObjectPath<'_>,
+        _app_id: &str,
+        _options: HashMap<String, Value<'_>>,
+        #[zbus(object_server)] server: &zbus::ObjectServer,
+    ) -> zbus::fdo::Result<PortalResponse<CreateSessionRet2>> {
+        let current_session = Session::new(session_handle.clone(), SessionType::InputCapture);
+        // TODO: check the app_id
+        append_session(current_session.clone()).await;
+        server.at(session_handle.clone(), current_session).await?;
+
+        Ok(PortalResponse::Success(CreateSessionRet2 {}))
     }
 
     async fn get_zones(
