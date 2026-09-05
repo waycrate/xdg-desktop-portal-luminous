@@ -28,7 +28,6 @@ use zbus::{interface, object_server::ResponseDispatchNotifier};
 
 use crate::PortalResponse;
 use crate::dialog::{CopySelect, Message, PermissionMode, PermissionResult};
-use crate::input_capture::BarrierInfo;
 use crate::pipewirethread::CastTarget;
 use crate::pipewirethread::ScreencastThread;
 use crate::request::RequestInterface;
@@ -38,9 +37,9 @@ use crate::session::{
 use crate::settings::WHITE_LIST_MAINTAINER;
 use crate::utils::get_selection_from_socket;
 
-pub use self::eis_server::{EisServerMsg, InputEvent};
-pub use self::remote_thread::InputRequest;
-use std::hash::Hash;
+pub use self::eis_server::EisServerMsg;
+
+use crate::utils::{InputEvent, InputRequest};
 
 use crate::settings::SETTING_CONFIG;
 
@@ -48,7 +47,6 @@ use futures::{
     SinkExt, StreamExt,
     channel::mpsc::{Receiver as FutReceiver, Sender as FutSender},
 };
-use std::sync::atomic::{self, AtomicU32};
 type EisServerSender = Sender<EisServerMsg>;
 type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
 
@@ -59,24 +57,6 @@ pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLoc
 
 pub fn get_input_receiver() -> InputEventReceiver {
     EIS_SERVER.1.clone()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-/// The id of the window.
-///
-/// Internally Iced reserves `window::Id::MAIN` for the first window spawned.
-pub struct ZoneId(u32);
-
-static COUNT: AtomicU32 = AtomicU32::new(0);
-
-impl ZoneId {
-    /// Creates a new unique window [`Id`].
-    pub fn unique() -> ZoneId {
-        ZoneId(COUNT.fetch_add(1, atomic::Ordering::Relaxed))
-    }
-    pub fn value(&self) -> u32 {
-        self.0
-    }
 }
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
@@ -182,22 +162,11 @@ pub struct SelectDevicesOptions {
     pub persist_mode: Option<PersistMode>,
 }
 
-#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, Type)]
-pub struct CursorPosition {
-    x: f64,
-    y: f64,
-}
-
 pub struct RemoteSessionData {
     pub session_handle: String,
     pub cast_thread: Option<ScreencastThread>,
     pub remote_control: RemoteControl,
-    pub zones: Vec<Zone>,
-    pub zone_id: ZoneId,
-    pub barriers: Vec<BarrierInfo>,
     pub restore_data: Option<RestoreData>,
-    cursor: CursorPosition,
-    activation_id: u32,
 }
 
 impl RemoteSessionData {
@@ -205,50 +174,15 @@ impl RemoteSessionData {
         session_handle: String,
         cast_thread: Option<ScreencastThread>,
         remote_control: RemoteControl,
-        zones: Vec<Zone>,
         restore_data: impl Into<Option<RestoreData>>,
     ) -> Self {
         Self {
             session_handle,
             cast_thread,
             remote_control,
-            zones,
-            zone_id: ZoneId::unique(),
-            cursor: CursorPosition::default(),
-            barriers: Vec::new(),
-            activation_id: 0,
             restore_data: restore_data.into(),
         }
     }
-    pub fn step(&mut self) {
-        self.activation_id += 1;
-    }
-    pub fn activation_id(&self) -> u32 {
-        self.activation_id
-    }
-    pub fn cursor_position(&self) -> CursorPosition {
-        self.cursor
-    }
-    pub fn update_cursor(&mut self, event: InputRequest) {
-        match event {
-            InputRequest::PointerMotionAbsolute { x, y } => {
-                self.cursor = CursorPosition { x, y };
-            }
-            InputRequest::PointerMotion { dx, dy } => {
-                self.cursor.x += dx;
-                self.cursor.y += dy;
-            }
-            _ => {}
-        }
-    }
-}
-
-#[derive(Debug, Type, Serialize, Deserialize, Clone, Copy)]
-pub struct Zone {
-    pub width: u32,
-    pub height: u32,
-    pub x_offset: i32,
-    pub y_offset: i32,
 }
 
 impl RemoteSessionData {
@@ -279,30 +213,17 @@ pub async fn append_remote_session(session: RemoteSessionData) {
     sessions.push(session)
 }
 
-pub async fn remove_remote_session(path: &str) {
+pub async fn remove_remote_session(session_handle: ObjectPath<'_>) {
     let mut sessions = REMOTE_SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
-        .position(|the_session| the_session.session_handle == path)
+        .position(|the_session| the_session.session_handle == session_handle.as_str())
     else {
         return;
     };
     sessions[index].stop();
     tracing::info!("session {} is stopped", sessions[index].session_handle);
     sessions.remove(index);
-}
-
-pub async fn enable_eis_listener(session_handle: ObjectPath<'_>) {
-    EIS_SERVER
-        .0
-        .send(EisServerMsg::ActiveListener(session_handle.to_string()))
-        .unwrap();
-}
-pub async fn disable_eis_listener(session_handle: ObjectPath<'_>) {
-    EIS_SERVER
-        .0
-        .send(EisServerMsg::StopListener(session_handle.to_string()))
-        .unwrap();
 }
 
 async fn notify_input_event(
@@ -316,7 +237,6 @@ async fn notify_input_event(
     else {
         return Ok(());
     };
-    session.update_cursor(event);
     let remote_control = &session.remote_control;
     remote_control
         .sender
@@ -332,72 +252,12 @@ fn option_bool(options: &HashMap<String, Value<'_>>, key: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub async fn handle_input_event(event: InputEvent) {
-    let (session_handle, request) = match event {
-        InputEvent::PointerMotion {
-            session_handle,
-            dx,
-            dy,
-        } => (session_handle, InputRequest::PointerMotion { dx, dy }),
-        InputEvent::PointerMotionAbsolute {
-            session_handle,
-            x,
-            y,
-        } => (session_handle, InputRequest::PointerMotionAbsolute { x, y }),
-        InputEvent::PointerButton {
-            session_handle,
-            button,
-            state,
-        } => (
-            session_handle,
-            InputRequest::PointerButton { button, state },
-        ),
-        InputEvent::PointerAxis {
-            session_handle,
-            dx,
-            dy,
-        } => (
-            session_handle,
-            InputRequest::PointerAxis {
-                dx,
-                dy,
-                finish: false,
-            },
-        ),
-        InputEvent::PointerAxisDiscrete {
-            session_handle,
-            axis,
-            steps,
-        } => (
-            session_handle,
-            InputRequest::PointerAxisDiscrete { axis, steps },
-        ),
-        InputEvent::KeyboardKeycode {
-            session_handle,
-            keycode,
-            state,
-        } => (
-            session_handle,
-            InputRequest::KeyboardKeycode { keycode, state },
-        ),
-        InputEvent::TouchDown {
-            session_handle,
-            slot,
-            x,
-            y,
-        } => (session_handle, InputRequest::TouchDown { slot, x, y }),
-        InputEvent::TouchMotion {
-            session_handle,
-            slot,
-            x,
-            y,
-        } => (session_handle, InputRequest::TouchMotion { slot, x, y }),
-        InputEvent::TouchUp {
-            session_handle,
-            slot,
-        } => (session_handle, InputRequest::TouchUp { slot }),
-    };
-
+pub async fn handle_input_event(
+    InputEvent {
+        session_handle,
+        request,
+    }: InputEvent,
+) {
     if let Ok(path) = ObjectPath::try_from(session_handle) {
         let _ = notify_input_event(path, request).await;
     }
@@ -633,12 +493,6 @@ impl RemoteDesktopBackend {
             session_handle.to_string(),
             cast_thread,
             remote_control,
-            vec![Zone {
-                x_offset: x,
-                y_offset: y,
-                width: width as u32,
-                height: height as u32,
-            }],
             restore_data.clone(),
         ))
         .await;
