@@ -1011,7 +1011,7 @@ impl AreaSelectorGUI {
             Message::StopCapture(id) => {
                 self.capture_info = None;
                 close_window(id)
-            },
+            }
             Message::IcedEvent(event) => {
                 let Some(CaptureInfo { handle, .. }) = &self.capture_info else {
                     return Task::none();

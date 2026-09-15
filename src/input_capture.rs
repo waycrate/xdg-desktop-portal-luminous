@@ -320,7 +320,11 @@ impl InputCapture {
             ..
         } = get_monitor_info_from_socket(&connection)?;
         let capabilities = options.capabilities & self.capabilities();
-        tracing::info!("Start session: path :{}, appid: {}", handle.as_str(), app_id);
+        tracing::info!(
+            "Start session: path :{}, appid: {}",
+            handle.as_str(),
+            app_id
+        );
         server
             .at(
                 handle.clone(),
