@@ -1010,7 +1010,7 @@ impl AreaSelectorGUI {
             }
             Message::StopCapture(id) => close_window(id),
             Message::IcedEvent(event) => {
-                let Some(CaptureInfo {  handle, .. }) = &self.capture_info else {
+                let Some(CaptureInfo { handle, .. }) = &self.capture_info else {
                     return Task::none();
                 };
                 match event {
@@ -1077,7 +1077,7 @@ impl AreaSelectorGUI {
                     _ => {}
                 }
 
-                return Task::none();
+                Task::none()
             }
             _ => unreachable!(),
         }
