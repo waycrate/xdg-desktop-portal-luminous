@@ -16,8 +16,10 @@ use iced_exwlshell::settings::{LayerShellSettings, LayerSize, StartMode};
 use iced_exwlshell::to_layer_message;
 
 use libwayshot::output::OutputInfo;
+use libwayshot::reexport::WlOutput;
 use libwayshot::region::TopLevel;
 
+use crate::backend::get_wlconnection;
 use crate::settings::SettingsConfig;
 
 const BACKGROUND_PROMPT_QUEUE_CAPACITY: usize = 8;
@@ -52,17 +54,23 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_exwlshell::Erro
     unsafe { std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info") }
     tracing_subscriber::fmt().init();
     tracing::info!("luminous Start");
+    let connection = get_wlconnection();
     daemon(
         move || AreaSelectorGUI::new(toplevel_capture_support),
         AreaSelectorGUI::namespace,
         AreaSelectorGUI::update,
         AreaSelectorGUI::view,
     )
-    .layer_settings(LayerShellSettings {
-        exclusive_zone: 0,
-        anchor: Anchor::all(),
-        keyboard_interactivity: KeyboardInteractivity::OnDemand,
-        start_mode: StartMode::Background,
+    .settings(iced_exwlshell::Settings {
+        with_connection: Some(connection.into()),
+        layer_settings: LayerShellSettings {
+            exclusive_zone: 0,
+            anchor: Anchor::all(),
+            keyboard_interactivity: KeyboardInteractivity::OnDemand,
+            start_mode: StartMode::Background,
+
+            ..Default::default()
+        },
         ..Default::default()
     })
     .subscription(AreaSelectorGUI::subscription)
@@ -119,6 +127,8 @@ struct AreaSelectorGUI {
     tombstoned_background_handles: VecDeque<String>,
     usb_entries: Vec<UsbDeviceEntry>,
     prefers_dark: bool,
+
+    capture_id: Option<iced::window::Id>,
 }
 
 #[derive(Debug, Clone)]
@@ -216,6 +226,9 @@ pub enum Message {
         app_id: String,
         name: String,
     },
+    CaptureLayer {
+        wl_output: WlOutput,
+    },
     CloseBackgroundPrompt {
         handle: String,
     },
@@ -303,6 +316,18 @@ fn primary_button_style(theme: &iced::Theme, status: button::Status) -> button::
 
 fn divider() -> Element<'static, Message> {
     rule::horizontal(1).style(rule::weak).into()
+}
+
+fn input_capture_layer_settings(output: WlOutput) -> NewLayerShellSettings {
+    NewLayerShellSettings {
+        size: LayerSize::FILL,
+        layer: iced_exwlshell::reexport::Layer::Top,
+        anchor: Anchor::all(),
+        exclusive_zone: Some(-1),
+        output_option: OutputOption::Output(output),
+        namespace: Some("capture".to_owned()),
+        ..Default::default()
+    }
 }
 
 fn chooser_layer_settings() -> NewLayerShellSettings {
@@ -578,6 +603,7 @@ impl AreaSelectorGUI {
             tombstoned_background_handles: VecDeque::new(),
             usb_entries: Vec::new(),
             prefers_dark: SettingsConfig::config_from_file().prefers_dark(),
+            capture_id: None,
         }
     }
 
@@ -963,6 +989,14 @@ impl AreaSelectorGUI {
                 self.prefers_dark = prefers_dark;
                 Task::none()
             }
+            Message::CaptureLayer { wl_output } => {
+                let id = iced::window::Id::unique();
+                self.capture_id = Some(id);
+                Task::done(Message::NewLayerShell {
+                    settings: input_capture_layer_settings(wl_output),
+                    id,
+                })
+            }
             _ => unreachable!(),
         }
     }
@@ -1227,6 +1261,12 @@ impl AreaSelectorGUI {
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
         if let GuiMode::PermissionPrompt { id_valid, .. } = self.gui_mode {
             return self.view_permission_prompt(id, id_valid);
+        }
+        if let Some(cap_id) = self.capture_id
+            && cap_id == id
+        {
+            // NOTE: prepare for the capture layer
+            todo!()
         }
         if self.gui_mode == GuiMode::BackgroundPrompt {
             return self.view_background_prompt(id);

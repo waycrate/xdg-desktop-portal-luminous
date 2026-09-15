@@ -3,16 +3,25 @@ use std::{
     os::{fd::AsFd, unix::net::UnixStream},
 };
 mod ei_client;
-use crate::utils::InputRequest;
+use crate::dialog::Message;
 use crate::{
     PortalResponse,
-    remotedesktop::{RemoteInfo, get_monitor_info_from_socket},
+    backend::get_wlconnection,
+    remotedesktop::{
+        LuminousData, RESTORE_DATA_VERSION, RemoteInfo, RestoreData, VENDOR_NAME,
+        get_monitor_info_from_socket, space_size,
+    },
     request::RequestInterface,
     session::{DeviceType, Session, SessionType, append_session},
+};
+use crate::{
+    session::{PersistMode, SESSIONS},
+    utils::InputRequest,
 };
 use calloop::channel::Sender;
 use ei_client::EiClientMsg;
 use enumflags2::BitFlags;
+use futures::{SinkExt, channel::mpsc::Sender as FutSender};
 use reis::{ei, eis};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{self, AtomicU32};
@@ -21,7 +30,10 @@ use tokio::sync::Mutex;
 use zbus::{
     interface,
     object_server::SignalEmitter,
-    zvariant::{DeserializeDict, Fd, ObjectPath, SerializeDict, Type, Value, as_value},
+    zvariant::{
+        DeserializeDict, Fd, ObjectPath, SerializeDict, Type, Value,
+        as_value::{self, optional},
+    },
 };
 type EiClientSender = Sender<EiClientMsg>;
 pub static EI_CLIENT: LazyLock<EiClientSender> = LazyLock::new(ei_client::start);
@@ -150,6 +162,26 @@ struct CreateSessionOptions {
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
+struct StartSessionOptions {
+    #[serde(with = "as_value")]
+    capabilities: BitFlags<SupportedCapabilities>,
+    #[serde(with = "as_value")]
+    persist_mode: PersistMode,
+}
+
+#[derive(Type, Debug, Default, Serialize, Deserialize)]
+#[zvariant(signature = "dict")]
+struct StartResult {
+    #[serde(with = "as_value")]
+    capabilities: BitFlags<SupportedCapabilities>,
+    #[serde(with = "as_value")]
+    clipboard_enabled: bool,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
+    restore_data: Option<RestoreData>,
+}
+
+#[derive(Type, Debug, Default, Serialize, Deserialize)]
+#[zvariant(signature = "dict")]
 struct CreateSessionRet {
     #[serde(with = "as_value")]
     capabilities: BitFlags<SupportedCapabilities>,
@@ -220,12 +252,18 @@ async fn remote_zones(session_handle: ObjectPath<'_>) -> Option<(u32, Vec<Zone>)
     Some((session.zone_id.value(), session.zones.clone()))
 }
 
-#[derive(Default)]
 pub struct InputCapture {
+    pub sender: FutSender<Message>,
     clients: HashMap<String, UnixStream>,
 }
 
 impl InputCapture {
+    pub fn new(sender: FutSender<Message>) -> Self {
+        Self {
+            sender,
+            clients: HashMap::new(),
+        }
+    }
     fn capabilities(&self) -> BitFlags<SupportedCapabilities> {
         SupportedCapabilities::Pointer
             | SupportedCapabilities::Keyboard
@@ -317,6 +355,102 @@ impl InputCapture {
         server.at(session_handle.clone(), current_session).await?;
 
         Ok(PortalResponse::Success(CreateSessionRet2 {}))
+    }
+
+    async fn start(
+        &mut self,
+        _handle: ObjectPath<'_>,
+        session_handle: ObjectPath<'_>,
+        _app_id: &str,
+        _parent_window: &str,
+        options: StartSessionOptions,
+        #[zbus(connection)] dbus_connection: &zbus::Connection,
+    ) -> zbus::fdo::Result<PortalResponse<StartResult>> {
+        let mut locked_sessions = SESSIONS.lock().await;
+        let Some(index) = locked_sessions
+            .iter()
+            .position(|this_session| this_session.handle_path == session_handle.clone().into())
+        else {
+            tracing::warn!("No session is created or it is removed");
+            return Ok(PortalResponse::Other);
+        };
+
+        let current_session = &mut locked_sessions[index];
+
+        if (options.capabilities | self.capabilities()) != self.capabilities() {
+            return Err(zbus::Error::Failure("Unsupported capability".to_owned()).into());
+        }
+        let connection =
+            libwayshot::WayshotConnection::from_connection(get_wlconnection()).unwrap();
+        let RemoteInfo {
+            width,
+            height,
+            x,
+            y,
+            wl_output,
+            output_name,
+        } = if let Some(RestoreData {
+            vendor_name,
+            version,
+            data,
+        }) = current_session.restore_data.clone()
+            && current_session.persist_mode.is_persist()
+            && vendor_name == VENDOR_NAME
+            && version == RESTORE_DATA_VERSION
+            && let Some(display) = connection
+                .get_all_outputs()
+                .iter()
+                .find(|output_info| output_info.name == data.display)
+        {
+            let libwayshot::Size { width, height } = space_size(&connection);
+
+            let libwayshot::region::Position { x, y } = display.logical_region.inner.position;
+            RemoteInfo {
+                x,
+                y,
+                width,
+                height,
+                output_name: display.name.to_owned(),
+                wl_output: display.wl_output.clone(),
+            }
+        } else {
+            get_monitor_info_from_socket(&connection)?
+        };
+        let _ = self.sender.send(Message::CaptureLayer { wl_output }).await;
+        let capabilities = options.capabilities & self.capabilities();
+        let restore_data = current_session.persist_mode.is_persist().then(|| {
+            RestoreData::new(LuminousData {
+                display: output_name,
+            })
+        });
+        current_session.restore_data = restore_data.clone();
+        let _ = current_session;
+        drop(locked_sessions);
+        append_capture_session(
+            &session_handle,
+            InputCaptureData {
+                session_handle: session_handle.to_string(),
+                zones: vec![Zone {
+                    x_offset: x,
+                    y_offset: y,
+                    width: width as u32,
+                    height: height as u32,
+                }],
+                zone_id: ZoneId::unique(),
+                barriers: vec![],
+                activation_id: 0,
+                cursor: CursorPosition::default(),
+            },
+        )
+        .await;
+        let clipboard_enabled =
+            crate::clipboard::ensure_clipboard_session(&session_handle, dbus_connection.clone())
+                .await;
+        Ok(PortalResponse::Success(StartResult {
+            capabilities,
+            clipboard_enabled,
+            restore_data,
+        }))
     }
 
     async fn get_zones(

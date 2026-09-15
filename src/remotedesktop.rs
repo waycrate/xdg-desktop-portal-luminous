@@ -27,6 +27,7 @@ use zbus::zvariant::{
 use zbus::{interface, object_server::ResponseDispatchNotifier};
 
 use crate::PortalResponse;
+use crate::backend::get_wlconnection;
 use crate::dialog::{CopySelect, Message, PermissionMode, PermissionResult};
 use crate::pipewirethread::CastTarget;
 use crate::pipewirethread::ScreencastThread;
@@ -124,14 +125,14 @@ fn remote_start_other() -> ResponseDispatchNotifier<PortalResponse<RemoteStartRe
 #[derive(Type, Debug, Default, Deserialize, Serialize, Clone)]
 #[zvariant(signature = "(suv)")]
 pub struct RestoreData {
-    vendor_name: String,
-    version: u32,
+    pub vendor_name: String,
+    pub version: u32,
     #[serde(with = "as_value")]
-    data: LuminousData,
+    pub data: LuminousData,
 }
 
-const VENDOR_NAME: &str = "luminous";
-const RESTORE_DATA_VERSION: u32 = 1;
+pub const VENDOR_NAME: &str = "luminous";
+pub const RESTORE_DATA_VERSION: u32 = 1;
 
 impl RestoreData {
     pub fn new(data: LuminousData) -> Self {
@@ -425,7 +426,7 @@ impl RemoteDesktopBackend {
         let screen_share_enabled = current_session.screen_share_enabled;
         let mut streams = vec![];
         let mut cast_thread = None;
-        let connection = libwayshot::WayshotConnection::new().unwrap();
+        let connection = libwayshot::WayshotConnection::from_connection(get_wlconnection()).unwrap();
         let RemoteInfo {
             width,
             height,
@@ -676,10 +677,10 @@ pub struct RemoteInfo {
     pub width: i32,
     pub height: i32,
     pub output_name: String,
-    wl_output: wl_output::WlOutput,
+    pub wl_output: wl_output::WlOutput,
 }
 
-fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
+pub fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
     let mut space_width = 0;
     let mut space_height = 0;
 
