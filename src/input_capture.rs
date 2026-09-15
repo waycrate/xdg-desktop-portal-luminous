@@ -289,15 +289,16 @@ impl InputCapture {
 impl InputCapture {
     #[zbus(property, name = "version")]
     fn version(&self) -> u32 {
-        1
+        2
     }
     #[zbus(property)]
     fn supported_capabilities(&self) -> u32 {
         self.capabilities().bits()
     }
-    // here open a layershell to capture all the events
+
+    // NOTE: this interface won't be used anymore
     async fn create_session(
-        &self,
+        &mut self,
         handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         app_id: &str,
@@ -308,16 +309,18 @@ impl InputCapture {
         if (options.capabilities | self.capabilities()) != self.capabilities() {
             return Err(zbus::Error::Failure("Unsupported capability".to_owned()).into());
         }
-        let connection = libwayshot::WayshotConnection::new().unwrap();
+        let connection =
+            libwayshot::WayshotConnection::from_connection(get_wlconnection()).unwrap();
         let RemoteInfo {
             width,
             height,
             x,
             y,
+            wl_output,
             ..
         } = get_monitor_info_from_socket(&connection)?;
         let capabilities = options.capabilities & self.capabilities();
-        tracing::info!("Start shot: path :{}, appid: {}", handle.as_str(), app_id);
+        tracing::info!("Start session: path :{}, appid: {}", handle.as_str(), app_id);
         server
             .at(
                 handle.clone(),
@@ -348,6 +351,13 @@ impl InputCapture {
             },
         )
         .await;
+        let _ = self
+            .sender
+            .send(Message::CaptureLayer {
+                wl_output,
+                handle: session_handle.to_string(),
+            })
+            .await;
         Ok(PortalResponse::Success(CreateSessionRet {
             capabilities,
             session_id: session_handle.to_string(),
