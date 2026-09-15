@@ -18,19 +18,19 @@ repository.workspace = true
 keywords = ["wayland"]
 
 [workspace.dependencies]
-serde = "1.0.228"
-serde_json = "1.0.150"
-thiserror = "2.0.18"
+serde = "1.0.229"
+serde_json = "1.0.151"
+thiserror = "2.0.20"
 stream_message = { path = "./stream_message", version = "0.1.20" }
 
 [dependencies]
-zbus = { version = "5.16", default-features = false, features = [
+zbus = { version = "5.19", default-features = false, features = [
 	"tokio",
 	"url",
 ] }
 stream_message.workspace = true
 
-tokio = { version = "1.52.3", features = ["full"] }
+tokio = { version = "1.53.1", features = ["full"] }
 iced = { features = [
 	"tokio",
 	"debug",
@@ -55,12 +55,12 @@ image = { version = "=0.24", default-features = false, features = [
 	"qoi",
 ] }
 
-bitflags = "2.13.0"
+bitflags = "2.13.2"
 enumflags2 = "0.7.12"
-anyhow = "1.0.102"
+anyhow = "1.0.104"
 
 # pipewire
-pipewire = "0.10.0"
+pipewire = "0.10.1"
 
 libwayshot = { version = "0.9.0", features = ["screencast"] }
 
@@ -76,21 +76,21 @@ wayland-protocols = { version = "0.32.13", default-features = false, features = 
 wayland-protocols-wlr = { version = "0.3.12", default-features = false, features = [
 	"client",
 ] }
-wayland-client = { version = "0.31.14" }
+wayland-client = { version = "0.31.15" }
 os_pipe = { version = "1.2", features = ["io_safety"] }
 
 wayland-protocols-misc = { version = "0.3.12", features = ["client"] }
 xkbcommon = "0.9.0"
 tempfile = "3.27.0"
-thiserror = "2.0.18"
-toml = "1.1.2"
-csscolorparser = "0.8.3"
+thiserror = "2.0.20"
+toml = "1.1.6"
+csscolorparser = "0.8.4"
 notify = "8.2.0"
-futures = "0.3.32"
+futures = "0.3.34"
 libwaysip = "0.7.0"
-reis = { version = "0.7.0", features = ["tokio", "calloop"] }
+reis = { version = "0.7.1", features = ["tokio", "calloop"] }
 sctk = { package = "smithay-client-toolkit", version = "0.20.0" }
 
 calloop = "0.14.4"
 calloop-wayland-source = "0.4.1"
-iced_exwlshell = "0.20.0"
+iced_exwlshell = "0.20.1"
