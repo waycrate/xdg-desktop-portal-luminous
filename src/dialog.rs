@@ -118,7 +118,6 @@ struct CaptureInfo {
 struct AreaSelectorGUI {
     gui_mode: GuiMode,
     mode: ViewMode,
-    window_show: bool,
     window_id: Option<iced::window::Id>,
     toplevel_capture_support: bool,
     sender_shot: Option<Sender<CopySelect>>,
@@ -597,7 +596,6 @@ impl AreaSelectorGUI {
         Self {
             gui_mode: GuiMode::ScreenShot,
             mode: ViewMode::Others,
-            window_show: false,
             window_id: None,
             toplevel_capture_support,
             sender_shot: None,
@@ -628,7 +626,6 @@ impl AreaSelectorGUI {
         app_id: String,
         name: String,
     ) -> Task<Message> {
-        self.window_show = true;
         self.gui_mode = GuiMode::BackgroundPrompt;
         self.active_background_handle = Some(handle);
         let app_name = if name.is_empty() { app_id } else { name };
@@ -645,7 +642,7 @@ impl AreaSelectorGUI {
     }
 
     fn show_next_background_prompt(&mut self) -> Task<Message> {
-        if self.window_show {
+        if self.window_id.is_some() {
             return Task::none();
         }
 
@@ -781,7 +778,6 @@ impl AreaSelectorGUI {
                     }
                 }
 
-                self.window_show = false;
                 self.window_id = None;
                 if self.gui_mode == GuiMode::BackgroundPrompt {
                     self.gui_mode = GuiMode::ScreenShot;
@@ -795,7 +791,7 @@ impl AreaSelectorGUI {
                 top_levels: toplevels,
                 screens,
             } => {
-                if self.window_show {
+                if self.window_id.is_some() {
                     let _ = self
                         .sender_shot
                         .as_mut()
@@ -807,7 +803,6 @@ impl AreaSelectorGUI {
                     self.mode = ViewMode::Others;
                 }
                 self.gui_mode = GuiMode::ScreenShot;
-                self.window_show = true;
                 self.toplevels = toplevels;
                 self.screens = screens;
                 let id = iced::window::Id::unique();
@@ -822,7 +817,7 @@ impl AreaSelectorGUI {
                 screens,
                 show_cursor,
             } => {
-                if self.window_show {
+                if self.window_id.is_some() {
                     let _ = self
                         .sender_cast
                         .as_mut()
@@ -835,7 +830,6 @@ impl AreaSelectorGUI {
                 }
                 self.use_cursor = show_cursor;
                 self.gui_mode = GuiMode::ScreenCast;
-                self.window_show = true;
                 self.toplevels = toplevels;
                 self.screens = screens;
                 let id = iced::window::Id::unique();
@@ -874,7 +868,7 @@ impl AreaSelectorGUI {
                 mode,
                 id_valid,
             } => {
-                if self.window_show {
+                if self.window_id.is_some() {
                     match mode {
                         PermissionMode::ScreenShot => {
                             let _ = self
@@ -894,7 +888,6 @@ impl AreaSelectorGUI {
 
                     return Task::none();
                 }
-                self.window_show = true;
                 self.gui_mode = GuiMode::PermissionPrompt { mode, id_valid };
                 self.prompt_text = Some(message);
                 let id = iced::window::Id::unique();
@@ -913,7 +906,7 @@ impl AreaSelectorGUI {
                     return Task::none();
                 }
 
-                if self.window_show {
+                if self.window_id.is_some() {
                     if self.background_queue.len() >= BACKGROUND_PROMPT_QUEUE_CAPACITY {
                         self.send_background_response(CopySelect::BackgroundPermission {
                             handle,
@@ -943,7 +936,7 @@ impl AreaSelectorGUI {
                     return Task::none();
                 }
 
-                self.window_show = false;
+                self.window_id = None;
                 self.gui_mode = GuiMode::ScreenShot;
                 self.prompt_text = None;
                 self.active_background_handle = None;
@@ -955,13 +948,12 @@ impl AreaSelectorGUI {
                 }
             }
             Message::UsbAcquireDialog { app_id, entries } => {
-                if self.window_show {
+                if self.window_id.is_some() {
                     if let Some(sender) = self.sender_usb.as_mut() {
                         let _ = sender.try_send(CopySelect::Cancel);
                     }
                     return Task::none();
                 }
-                self.window_show = true;
                 self.gui_mode = GuiMode::UsbPrompt;
                 self.usb_entries = entries;
                 self.prompt_text = Some(format!(
@@ -983,10 +975,9 @@ impl AreaSelectorGUI {
                 Task::none()
             }
             Message::CloseUsbPrompt => {
-                if self.gui_mode != GuiMode::UsbPrompt || !self.window_show {
+                if self.gui_mode != GuiMode::UsbPrompt || !self.window_id.is_some() {
                     return Task::none();
                 }
-                self.window_show = false;
                 self.gui_mode = GuiMode::ScreenShot;
                 self.prompt_text = None;
                 self.usb_entries = Vec::new();
@@ -1364,8 +1355,15 @@ impl AreaSelectorGUI {
         if self.gui_mode == GuiMode::BackgroundPrompt {
             return self.view_background_prompt(id);
         }
+
         if self.gui_mode == GuiMode::UsbPrompt {
             return self.view_usb_prompt(id);
+        }
+
+        if self.window_id.is_none() {
+            // HACK: when the deleted event is sent, but window is still alive
+            // Use an empty view to fill it
+            return Space::new().into()
         }
 
         let selector = self.selector();
