@@ -1363,7 +1363,7 @@ impl AreaSelectorGUI {
         if self.window_id.is_none() {
             // HACK: when the deleted event is sent, but window is still alive
             // Use an empty view to fill it
-            return Space::new().into()
+            return Space::new().into();
         }
 
         let selector = self.selector();
