@@ -426,7 +426,8 @@ impl RemoteDesktopBackend {
         let screen_share_enabled = current_session.screen_share_enabled;
         let mut streams = vec![];
         let mut cast_thread = None;
-        let connection = libwayshot::WayshotConnection::from_connection(get_wlconnection()).unwrap();
+        let connection =
+            libwayshot::WayshotConnection::from_connection(get_wlconnection()).unwrap();
         let RemoteInfo {
             width,
             height,

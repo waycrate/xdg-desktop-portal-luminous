@@ -5,12 +5,7 @@ use calloop::{
 };
 use reis::{PendingRequestResult, ei};
 use std::sync::LazyLock;
-use std::{
-    collections::HashMap,
-    io,
-    thread,
-    time::Duration,
-};
+use std::{collections::HashMap, io, thread, time::Duration};
 
 use crate::utils::{InputEvent, InputRequest};
 
@@ -34,7 +29,7 @@ const INTERFACES_LIST: &[&'static str] = &[
     "ei_touch",
     "ei_pointer",
     "ei_pointer_absolute",
-    "ei_scroll"
+    "ei_scroll",
 ];
 
 static INTERFACES: LazyLock<HashMap<&'static str, u32>> = LazyLock::new(|| {
@@ -86,7 +81,7 @@ pub struct SessionState {
     pointer_abs: Option<ei::PointerAbsolute>,
     button: Option<ei::Button>,
     touch: Option<ei::Touchscreen>,
-    scroll: Option<ei::Scroll>
+    scroll: Option<ei::Scroll>,
 }
 
 impl SessionState {
