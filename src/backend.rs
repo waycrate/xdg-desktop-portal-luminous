@@ -21,14 +21,18 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, mpsc as tokio_mpsc};
 use tokio::time::MissedTickBehavior;
+use wayland_client::Connection as WlConnection;
 use zbus::{Connection, connection, object_server::SignalEmitter};
 
+use std::sync::LazyLock;
 use std::sync::OnceLock;
 
 static SESSION: OnceLock<zbus::Connection> = OnceLock::new();
+static WL_CONNECTION: LazyLock<WlConnection> =
+    LazyLock::new(|| WlConnection::connect_to_env().unwrap());
 const SYSTEMD_SIGNAL_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
-async fn get_connection() -> zbus::Connection {
+fn get_connection() -> zbus::Connection {
     if let Some(cnx) = SESSION.get() {
         cnx.clone()
     } else {
@@ -36,7 +40,11 @@ async fn get_connection() -> zbus::Connection {
     }
 }
 
-async fn set_connection(connection: Connection) {
+pub fn get_wlconnection() -> WlConnection {
+    WL_CONNECTION.clone()
+}
+
+fn set_connection(connection: Connection) {
     SESSION.set(connection).expect("Cannot set a OnceLock");
 }
 
@@ -103,7 +111,7 @@ async fn async_watch<P: AsRef<Path>>(
     path: P,
     mut dialog_sender: Sender<Message>,
 ) -> notify::Result<()> {
-    let connection = get_connection().await;
+    let connection = get_connection();
     let (mut watcher, mut rx) = async_watcher()?;
 
     let signal_context =
@@ -184,7 +192,10 @@ pub async fn backend(
             RemoteDesktopBackend::new(sender.clone(), receiver_remote),
         )?
         .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
-        .serve_at("/org/freedesktop/portal/desktop", InputCapture::default())?
+        .serve_at(
+            "/org/freedesktop/portal/desktop",
+            InputCapture::new(sender.clone()),
+        )?
         .serve_at("/org/freedesktop/portal/desktop", Clipboard)?
         .serve_at(
             "/org/freedesktop/portal/desktop",
@@ -196,13 +207,13 @@ pub async fn backend(
         .build()
         .await?;
 
-    set_connection(conn).await;
+    set_connection(conn);
     tokio::spawn(crate::background::route_background_dialog_responses(
         receiver_background,
         pending_background_responses,
     ));
 
-    let background_connection = get_connection().await;
+    let background_connection = get_connection();
     tokio::spawn(async move {
         if let Err(e) = watch_background_applications(background_connection).await {
             tracing::info!("Cannot watch systemd app scopes: {e}");
@@ -229,7 +240,7 @@ pub async fn backend(
         }
     });
 
-    let connection = get_connection().await;
+    let connection = get_connection();
 
     let signal_context =
         SignalEmitter::new(&connection, "/org/freedesktop/portal/desktop").unwrap();

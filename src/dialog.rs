@@ -5,8 +5,8 @@ use iced::widget::{
     Row, Space, button, checkbox, column, container, grid, image, row, rule, scrollable, text,
 };
 use iced::{
-    Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Pixels, Shadow, Task,
-    Vector,
+    Alignment, Background, Border, Color, ContentFit, Element, Event, Font, Length, Pixels, Shadow,
+    Task, Vector, event,
 };
 use iced_exwlshell::daemon;
 use iced_exwlshell::reexport::{
@@ -16,9 +16,13 @@ use iced_exwlshell::settings::{LayerShellSettings, LayerSize, StartMode};
 use iced_exwlshell::to_layer_message;
 
 use libwayshot::output::OutputInfo;
+use libwayshot::reexport::WlOutput;
 use libwayshot::region::TopLevel;
 
+use crate::backend::get_wlconnection;
+use crate::input_capture::{EI_CLIENT, SendInputEvent};
 use crate::settings::SettingsConfig;
+use crate::utils::{InputRequest, from_icedmouse_to_u32};
 
 const BACKGROUND_PROMPT_QUEUE_CAPACITY: usize = 8;
 const BACKGROUND_PROMPT_TOMBSTONE_CAPACITY: usize = 64;
@@ -52,17 +56,23 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_exwlshell::Erro
     unsafe { std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info") }
     tracing_subscriber::fmt().init();
     tracing::info!("luminous Start");
+    let connection = get_wlconnection();
     daemon(
         move || AreaSelectorGUI::new(toplevel_capture_support),
         AreaSelectorGUI::namespace,
         AreaSelectorGUI::update,
         AreaSelectorGUI::view,
     )
-    .layer_settings(LayerShellSettings {
-        exclusive_zone: 0,
-        anchor: Anchor::all(),
-        keyboard_interactivity: KeyboardInteractivity::OnDemand,
-        start_mode: StartMode::Background,
+    .settings(iced_exwlshell::Settings {
+        with_connection: Some(connection.into()),
+        layer_settings: LayerShellSettings {
+            exclusive_zone: 0,
+            anchor: Anchor::all(),
+            keyboard_interactivity: KeyboardInteractivity::OnDemand,
+            start_mode: StartMode::Background,
+
+            ..Default::default()
+        },
         ..Default::default()
     })
     .subscription(AreaSelectorGUI::subscription)
@@ -98,6 +108,12 @@ enum ViewMode {
     Others,
 }
 
+#[derive(Debug)]
+struct CaptureInfo {
+    id: iced::window::Id,
+    handle: String,
+}
+
 #[derive(Debug, Default)]
 struct AreaSelectorGUI {
     gui_mode: GuiMode,
@@ -119,6 +135,8 @@ struct AreaSelectorGUI {
     tombstoned_background_handles: VecDeque<String>,
     usb_entries: Vec<UsbDeviceEntry>,
     prefers_dark: bool,
+
+    capture_info: Option<CaptureInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -216,6 +234,10 @@ pub enum Message {
         app_id: String,
         name: String,
     },
+    CaptureLayer {
+        wl_output: WlOutput,
+        handle: String,
+    },
     CloseBackgroundPrompt {
         handle: String,
     },
@@ -229,6 +251,8 @@ pub enum Message {
     },
     CloseUsbPrompt,
     ColorSchemeChanged(bool),
+    StopCapture(iced::window::Id),
+    IcedEvent(Event),
 }
 
 fn dialog_style(outlined: bool) -> impl Fn(&iced::Theme) -> container::Style + Copy {
@@ -303,6 +327,18 @@ fn primary_button_style(theme: &iced::Theme, status: button::Status) -> button::
 
 fn divider() -> Element<'static, Message> {
     rule::horizontal(1).style(rule::weak).into()
+}
+
+fn input_capture_layer_settings(output: WlOutput) -> NewLayerShellSettings {
+    NewLayerShellSettings {
+        size: LayerSize::FILL,
+        layer: iced_exwlshell::reexport::Layer::Top,
+        anchor: Anchor::all(),
+        exclusive_zone: Some(-1),
+        output_option: OutputOption::Output(output),
+        namespace: Some("capture".to_owned()),
+        ..Default::default()
+    }
 }
 
 fn chooser_layer_settings() -> NewLayerShellSettings {
@@ -578,6 +614,7 @@ impl AreaSelectorGUI {
             tombstoned_background_handles: VecDeque::new(),
             usb_entries: Vec::new(),
             prefers_dark: SettingsConfig::config_from_file().prefers_dark(),
+            capture_info: None,
         }
     }
 
@@ -963,6 +1000,88 @@ impl AreaSelectorGUI {
                 self.prefers_dark = prefers_dark;
                 Task::none()
             }
+            Message::CaptureLayer { wl_output, handle } => {
+                let id = iced::window::Id::unique();
+                self.capture_info = Some(CaptureInfo { id, handle });
+                Task::done(Message::NewLayerShell {
+                    settings: input_capture_layer_settings(wl_output),
+                    id,
+                })
+            }
+            Message::StopCapture(id) => {
+                self.capture_info = None;
+                close_window(id)
+            }
+            Message::IcedEvent(event) => {
+                let Some(CaptureInfo { handle, .. }) = &self.capture_info else {
+                    return Task::none();
+                };
+                match event {
+                    Event::Mouse(mouse) => match mouse {
+                        iced::mouse::Event::CursorMoved { position } => {
+                            EI_CLIENT.send_event(
+                                handle.as_str(),
+                                InputRequest::PointerMotionAbsolute {
+                                    x: position.x as f64,
+                                    y: position.y as f64,
+                                },
+                            );
+                        }
+                        iced::mouse::Event::ButtonPressed(button) => {
+                            EI_CLIENT.send_event(
+                                handle,
+                                InputRequest::PointerButton {
+                                    button: from_icedmouse_to_u32(button) as i32,
+                                    state: 1,
+                                },
+                            );
+                        }
+                        iced::mouse::Event::ButtonReleased(button) => {
+                            EI_CLIENT.send_event(
+                                handle,
+                                InputRequest::PointerButton {
+                                    button: from_icedmouse_to_u32(button) as i32,
+                                    state: 0,
+                                },
+                            );
+                        }
+                        _ => {}
+                    },
+                    Event::Touch(touch) => match touch {
+                        iced::touch::Event::FingerMoved { id, position } => {
+                            EI_CLIENT.send_event(
+                                handle,
+                                InputRequest::TouchMotion {
+                                    slot: id.0 as u32,
+                                    x: position.x as f64,
+                                    y: position.y as f64,
+                                },
+                            );
+                        }
+                        iced::touch::Event::FingerPressed { id, position } => {
+                            EI_CLIENT.send_event(
+                                handle,
+                                InputRequest::TouchDown {
+                                    slot: id.0 as u32,
+                                    x: position.x as f64,
+                                    y: position.y as f64,
+                                },
+                            );
+                        }
+                        iced::touch::Event::FingerLifted { id, .. } => {
+                            EI_CLIENT
+                                .send_event(handle, InputRequest::TouchUp { slot: id.0 as u32 });
+                        }
+                        _ => {}
+                    },
+                    Event::Keyboard(_keyboard) => {
+                        // TODO: I do not know how to do
+                    }
+                    _ => {}
+                }
+
+                Task::none()
+            }
             _ => unreachable!(),
         }
     }
@@ -1224,9 +1343,23 @@ impl AreaSelectorGUI {
             .into()
     }
 
+    fn capture_view(&self, id: iced::window::Id) -> Element<'_, Message> {
+        container(button("close").on_press(Message::StopCapture(id)))
+            .center_y(Length::Fill)
+            .center_x(Length::Fill)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
         if let GuiMode::PermissionPrompt { id_valid, .. } = self.gui_mode {
             return self.view_permission_prompt(id, id_valid);
+        }
+        if let Some(CaptureInfo { id: cap_id, .. }) = self.capture_info.as_ref()
+            && *cap_id == id
+        {
+            return self.capture_view(id);
         }
         if self.gui_mode == GuiMode::BackgroundPrompt {
             return self.view_background_prompt(id);
@@ -1362,34 +1495,37 @@ impl AreaSelectorGUI {
     }
 
     fn subscription(&self) -> iced::Subscription<Message> {
-        iced::Subscription::run(|| {
-            iced::stream::channel(100, |mut output: Sender<Message>| async move {
-                use iced::futures::channel::mpsc::{channel, unbounded};
-                use iced::futures::sink::SinkExt;
-                let (sender_shot, receiver_shot) = channel(100);
-                let (sender_cast, receiver_cast) = channel(100);
-                let (sender_remote, receiver_remote) = channel(100);
-                let (sender_background, receiver_background) = unbounded();
-                let (sender_usb, receiver_usb) = channel(100);
-                let _ = output.send(Message::ReadyShot(sender_shot)).await;
-                let _ = output.send(Message::ReadyCast(sender_cast)).await;
-                let _ = output.send(Message::ReadyRemote(sender_remote)).await;
-                let _ = output
-                    .send(Message::ReadyBackground(sender_background))
-                    .await;
-                let _ = output.send(Message::ReadyUsb(sender_usb)).await;
+        iced::Subscription::batch(vec![
+            event::listen().map(Message::IcedEvent),
+            iced::Subscription::run(|| {
+                iced::stream::channel(100, |mut output: Sender<Message>| async move {
+                    use iced::futures::channel::mpsc::{channel, unbounded};
+                    use iced::futures::sink::SinkExt;
+                    let (sender_shot, receiver_shot) = channel(100);
+                    let (sender_cast, receiver_cast) = channel(100);
+                    let (sender_remote, receiver_remote) = channel(100);
+                    let (sender_background, receiver_background) = unbounded();
+                    let (sender_usb, receiver_usb) = channel(100);
+                    let _ = output.send(Message::ReadyShot(sender_shot)).await;
+                    let _ = output.send(Message::ReadyCast(sender_cast)).await;
+                    let _ = output.send(Message::ReadyRemote(sender_remote)).await;
+                    let _ = output
+                        .send(Message::ReadyBackground(sender_background))
+                        .await;
+                    let _ = output.send(Message::ReadyUsb(sender_usb)).await;
 
-                let _ = crate::backend::backend(
-                    output,
-                    receiver_shot,
-                    receiver_cast,
-                    receiver_remote,
-                    receiver_background,
-                    receiver_usb,
-                )
-                .await;
-            })
-        })
+                    let _ = crate::backend::backend(
+                        output,
+                        receiver_shot,
+                        receiver_cast,
+                        receiver_remote,
+                        receiver_background,
+                        receiver_usb,
+                    )
+                    .await;
+                })
+            }),
+        ])
     }
     fn theme(&self, _id: iced::window::Id) -> Option<iced::Theme> {
         Some(dialog_theme(self.prefers_dark))

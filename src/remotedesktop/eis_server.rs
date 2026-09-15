@@ -1,3 +1,5 @@
+use super::dispatch::{get_keymap_as_file, init_xkb_objects};
+use crate::utils::{InputEvent, InputRequest};
 use calloop::{
     RegistrationToken,
     channel::{Sender, channel},
@@ -16,8 +18,6 @@ use std::{
     thread,
     time::Duration,
 };
-
-use super::dispatch::{get_keymap_as_file, init_xkb_objects};
 
 #[derive(Default)]
 struct ContextState {
@@ -228,76 +228,95 @@ impl State {
             EisRequestSourceEvent::Request(request) => {
                 match &request {
                     EisRequest::PointerMotion(e) => {
-                        let _ = sender.send(InputEvent::PointerMotion {
+                        let _ = sender.send(InputEvent {
                             session_handle: session_handle.to_string(),
-                            dx: e.dx as f64,
-                            dy: e.dy as f64,
+                            request: InputRequest::PointerMotion {
+                                dx: e.dx as f64,
+                                dy: e.dy as f64,
+                            },
                         });
                     }
                     EisRequest::PointerMotionAbsolute(e) => {
-                        let _ = sender.send(InputEvent::PointerMotionAbsolute {
+                        let _ = sender.send(InputEvent {
                             session_handle: session_handle.to_string(),
-                            x: e.dx_absolute as f64,
-                            y: e.dy_absolute as f64,
+                            request: InputRequest::PointerMotionAbsolute {
+                                x: e.dx_absolute as f64,
+                                y: e.dy_absolute as f64,
+                            },
                         });
                     }
                     EisRequest::Button(e) => {
-                        let _ = sender.send(InputEvent::PointerButton {
+                        let _ = sender.send(InputEvent {
                             session_handle: session_handle.to_string(),
-                            button: e.button as i32,
-                            state: e.state as u32,
+                            request: InputRequest::PointerButton {
+                                button: e.button as i32,
+                                state: e.state as u32,
+                            },
                         });
                     }
                     EisRequest::ScrollDelta(e) => {
-                        let _ = sender.send(InputEvent::PointerAxis {
+                        let _ = sender.send(InputEvent {
                             session_handle: session_handle.to_string(),
-                            dx: e.dx as f64,
-                            dy: e.dy as f64,
+                            request: InputRequest::PointerAxis {
+                                dx: e.dx as f64,
+                                dy: e.dy as f64,
+                                finish: false,
+                            },
                         });
                     }
                     EisRequest::ScrollDiscrete(e) => {
                         if e.discrete_dx != 0 {
-                            let _ = sender.send(InputEvent::PointerAxisDiscrete {
+                            let _ = sender.send(InputEvent {
                                 session_handle: session_handle.to_string(),
-                                axis: 1, // Horizontal
-                                steps: e.discrete_dx,
+                                request: InputRequest::PointerAxisDiscrete {
+                                    axis: 1, // Horizontal
+                                    steps: e.discrete_dx,
+                                },
                             });
                         }
                         if e.discrete_dy != 0 {
-                            let _ = sender.send(InputEvent::PointerAxisDiscrete {
+                            let _ = sender.send(InputEvent {
                                 session_handle: session_handle.to_string(),
-                                axis: 0, // Vertical
-                                steps: e.discrete_dy,
+                                request: InputRequest::PointerAxisDiscrete {
+                                    axis: 0, // Vertical
+                                    steps: e.discrete_dy,
+                                },
                             });
                         }
                     }
                     EisRequest::KeyboardKey(e) => {
-                        let _ = sender.send(InputEvent::KeyboardKeycode {
+                        let _ = sender.send(InputEvent {
                             session_handle: session_handle.to_string(),
-                            keycode: e.key as i32,
-                            state: e.state as u32,
+                            request: InputRequest::KeyboardKeycode {
+                                keycode: e.key as i32,
+                                state: e.state as u32,
+                            },
                         });
                     }
                     EisRequest::TouchDown(e) => {
-                        let _ = sender.send(InputEvent::TouchDown {
+                        let _ = sender.send(InputEvent {
                             session_handle: session_handle.to_string(),
-                            slot: e.touch_id,
-                            x: e.x as f64,
-                            y: e.y as f64,
+                            request: InputRequest::TouchDown {
+                                slot: e.touch_id,
+                                x: e.x as f64,
+                                y: e.y as f64,
+                            },
                         });
                     }
                     EisRequest::TouchMotion(e) => {
-                        let _ = sender.send(InputEvent::TouchMotion {
+                        let _ = sender.send(InputEvent {
                             session_handle: session_handle.to_string(),
-                            slot: e.touch_id,
-                            x: e.x as f64,
-                            y: e.y as f64,
+                            request: InputRequest::TouchMotion {
+                                slot: e.touch_id,
+                                x: e.x as f64,
+                                y: e.y as f64,
+                            },
                         });
                     }
                     EisRequest::TouchUp(e) => {
-                        let _ = sender.send(InputEvent::TouchUp {
+                        let _ = sender.send(InputEvent {
                             session_handle: session_handle.to_string(),
-                            slot: e.touch_id,
+                            request: InputRequest::TouchUp { slot: e.touch_id },
                         });
                     }
                     _ => {}
@@ -319,58 +338,7 @@ impl State {
 #[allow(clippy::enum_variant_names)]
 pub enum EisServerMsg {
     NewListener(eis::Listener, String),
-    StopListener(String),
-    ActiveListener(String),
     RemoveListener(String),
-}
-
-pub enum InputEvent {
-    PointerMotion {
-        session_handle: String,
-        dx: f64,
-        dy: f64,
-    },
-    PointerMotionAbsolute {
-        session_handle: String,
-        x: f64,
-        y: f64,
-    },
-    PointerButton {
-        session_handle: String,
-        button: i32,
-        state: u32,
-    },
-    PointerAxis {
-        session_handle: String,
-        dx: f64,
-        dy: f64,
-    },
-    PointerAxisDiscrete {
-        session_handle: String,
-        axis: u32,
-        steps: i32,
-    },
-    KeyboardKeycode {
-        session_handle: String,
-        keycode: i32,
-        state: u32,
-    },
-    TouchMotion {
-        session_handle: String,
-        slot: u32,
-        x: f64,
-        y: f64,
-    },
-    TouchDown {
-        session_handle: String,
-        slot: u32,
-        x: f64,
-        y: f64,
-    },
-    TouchUp {
-        session_handle: String,
-        slot: u32,
-    },
 }
 
 pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
@@ -402,18 +370,6 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
                             )
                             .unwrap();
                         state.clients.insert(session_handle_2, token);
-                    }
-                    EisServerMsg::StopListener(session) => {
-                        let Some(token) = state.clients.get(&session) else {
-                            return;
-                        };
-                        let _ = state.handle.disable(token);
-                    }
-                    EisServerMsg::ActiveListener(session) => {
-                        let Some(token) = state.clients.get(&session) else {
-                            return;
-                        };
-                        let _ = state.handle.enable(token);
                     }
                     EisServerMsg::RemoveListener(session) => {
                         let Some(token) = state.clients.remove(&session) else {

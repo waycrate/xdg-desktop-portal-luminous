@@ -19,20 +19,7 @@ use calloop::{
 };
 use calloop_wayland_source::WaylandSource;
 
-#[derive(Debug, Clone, Copy)]
-pub enum InputRequest {
-    PointerMotion { dx: f64, dy: f64 },
-    PointerMotionAbsolute { x: f64, y: f64 },
-    PointerButton { button: i32, state: u32 },
-    PointerAxis { dx: f64, dy: f64, finish: bool },
-    PointerAxisDiscrete { axis: u32, steps: i32 },
-    KeyboardKeycode { keycode: i32, state: u32 },
-    KeyboardKeysym { keysym: i32, state: u32 },
-    TouchMotion { slot: u32, x: f64, y: f64 },
-    TouchDown { slot: u32, x: f64, y: f64 },
-    TouchUp { slot: u32 },
-    Exit,
-}
+use crate::utils::InputRequest;
 
 #[derive(Debug)]
 pub struct RemoteControl {
