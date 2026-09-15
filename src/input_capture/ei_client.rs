@@ -18,7 +18,7 @@ pub enum EiClientMsg {
     Event(InputEvent),
 }
 
-const INTERFACES_LIST: &[&'static str] = &[
+const INTERFACES_LIST: &[&str] = &[
     "ei_callback",
     "ei_connection",
     "ei_seat",

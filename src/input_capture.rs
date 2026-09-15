@@ -3,7 +3,6 @@ use std::{
     os::{fd::AsFd, unix::net::UnixStream},
 };
 mod ei_client;
-use crate::dialog::Message;
 use crate::{
     PortalResponse,
     backend::get_wlconnection,
@@ -14,12 +13,13 @@ use crate::{
     request::RequestInterface,
     session::{DeviceType, Session, SessionType, append_session},
 };
+use crate::{dialog::Message, utils::InputEvent};
 use crate::{
     session::{PersistMode, SESSIONS},
     utils::InputRequest,
 };
 use calloop::channel::Sender;
-use ei_client::EiClientMsg;
+pub use ei_client::EiClientMsg;
 use enumflags2::BitFlags;
 use futures::{SinkExt, channel::mpsc::Sender as FutSender};
 use reis::{ei, eis};
@@ -37,6 +37,19 @@ use zbus::{
 };
 type EiClientSender = Sender<EiClientMsg>;
 pub static EI_CLIENT: LazyLock<EiClientSender> = LazyLock::new(ei_client::start);
+
+pub trait SendInputEvent {
+    fn send_event(&self, handle: &str, request: InputRequest);
+}
+
+impl SendInputEvent for EiClientSender {
+    fn send_event(&self, handle: &str, request: InputRequest) {
+        let _ = self.send(EiClientMsg::Event(InputEvent {
+            session_handle: handle.to_string(),
+            request,
+        }));
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 /// The id of the window.
@@ -416,7 +429,13 @@ impl InputCapture {
         } else {
             get_monitor_info_from_socket(&connection)?
         };
-        let _ = self.sender.send(Message::CaptureLayer { wl_output }).await;
+        let _ = self
+            .sender
+            .send(Message::CaptureLayer {
+                wl_output,
+                handle: session_handle.to_string(),
+            })
+            .await;
         let capabilities = options.capabilities & self.capabilities();
         let restore_data = current_session.persist_mode.is_persist().then(|| {
             RestoreData::new(LuminousData {

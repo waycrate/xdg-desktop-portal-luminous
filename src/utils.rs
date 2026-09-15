@@ -73,3 +73,12 @@ pub enum InputRequest {
     TouchUp { slot: u32 },
     Exit,
 }
+
+pub fn from_icedmouse_to_u32(mouse: iced::mouse::Button) -> u32 {
+    match mouse {
+        iced::mouse::Button::Right => 273,
+        iced::mouse::Button::Middle => 274,
+        iced::mouse::Button::Other(code) => code as u32,
+        _ => 272
+    }
+}
