@@ -1,14 +1,12 @@
-use std::{
-    collections::HashMap,
-    os::{fd::AsFd, unix::net::UnixStream},
-};
 use crate::dialog::Message;
+use crate::eis_server::EIS_SENDER;
+use crate::eis_server::EisServerMsg;
 use crate::{
     PortalResponse,
     backend::get_wlconnection,
     remotedesktop::{
-        EIS_SENDER, EisServerMsg, LuminousData, RESTORE_DATA_VERSION, RemoteInfo, RestoreData,
-        VENDOR_NAME, get_monitor_info_from_socket, space_size,
+        LuminousData, RESTORE_DATA_VERSION, RemoteInfo, RestoreData, VENDOR_NAME,
+        get_monitor_info_from_socket, space_size,
     },
     request::RequestInterface,
     session::{DeviceType, Session, SessionType, append_session},
@@ -23,6 +21,10 @@ use reis::eis;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{self, AtomicU32};
 use std::sync::{Arc, LazyLock};
+use std::{
+    collections::HashMap,
+    os::{fd::AsFd, unix::net::UnixStream},
+};
 use tokio::sync::Mutex;
 use zbus::{
     interface,

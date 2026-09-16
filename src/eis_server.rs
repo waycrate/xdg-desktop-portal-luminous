@@ -1,5 +1,4 @@
-use super::dispatch::{get_keymap_as_file, init_xkb_objects};
-use crate::utils::{InputEvent, InputRequest};
+use crate::utils::{InputEvent, InputRequest, get_keymap_as_file, init_xkb_objects};
 use calloop::{
     RegistrationToken,
     channel::{Sender, channel},
@@ -19,6 +18,31 @@ use std::{
     time::Duration,
 };
 
+use std::sync::{Arc, LazyLock, Mutex as StdMutex};
+type EisServerSender = Sender<EisServerMsg>;
+type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
+
+pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
+    let (tx, rx) = start();
+    (tx, Arc::new(StdMutex::new(rx)))
+});
+
+pub static EIS_SENDER: LazyLock<EisServerSender> = LazyLock::new(|| EIS_SERVER.0.clone());
+pub trait SendInputEvent {
+    fn send_event(&self, handle: &str, request: InputRequest);
+}
+
+impl SendInputEvent for EisServerSender {
+    fn send_event(&self, handle: &str, request: InputRequest) {
+        let _ = self.send(EisServerMsg::Event(InputEvent {
+            session_handle: handle.to_string(),
+            request,
+        }));
+    }
+}
+pub fn get_input_receiver() -> InputEventReceiver {
+    EIS_SERVER.1.clone()
+}
 #[derive(Debug, Default)]
 struct ContextState {
     seat: Option<reis::request::Seat>,

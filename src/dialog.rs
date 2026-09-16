@@ -20,7 +20,7 @@ use libwayshot::reexport::WlOutput;
 use libwayshot::region::TopLevel;
 
 use crate::backend::get_wlconnection;
-use crate::remotedesktop::{EIS_SENDER, SendInputEvent};
+use crate::eis_server::{EIS_SENDER, SendInputEvent};
 use crate::settings::SettingsConfig;
 use crate::utils::{InputRequest, from_icedmouse_to_u32};
 
