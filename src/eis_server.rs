@@ -158,7 +158,6 @@ impl ContextState {
                 if let Some(device) = &self.device_scroll
                     && let Some(scroll) = device.interface::<reis::eis::Scroll>()
                 {
-
                     device.start_emulating(self.sequence);
                     scroll.scroll(dx as f32, dy as f32);
                     device.frame(time_stamp);
@@ -182,10 +181,7 @@ impl ContextState {
         }
     }
 
-    fn handle_request(
-        &mut self,
-        request: &EisRequest,
-    ) -> calloop::PostAction {
+    fn handle_request(&mut self, request: &EisRequest) -> calloop::PostAction {
         match request {
             EisRequest::Disconnect => {
                 return calloop::PostAction::Remove;
