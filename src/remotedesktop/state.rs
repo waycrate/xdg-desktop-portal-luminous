@@ -9,18 +9,14 @@ use wayland_client::{
 };
 use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1;
 
+use crate::utils::{BTN_LEFT, BTN_RIGHT, PAD_RIGHT};
+
 use enumflags2::{BitFlag, BitFlags, bitflags};
 use thiserror::Error;
 use xkbcommon::xkb::{Context, Keycode, Keymap, Keysym, STATE_LAYOUT_EFFECTIVE, State};
 
 const LEFT_SHIFT: i32 = 42;
 const ALTGR: i32 = 100;
-
-// NOTE: always read https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
-const BTN_LEFT: u32 = 0x110;
-const BTN_RIGHT: u32 = 0x111;
-//const PAD_LEFT: u32 = 0x222;
-const PAD_RIGHT: u32 = 0x223;
 
 // This struct represents the state of our app. This simple app does not
 // need any state, by this type still supports the `Dispatch` implementations.

@@ -77,13 +77,18 @@ pub enum InputRequest {
     TouchUp { slot: u32 },
     Exit,
 }
-
+// NOTE: always read https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
+pub const BTN_LEFT: u32 = 0x110;
+pub const BTN_RIGHT: u32 = 0x111;
+pub const BTN_MIDDLE: u32 = 0x112;
+//const PAD_LEFT: u32 = 0x222;
+pub const PAD_RIGHT: u32 = 0x223;
 pub fn from_icedmouse_to_u32(mouse: iced::mouse::Button) -> u32 {
     match mouse {
-        iced::mouse::Button::Right => 273,
-        iced::mouse::Button::Middle => 274,
+        iced::mouse::Button::Right => BTN_LEFT,
+        iced::mouse::Button::Middle => BTN_MIDDLE,
         iced::mouse::Button::Other(code) => code as u32,
-        _ => 272,
+        _ => BTN_LEFT,
     }
 }
 

@@ -1007,6 +1007,9 @@ impl AreaSelectorGUI {
                 let Some(CaptureInfo { handle, .. }) = &self.capture_info else {
                     return Task::none();
                 };
+                // TODO: use iced::window to get size, and map to the real position
+                // Since maybe the setting of barries still have something wrong, the remote control
+                // can never work, so it will be the job of next time
                 match event {
                     Event::Mouse(mouse) => match mouse {
                         iced::mouse::Event::CursorMoved { position } => {
@@ -1037,6 +1040,7 @@ impl AreaSelectorGUI {
                             );
                         }
                         iced::mouse::Event::WheelScrolled { delta } => match delta {
+                            // NOTE: it may be the wrong implement
                             iced::mouse::ScrollDelta::Lines { x, y } => {
                                 let (axis, steps) =
                                     if x > y { (0, x as i32) } else { (1, y as i32) };
