@@ -241,7 +241,7 @@ impl ContextState {
                         &request.seat,
                     ));
                 }
-                if self.device_scroll.is_none() && capabilities.contains(DeviceCapability::Button) {
+                if self.device_button.is_none() && capabilities.contains(DeviceCapability::Button) {
                     self.device_button = Some(add_device(
                         "button",
                         BitFlags::from_flag(DeviceCapability::Button),
