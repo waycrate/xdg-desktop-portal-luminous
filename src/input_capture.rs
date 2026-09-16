@@ -178,8 +178,10 @@ struct CreateSessionOptions {
 struct StartSessionOptions {
     #[serde(with = "as_value")]
     capabilities: BitFlags<SupportedCapabilities>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_value", default)]
     persist_mode: PersistMode,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
+    restore_data: Option<RestoreData>,
 }
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
@@ -393,7 +395,7 @@ impl InputCapture {
         options: StartSessionOptions,
         #[zbus(connection)] dbus_connection: &zbus::Connection,
     ) -> zbus::fdo::Result<PortalResponse<StartResult>> {
-        let mut locked_sessions = SESSIONS.lock().await;
+        let locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
             .iter()
             .position(|this_session| this_session.handle_path == session_handle.clone().into())
@@ -402,7 +404,7 @@ impl InputCapture {
             return Ok(PortalResponse::Other);
         };
 
-        let current_session = &mut locked_sessions[index];
+        let current_session = &locked_sessions[index];
 
         if (options.capabilities | self.capabilities()) != self.capabilities() {
             return Err(zbus::Error::Failure("Unsupported capability".to_owned()).into());
@@ -420,8 +422,8 @@ impl InputCapture {
             vendor_name,
             version,
             data,
-        }) = current_session.restore_data.clone()
-            && current_session.persist_mode.is_persist()
+        }) = options.restore_data
+            && options.persist_mode.is_persist()
             && vendor_name == VENDOR_NAME
             && version == RESTORE_DATA_VERSION
             && let Some(display) = connection
@@ -451,12 +453,11 @@ impl InputCapture {
             })
             .await;
         let capabilities = options.capabilities & self.capabilities();
-        let restore_data = current_session.persist_mode.is_persist().then(|| {
+        let restore_data = options.persist_mode.is_persist().then(|| {
             RestoreData::new(LuminousData {
                 display: output_name,
             })
         });
-        current_session.restore_data = restore_data.clone();
         let _ = current_session;
         drop(locked_sessions);
         append_capture_session(

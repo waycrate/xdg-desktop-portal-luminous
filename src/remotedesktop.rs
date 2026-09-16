@@ -379,7 +379,7 @@ impl RemoteDesktopBackend {
         _options: HashMap<String, Value<'_>>,
         #[zbus(connection)] dbus_connection: &zbus::Connection,
     ) -> zbus::fdo::Result<ResponseDispatchNotifier<PortalResponse<RemoteStartReturnValue>>> {
-        let locked_sessions = SESSIONS.lock().await;
+        let mut locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
             .iter()
             .position(|this_session| this_session.handle_path == session_handle.clone().into())
@@ -388,13 +388,12 @@ impl RemoteDesktopBackend {
             return Ok(remote_start_other());
         };
 
-        let current_session = locked_sessions[index].clone();
+        let current_session = &mut locked_sessions[index];
         if current_session.session_type != SessionType::Remote {
             return Ok(remote_start_other());
         }
         let device_type = current_session.device_type;
         let clipboard_requested = current_session.clipboard_requested;
-        drop(locked_sessions);
 
         let remote_sessions = REMOTE_SESSIONS.lock().await;
         if let Some(session) = remote_sessions
@@ -421,7 +420,6 @@ impl RemoteDesktopBackend {
                 },
             ));
         }
-        drop(remote_sessions);
 
         let screen_share_enabled = current_session.screen_share_enabled;
         let mut streams = vec![];
@@ -439,7 +437,7 @@ impl RemoteDesktopBackend {
             vendor_name,
             version,
             data,
-        }) = current_session.restore_data
+        }) = current_session.restore_data.clone()
             && current_session.persist_mode.is_persist()
             && vendor_name == VENDOR_NAME
             && version == RESTORE_DATA_VERSION
@@ -491,6 +489,9 @@ impl RemoteDesktopBackend {
                 display: output_name,
             })
         });
+        current_session.restore_data = restore_data.clone();
+        let _ = current_session;
+        drop(remote_sessions);
         append_remote_session(RemoteSessionData::new(
             session_handle.to_string(),
             cast_thread,
