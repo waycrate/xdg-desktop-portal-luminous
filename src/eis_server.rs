@@ -15,7 +15,7 @@ use std::{
     os::fd::AsFd,
     sync::mpsc::{self, Receiver},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use std::sync::{Arc, LazyLock, Mutex as StdMutex};
@@ -43,44 +43,88 @@ impl SendInputEvent for EisServerSender {
 pub fn get_input_receiver() -> InputEventReceiver {
     EIS_SERVER.1.clone()
 }
-#[derive(Debug, Default)]
+
+#[derive(Debug)]
 struct ContextState {
     seat: Option<reis::request::Seat>,
-    device_keyboard: Option<reis::eis::Keyboard>,
-    device_pointer: Option<reis::eis::Pointer>,
-    device_pointer_absolute: Option<reis::eis::PointerAbsolute>,
-    device_touch: Option<reis::eis::Touchscreen>,
-    device_text: Option<reis::eis::Text>,
-    device_scroll: Option<reis::eis::Scroll>,
-    device_button: Option<reis::eis::Button>,
+    device_keyboard: Option<reis::request::Device>,
+    device_pointer: Option<reis::request::Device>,
+    device_pointer_absolute: Option<reis::request::Device>,
+    device_touch: Option<reis::request::Device>,
+    device_text: Option<reis::request::Device>,
+    device_scroll: Option<reis::request::Device>,
+    device_button: Option<reis::request::Device>,
+    connection: Option<Connection>,
     sequence: u32,
+    instant: Instant,
 }
 
 impl ContextState {
-    fn handle_input_request(&self, request: InputRequest) {
+    fn new() -> Self {
+        Self {
+            seat: None,
+            device_keyboard: None,
+            device_pointer: None,
+            device_pointer_absolute: None,
+            device_touch: None,
+            device_text: None,
+            device_scroll: None,
+            device_button: None,
+            connection: None,
+            sequence: 0,
+            instant: Instant::now(),
+        }
+    }
+    fn handle_input_request(&mut self, request: InputRequest) {
+        let current_time = Instant::now();
+        let time_stamp = (current_time - self.instant).as_millis() as u64;
+        self.sequence += 1;
         match request {
             InputRequest::TouchUp { slot } => {
-                if let Some(touch) = &self.device_touch {
+                if let Some(device) = &self.device_touch
+                    && let Some(touch) = device.interface::<reis::eis::Touchscreen>()
+                {
+                    device.start_emulating(self.sequence);
                     touch.up(slot);
+                    device.frame(time_stamp);
+                    device.stop_emulating();
                 }
             }
             InputRequest::TouchDown { slot, x, y } => {
-                if let Some(touch) = &self.device_touch {
+                if let Some(device) = &self.device_touch
+                    && let Some(touch) = device.interface::<reis::eis::Touchscreen>()
+                {
+                    device.start_emulating(self.sequence);
                     touch.down(slot, x as f32, y as f32);
+                    device.frame(time_stamp);
+                    device.stop_emulating();
                 }
             }
             InputRequest::PointerMotion { dx, dy } => {
-                if let Some(pointer) = &self.device_pointer {
+                if let Some(device) = &self.device_pointer
+                    && let Some(pointer) = device.interface::<reis::eis::Pointer>()
+                {
+                    device.start_emulating(self.sequence);
                     pointer.motion_relative(dx as f32, dy as f32);
+                    device.frame(time_stamp);
+                    device.stop_emulating();
                 }
             }
             InputRequest::PointerMotionAbsolute { x, y } => {
-                if let Some(pointer) = &self.device_pointer_absolute {
+                if let Some(device) = &self.device_pointer_absolute
+                    && let Some(pointer) = device.interface::<reis::eis::PointerAbsolute>()
+                {
+                    device.start_emulating(self.sequence);
                     pointer.motion_absolute(x as f32, y as f32);
+                    device.frame(time_stamp);
+                    device.stop_emulating();
                 }
             }
             InputRequest::PointerButton { button, state } => {
-                if let Some(pointer_button) = &self.device_button {
+                if let Some(device) = &self.device_button
+                    && let Some(pointer_button) = device.interface::<reis::eis::Button>()
+                {
+                    device.start_emulating(self.sequence);
                     pointer_button.button(
                         button as u32,
                         if state == 0 {
@@ -89,10 +133,15 @@ impl ContextState {
                             eis::button::ButtonState::Released
                         },
                     );
+                    device.frame(time_stamp);
+                    device.stop_emulating();
                 }
             }
             InputRequest::KeyboardKeycode { keycode, state } => {
-                if let Some(keyboard) = &self.device_keyboard {
+                if let Some(device) = &self.device_keyboard
+                    && let Some(keyboard) = device.interface::<reis::eis::Keyboard>()
+                {
+                    device.start_emulating(self.sequence);
                     keyboard.key(
                         keycode as u32,
                         if state == 0 {
@@ -101,25 +150,40 @@ impl ContextState {
                             eis::keyboard::KeyState::Released
                         },
                     );
+                    device.frame(time_stamp);
+                    device.stop_emulating();
                 }
             }
             InputRequest::PointerAxis { dx, dy, .. } => {
-                if let Some(scroll) = &self.device_scroll {
+                if let Some(device) = &self.device_scroll
+                    && let Some(scroll) = device.interface::<reis::eis::Scroll>()
+                {
+
+                    device.start_emulating(self.sequence);
                     scroll.scroll(dx as f32, dy as f32);
+                    device.frame(time_stamp);
+                    device.stop_emulating();
                 }
             }
             InputRequest::PointerAxisDiscrete { axis, steps } => {
-                if let Some(scroll) = &self.device_scroll {
+                if let Some(device) = &self.device_scroll
+                    && let Some(scroll) = device.interface::<reis::eis::Scroll>()
+                {
+                    device.start_emulating(self.sequence);
                     scroll.scroll_discrete(axis as i32, steps);
+                    device.frame(time_stamp);
+                    device.stop_emulating();
                 }
             }
             _ => {}
+        }
+        if let Some(connection) = &self.connection {
+            let _ = connection.flush();
         }
     }
 
     fn handle_request(
         &mut self,
-        connection: &Connection,
         request: &EisRequest,
     ) -> calloop::PostAction {
         match request {
@@ -132,91 +196,70 @@ impl ContextState {
                 if self.device_keyboard.is_none()
                     && capabilities.contains(DeviceCapability::Keyboard)
                 {
-                    self.device_keyboard = add_device(
+                    self.device_keyboard = Some(add_device(
                         "keyboard",
                         BitFlags::from_flag(DeviceCapability::Keyboard),
                         advertise_keyboard_keymap,
                         &request.seat,
-                        connection,
-                        &mut self.sequence,
-                    )
-                    .interface();
+                    ));
                 }
 
                 if self.device_pointer.is_none() && capabilities.contains(DeviceCapability::Pointer)
                 {
-                    self.device_pointer = add_device(
+                    self.device_pointer = Some(add_device(
                         "pointer",
                         DeviceCapability::Pointer
                             | DeviceCapability::Button
                             | DeviceCapability::Scroll,
                         |_| {},
                         &request.seat,
-                        connection,
-                        &mut self.sequence,
-                    )
-                    .interface();
+                    ));
                 }
 
                 if self.device_touch.is_none() && capabilities.contains(DeviceCapability::Touch) {
-                    self.device_touch = add_device(
+                    self.device_touch = Some(add_device(
                         "touch",
                         BitFlags::from_flag(DeviceCapability::Touch),
                         |_| {},
                         &request.seat,
-                        connection,
-                        &mut self.sequence,
-                    )
-                    .interface();
+                    ));
                 }
 
                 if self.device_pointer_absolute.is_none()
                     && capabilities.contains(DeviceCapability::PointerAbsolute)
                 {
-                    self.device_pointer_absolute = add_device(
+                    self.device_pointer_absolute = Some(add_device(
                         "pointer-abs",
                         DeviceCapability::PointerAbsolute
                             | DeviceCapability::Button
                             | DeviceCapability::Scroll,
                         |_| {},
                         &request.seat,
-                        connection,
-                        &mut self.sequence,
-                    )
-                    .interface();
+                    ));
                 }
                 if self.device_scroll.is_none() && capabilities.contains(DeviceCapability::Scroll) {
-                    self.device_scroll = add_device(
+                    self.device_scroll = Some(add_device(
                         "scroll",
                         BitFlags::from_flag(DeviceCapability::Scroll),
                         |_| {},
                         &request.seat,
-                        connection,
-                        &mut self.sequence,
-                    )
-                    .interface();
+                    ));
                 }
                 if self.device_scroll.is_none() && capabilities.contains(DeviceCapability::Button) {
-                    self.device_button = add_device(
+                    self.device_button = Some(add_device(
                         "button",
                         BitFlags::from_flag(DeviceCapability::Button),
                         |_| {},
                         &request.seat,
-                        connection,
-                        &mut self.sequence,
-                    )
-                    .interface();
+                    ));
                 }
                 if self.device_text.is_none() && capabilities.contains(DeviceCapability::Text) {
-                    self.device_text = add_device(
+                    self.device_text = Some(add_device(
                         "text",
                         DeviceCapability::Text.into(),
                         |_| {},
                         &request.seat,
-                        connection,
-                        &mut self.sequence,
-                    )
-                    .interface();
+                    ));
                 }
             }
             _ => {}
@@ -242,8 +285,6 @@ fn add_device(
     capabilities: BitFlags<DeviceCapability>,
     before_done_cb: impl for<'a> FnOnce(&'a reis::request::Device),
     seat: &reis::request::Seat,
-    connection: &Connection,
-    sequence: &mut u32,
 ) -> reis::request::Device {
     let device = seat.add_device(
         Some(name),
@@ -252,10 +293,6 @@ fn add_device(
         before_done_cb,
     );
     device.resumed();
-    if connection.context_type() == eis::handshake::ContextType::Receiver {
-        *sequence += 1;
-        device.start_emulating(*sequence);
-    }
     device
 }
 
@@ -294,7 +331,7 @@ impl State {
         );
 
         let source = EisRequestSource::new(context, Id::unique().0);
-        let context_state = ContextState::default();
+        let context_state = ContextState::new();
         let session_handle_clone = session_handle.clone();
         self.sessions.insert(session_handle, context_state);
         self.handle
@@ -304,6 +341,9 @@ impl State {
                         if let Some(context_state) =
                             state.sessions.get_mut(&session_handle_clone) =>
                     {
+                        if context_state.connection.is_none() {
+                            context_state.connection = Some(connected_state.clone());
+                        }
                         Self::handle_request_source_event(
                             context_state,
                             connected_state,
@@ -445,7 +485,7 @@ impl State {
                     _ => {}
                 }
 
-                let res = context_state.handle_request(connection, &request);
+                let res = context_state.handle_request(&request);
                 if res != calloop::PostAction::Continue {
                     return res;
                 }
@@ -528,7 +568,7 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
                         session_handle,
                         request,
                     }) => {
-                        let Some(session) = state.sessions.get(&session_handle) else {
+                        let Some(session) = state.sessions.get_mut(&session_handle) else {
                             return;
                         };
                         session.handle_input_request(request);

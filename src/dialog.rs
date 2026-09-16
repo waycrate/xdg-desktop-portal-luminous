@@ -1036,6 +1036,26 @@ impl AreaSelectorGUI {
                                 },
                             );
                         }
+                        iced::mouse::Event::WheelScrolled { delta } => match delta {
+                            iced::mouse::ScrollDelta::Lines { x, y } => {
+                                let (axis, steps) =
+                                    if x > y { (0, x as i32) } else { (1, y as i32) };
+                                EIS_SENDER.send_event(
+                                    handle,
+                                    InputRequest::PointerAxisDiscrete { axis, steps },
+                                );
+                            }
+                            iced::mouse::ScrollDelta::Pixels { x, y } => {
+                                EIS_SENDER.send_event(
+                                    handle,
+                                    InputRequest::PointerAxis {
+                                        dx: x as f64,
+                                        dy: y as f64,
+                                        finish: true,
+                                    },
+                                );
+                            }
+                        },
                         _ => {}
                     },
                     Event::Touch(touch) => match touch {
