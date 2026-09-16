@@ -56,6 +56,19 @@ pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLoc
     (tx, Arc::new(StdMutex::new(rx)))
 });
 
+pub static EIS_SENDER: LazyLock<EisServerSender> = LazyLock::new(|| EIS_SERVER.0.clone());
+pub trait SendInputEvent {
+    fn send_event(&self, handle: &str, request: InputRequest);
+}
+
+impl SendInputEvent for EisServerSender {
+    fn send_event(&self, handle: &str, request: InputRequest) {
+        let _ = self.send(EisServerMsg::Event(InputEvent {
+            session_handle: handle.to_string(),
+            request,
+        }));
+    }
+}
 pub fn get_input_receiver() -> InputEventReceiver {
     EIS_SERVER.1.clone()
 }

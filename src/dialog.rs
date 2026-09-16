@@ -20,7 +20,7 @@ use libwayshot::reexport::WlOutput;
 use libwayshot::region::TopLevel;
 
 use crate::backend::get_wlconnection;
-use crate::input_capture::{EI_CLIENT, SendInputEvent};
+use crate::remotedesktop::{EIS_SENDER, SendInputEvent};
 use crate::settings::SettingsConfig;
 use crate::utils::{InputRequest, from_icedmouse_to_u32};
 
@@ -1010,7 +1010,7 @@ impl AreaSelectorGUI {
                 match event {
                     Event::Mouse(mouse) => match mouse {
                         iced::mouse::Event::CursorMoved { position } => {
-                            EI_CLIENT.send_event(
+                            EIS_SENDER.send_event(
                                 handle.as_str(),
                                 InputRequest::PointerMotionAbsolute {
                                     x: position.x as f64,
@@ -1019,7 +1019,7 @@ impl AreaSelectorGUI {
                             );
                         }
                         iced::mouse::Event::ButtonPressed(button) => {
-                            EI_CLIENT.send_event(
+                            EIS_SENDER.send_event(
                                 handle,
                                 InputRequest::PointerButton {
                                     button: from_icedmouse_to_u32(button) as i32,
@@ -1028,7 +1028,7 @@ impl AreaSelectorGUI {
                             );
                         }
                         iced::mouse::Event::ButtonReleased(button) => {
-                            EI_CLIENT.send_event(
+                            EIS_SENDER.send_event(
                                 handle,
                                 InputRequest::PointerButton {
                                     button: from_icedmouse_to_u32(button) as i32,
@@ -1040,7 +1040,7 @@ impl AreaSelectorGUI {
                     },
                     Event::Touch(touch) => match touch {
                         iced::touch::Event::FingerMoved { id, position } => {
-                            EI_CLIENT.send_event(
+                            EIS_SENDER.send_event(
                                 handle,
                                 InputRequest::TouchMotion {
                                     slot: id.0 as u32,
@@ -1050,7 +1050,7 @@ impl AreaSelectorGUI {
                             );
                         }
                         iced::touch::Event::FingerPressed { id, position } => {
-                            EI_CLIENT.send_event(
+                            EIS_SENDER.send_event(
                                 handle,
                                 InputRequest::TouchDown {
                                     slot: id.0 as u32,
@@ -1060,7 +1060,7 @@ impl AreaSelectorGUI {
                             );
                         }
                         iced::touch::Event::FingerLifted { id, .. } => {
-                            EI_CLIENT
+                            EIS_SENDER
                                 .send_event(handle, InputRequest::TouchUp { slot: id.0 as u32 });
                         }
                         _ => {}

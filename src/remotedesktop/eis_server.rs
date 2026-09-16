@@ -19,18 +19,80 @@ use std::{
     time::Duration,
 };
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct ContextState {
     seat: Option<reis::request::Seat>,
-    device_keyboard: Option<reis::request::Device>,
-    device_pointer: Option<reis::request::Device>,
-    device_pointer_absolute: Option<reis::request::Device>,
-    device_touch: Option<reis::request::Device>,
-    device_text: Option<reis::request::Device>,
+    device_keyboard: Option<reis::eis::Keyboard>,
+    device_pointer: Option<reis::eis::Pointer>,
+    device_pointer_absolute: Option<reis::eis::PointerAbsolute>,
+    device_touch: Option<reis::eis::Touchscreen>,
+    device_text: Option<reis::eis::Text>,
+    device_scroll: Option<reis::eis::Scroll>,
+    device_button: Option<reis::eis::Button>,
     sequence: u32,
 }
 
 impl ContextState {
+    fn handle_input_request(&self, request: InputRequest) {
+        match request {
+            InputRequest::TouchUp { slot } => {
+                if let Some(touch) = &self.device_touch {
+                    touch.up(slot);
+                }
+            }
+            InputRequest::TouchDown { slot, x, y } => {
+                if let Some(touch) = &self.device_touch {
+                    touch.down(slot, x as f32, y as f32);
+                }
+            }
+            InputRequest::PointerMotion { dx, dy } => {
+                if let Some(pointer) = &self.device_pointer {
+                    pointer.motion_relative(dx as f32, dy as f32);
+                }
+            }
+            InputRequest::PointerMotionAbsolute { x, y } => {
+                if let Some(pointer) = &self.device_pointer_absolute {
+                    pointer.motion_absolute(x as f32, y as f32);
+                }
+            }
+            InputRequest::PointerButton { button, state } => {
+                if let Some(pointer_button) = &self.device_button {
+                    pointer_button.button(
+                        button as u32,
+                        if state == 0 {
+                            eis::button::ButtonState::Press
+                        } else {
+                            eis::button::ButtonState::Released
+                        },
+                    );
+                }
+            }
+            InputRequest::KeyboardKeycode { keycode, state } => {
+                if let Some(keyboard) = &self.device_keyboard {
+                    keyboard.key(
+                        keycode as u32,
+                        if state == 0 {
+                            eis::keyboard::KeyState::Press
+                        } else {
+                            eis::keyboard::KeyState::Released
+                        },
+                    );
+                }
+            }
+            InputRequest::PointerAxis { dx, dy, .. } => {
+                if let Some(scroll) = &self.device_scroll {
+                    scroll.scroll(dx as f32, dy as f32);
+                }
+            }
+            InputRequest::PointerAxisDiscrete { axis, steps } => {
+                if let Some(scroll) = &self.device_scroll {
+                    scroll.scroll_discrete(axis as i32, steps);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn handle_request(
         &mut self,
         connection: &Connection,
@@ -46,19 +108,20 @@ impl ContextState {
                 if self.device_keyboard.is_none()
                     && capabilities.contains(DeviceCapability::Keyboard)
                 {
-                    self.device_keyboard = Some(add_device(
+                    self.device_keyboard = add_device(
                         "keyboard",
                         BitFlags::from_flag(DeviceCapability::Keyboard),
                         advertise_keyboard_keymap,
                         &request.seat,
                         connection,
                         &mut self.sequence,
-                    ));
+                    )
+                    .interface();
                 }
 
                 if self.device_pointer.is_none() && capabilities.contains(DeviceCapability::Pointer)
                 {
-                    self.device_pointer = Some(add_device(
+                    self.device_pointer = add_device(
                         "pointer",
                         DeviceCapability::Pointer
                             | DeviceCapability::Button
@@ -67,24 +130,26 @@ impl ContextState {
                         &request.seat,
                         connection,
                         &mut self.sequence,
-                    ));
+                    )
+                    .interface();
                 }
 
                 if self.device_touch.is_none() && capabilities.contains(DeviceCapability::Touch) {
-                    self.device_touch = Some(add_device(
+                    self.device_touch = add_device(
                         "touch",
                         BitFlags::from_flag(DeviceCapability::Touch),
                         |_| {},
                         &request.seat,
                         connection,
                         &mut self.sequence,
-                    ));
+                    )
+                    .interface();
                 }
 
                 if self.device_pointer_absolute.is_none()
                     && capabilities.contains(DeviceCapability::PointerAbsolute)
                 {
-                    self.device_pointer_absolute = Some(add_device(
+                    self.device_pointer_absolute = add_device(
                         "pointer-abs",
                         DeviceCapability::PointerAbsolute
                             | DeviceCapability::Button
@@ -93,18 +158,41 @@ impl ContextState {
                         &request.seat,
                         connection,
                         &mut self.sequence,
-                    ));
+                    )
+                    .interface();
                 }
-
+                if self.device_scroll.is_none() && capabilities.contains(DeviceCapability::Scroll) {
+                    self.device_scroll = add_device(
+                        "scroll",
+                        BitFlags::from_flag(DeviceCapability::Scroll),
+                        |_| {},
+                        &request.seat,
+                        connection,
+                        &mut self.sequence,
+                    )
+                    .interface();
+                }
+                if self.device_scroll.is_none() && capabilities.contains(DeviceCapability::Button) {
+                    self.device_button = add_device(
+                        "button",
+                        BitFlags::from_flag(DeviceCapability::Button),
+                        |_| {},
+                        &request.seat,
+                        connection,
+                        &mut self.sequence,
+                    )
+                    .interface();
+                }
                 if self.device_text.is_none() && capabilities.contains(DeviceCapability::Text) {
-                    self.device_text = Some(add_device(
+                    self.device_text = add_device(
                         "text",
                         DeviceCapability::Text.into(),
                         |_| {},
                         &request.seat,
                         connection,
                         &mut self.sequence,
-                    ));
+                    )
+                    .interface();
                 }
             }
             _ => {}
@@ -151,6 +239,7 @@ struct State {
     handle: calloop::LoopHandle<'static, Self>,
     sender: mpsc::Sender<InputEvent>,
     clients: HashMap<String, RegistrationToken>,
+    sessions: HashMap<String, ContextState>,
 }
 
 use std::hash::Hash;
@@ -181,20 +270,30 @@ impl State {
         );
 
         let source = EisRequestSource::new(context, Id::unique().0);
-        let mut context_state = ContextState::default();
+        let context_state = ContextState::default();
         let session_handle_clone = session_handle.clone();
+        self.sessions.insert(session_handle, context_state);
         self.handle
             .insert_source(source, move |event, connected_state, state| {
                 Ok(match event {
-                    Ok(event) => Self::handle_request_source_event(
-                        &mut context_state,
-                        connected_state,
-                        event,
-                        &state.sender,
-                        &session_handle_clone,
-                    ),
+                    Ok(event)
+                        if let Some(context_state) =
+                            state.sessions.get_mut(&session_handle_clone) =>
+                    {
+                        Self::handle_request_source_event(
+                            context_state,
+                            connected_state,
+                            event,
+                            &state.sender,
+                            &session_handle_clone,
+                        )
+                    }
                     Err(err) => {
                         tracing::error!("Error communicating with client: {err}");
+                        calloop::PostAction::Remove
+                    }
+                    _ => {
+                        tracing::error!("context_state not found");
                         calloop::PostAction::Remove
                     }
                 })
@@ -339,6 +438,10 @@ impl State {
 pub enum EisServerMsg {
     NewListener(eis::Listener, String),
     RemoveListener(String),
+    StopContext(String),
+    ActiveContext(String),
+    RemoveContext(String),
+    Event(InputEvent),
 }
 
 pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
@@ -352,6 +455,7 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
             handle: handle.clone(),
             sender: input_tx,
             clients: HashMap::new(),
+            sessions: HashMap::new(),
         };
 
         let _ = handle.insert_source(msg_channel, |event, _, state| {
@@ -372,10 +476,38 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
                         state.clients.insert(session_handle_2, token);
                     }
                     EisServerMsg::RemoveListener(session) => {
+                        state.sessions.remove(&session);
                         let Some(token) = state.clients.remove(&session) else {
                             return;
                         };
                         state.handle.remove(token);
+                    }
+                    EisServerMsg::StopContext(session) => {
+                        let Some(token) = state.clients.get(&session) else {
+                            return;
+                        };
+                        let _ = state.handle.disable(token);
+                    }
+                    EisServerMsg::ActiveContext(session) => {
+                        let Some(token) = state.clients.get(&session) else {
+                            return;
+                        };
+                        let _ = state.handle.enable(token);
+                    }
+                    EisServerMsg::RemoveContext(session) => {
+                        let Some(token) = state.clients.remove(&session) else {
+                            return;
+                        };
+                        state.handle.remove(token);
+                    }
+                    EisServerMsg::Event(InputEvent {
+                        session_handle,
+                        request,
+                    }) => {
+                        let Some(session) = state.sessions.get(&session_handle) else {
+                            return;
+                        };
+                        session.handle_input_request(request);
                     }
                 }
             }
