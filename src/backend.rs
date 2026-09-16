@@ -231,7 +231,7 @@ pub async fn backend(
         }
     });
 
-    let receiver = remotedesktop::get_input_receiver();
+    let receiver = crate::eis_server::get_input_receiver();
     let runtime = tokio::runtime::Handle::current();
     std::thread::spawn(move || {
         loop {

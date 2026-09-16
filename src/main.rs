@@ -3,6 +3,7 @@ mod backend;
 mod background;
 mod clipboard;
 mod dialog;
+mod eis_server;
 mod input_capture;
 mod remotedesktop;
 mod request;
@@ -13,7 +14,6 @@ mod settings;
 mod systemd;
 mod usb;
 mod utils;
-
 use std::collections::HashMap;
 use zbus::zvariant;
 mod pipewirethread;

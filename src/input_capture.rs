@@ -1,8 +1,6 @@
-use std::{
-    collections::HashMap,
-    os::{fd::AsFd, unix::net::UnixStream},
-};
-mod ei_client;
+use crate::dialog::Message;
+use crate::eis_server::EIS_SENDER;
+use crate::eis_server::EisServerMsg;
 use crate::{
     PortalResponse,
     backend::get_wlconnection,
@@ -13,19 +11,20 @@ use crate::{
     request::RequestInterface,
     session::{DeviceType, Session, SessionType, append_session},
 };
-use crate::{dialog::Message, utils::InputEvent};
 use crate::{
     session::{PersistMode, SESSIONS},
     utils::InputRequest,
 };
-use calloop::channel::Sender;
-pub use ei_client::EiClientMsg;
 use enumflags2::BitFlags;
 use futures::{SinkExt, channel::mpsc::Sender as FutSender};
-use reis::{ei, eis};
+use reis::eis;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{self, AtomicU32};
 use std::sync::{Arc, LazyLock};
+use std::{
+    collections::HashMap,
+    os::{fd::AsFd, unix::net::UnixStream},
+};
 use tokio::sync::Mutex;
 use zbus::{
     interface,
@@ -35,21 +34,6 @@ use zbus::{
         as_value::{self, optional},
     },
 };
-type EiClientSender = Sender<EiClientMsg>;
-pub static EI_CLIENT: LazyLock<EiClientSender> = LazyLock::new(ei_client::start);
-
-pub trait SendInputEvent {
-    fn send_event(&self, handle: &str, request: InputRequest);
-}
-
-impl SendInputEvent for EiClientSender {
-    fn send_event(&self, handle: &str, request: InputRequest) {
-        let _ = self.send(EiClientMsg::Event(InputEvent {
-            session_handle: handle.to_string(),
-            request,
-        }));
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 /// The id of the window.
@@ -69,13 +53,13 @@ impl ZoneId {
     }
 }
 pub async fn enable_ei_client(session_handle: ObjectPath<'_>) {
-    EI_CLIENT
-        .send(EiClientMsg::ActiveContext(session_handle.to_string()))
+    EIS_SENDER
+        .send(EisServerMsg::ActiveContext(session_handle.to_string()))
         .unwrap();
 }
 pub async fn disable_ei_client(session_handle: ObjectPath<'_>) {
-    EI_CLIENT
-        .send(EiClientMsg::StopContext(session_handle.to_string()))
+    EIS_SENDER
+        .send(EisServerMsg::StopContext(session_handle.to_string()))
         .unwrap();
 }
 #[derive(Debug, Type, Serialize, Deserialize)]
@@ -109,7 +93,7 @@ pub struct InputCaptureData {
 
 impl InputCaptureData {
     fn stop(&self) {
-        let _ = EI_CLIENT.send(EiClientMsg::RemoveContext(self.session_handle.clone()));
+        let _ = EIS_SENDER.send(EisServerMsg::RemoveContext(self.session_handle.clone()));
     }
     pub fn step(&mut self) {
         self.activation_id += 1;
@@ -542,21 +526,19 @@ impl InputCapture {
     ) -> zbus::fdo::Result<Fd<'_>> {
         let listener = eis::Listener::bind_auto()
             .map_err(|e| zbus::Error::Failure(format!("Failed to create EIS listener: {}", e)))?;
-
         let path = listener.path();
         use std::os::unix::net::UnixStream;
-        let stream_server = UnixStream::connect(path).map_err(|e| {
+        let stream = UnixStream::connect(path).map_err(|e| {
             zbus::Error::Failure(format!("Failed to open unix stream: {path:?} with {e}"))
         })?;
-        let stream_client = UnixStream::connect(path).map_err(|e| {
-            zbus::Error::Failure(format!("Failed to open unix stream: {path:?} with {e}"))
-        })?;
-        let context = ei::Context::new(stream_client).unwrap();
-        self.clients
-            .insert(session_handle.to_string(), stream_server);
 
-        EI_CLIENT
-            .send(EiClientMsg::NewContext(context, session_handle.to_string()))
+        self.clients.insert(session_handle.to_string(), stream);
+
+        EIS_SENDER
+            .send(EisServerMsg::NewListener(
+                listener,
+                session_handle.to_string(),
+            ))
             .unwrap();
 
         Ok(Fd::from(self.clients[session_handle.as_str()].as_fd()))

@@ -1,5 +1,4 @@
 mod dispatch;
-mod eis_server;
 mod remote_thread;
 mod state;
 
@@ -12,10 +11,8 @@ use wayland_client::protocol::wl_output;
 use std::collections::HashMap;
 use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
-use std::sync::mpsc::Receiver;
-use std::sync::{Arc, LazyLock, Mutex as StdMutex};
+use std::sync::{Arc, LazyLock};
 
-use calloop::channel::Sender;
 use enumflags2::BitFlags;
 use reis::eis;
 use serde::{Deserialize, Serialize};
@@ -38,7 +35,7 @@ use crate::session::{
 use crate::settings::WHITE_LIST_MAINTAINER;
 use crate::utils::get_selection_from_socket;
 
-pub use self::eis_server::EisServerMsg;
+use crate::eis_server::{EIS_SERVER, EisServerMsg};
 
 use crate::utils::{InputEvent, InputRequest};
 
@@ -48,17 +45,6 @@ use futures::{
     SinkExt, StreamExt,
     channel::mpsc::{Receiver as FutReceiver, Sender as FutSender},
 };
-type EisServerSender = Sender<EisServerMsg>;
-type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
-
-pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
-    let (tx, rx) = eis_server::start();
-    (tx, Arc::new(StdMutex::new(rx)))
-});
-
-pub fn get_input_receiver() -> InputEventReceiver {
-    EIS_SERVER.1.clone()
-}
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 /// Specified options for a [`Screencast::create_session`] request.

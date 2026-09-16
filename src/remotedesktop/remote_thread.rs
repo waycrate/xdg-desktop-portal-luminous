@@ -5,11 +5,9 @@ use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1;
 use wayland_protocols_wlr::virtual_pointer::v1::client::zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1;
 
-use crate::remotedesktop::dispatch::init_xkb_objects;
-
-use super::dispatch::get_keymap_as_file;
 use super::state::AppData;
 use super::state::KeyPointerError;
+use crate::utils::{get_keymap_as_file, init_xkb_objects};
 
 use std::os::fd::AsFd;
 
