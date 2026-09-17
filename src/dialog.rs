@@ -1016,7 +1016,7 @@ impl AreaSelectorGUI {
                             EIS_SENDER.send_event(
                                 handle.as_str(),
                                 InputRequest::PointerMotionAbsolute {
-                                    x: position.x as f64,
+                                    x: position.x as f64 + 1920.,
                                     y: position.y as f64,
                                 },
                             );

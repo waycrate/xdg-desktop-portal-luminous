@@ -2,7 +2,7 @@ use crate::access::AccessBackend;
 use crate::background::{BackgroundBackend, PendingBackgroundResponses};
 use crate::clipboard::Clipboard;
 use crate::dialog::{CopySelect, Message};
-use crate::input_capture::InputCapture;
+use crate::input_capture::{self, InputCapture};
 use crate::remotedesktop::RemoteDesktopBackend;
 use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
@@ -236,7 +236,10 @@ pub async fn backend(
     std::thread::spawn(move || {
         loop {
             let event = receiver.lock().unwrap().recv().unwrap();
-            runtime.block_on(remotedesktop::handle_input_event(event));
+            runtime.block_on(async {
+                remotedesktop::handle_input_event(event.clone()).await;
+                input_capture::handle_input_event(event).await;
+            });
         }
     });
 
