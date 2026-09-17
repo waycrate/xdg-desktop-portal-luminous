@@ -1,9 +1,10 @@
+use crate::backend::get_message_sender;
 use crate::dialog::Message;
 use crate::eis_server::EIS_SENDER;
 use crate::eis_server::EisServerMsg;
 use crate::{
     PortalResponse,
-    backend::get_wlconnection,
+    backend::{get_wlconnection, get_zbus_connection},
     remotedesktop::{
         LuminousData, RESTORE_DATA_VERSION, RemoteInfo, RestoreData, VENDOR_NAME,
         get_monitor_info_from_socket, space_size,
@@ -136,6 +137,26 @@ async fn update_session_data(session_handle: ObjectPath<'_>, event: InputRequest
     let mut capture_sessions = INPUT_CAPTURE_SESSIONS.lock().await;
     let session = capture_sessions.get_mut(session_handle.as_str())?;
     session.update_cursor(event);
+    let cursor_position = session.cursor_position();
+    let activation_id = session.activation_id();
+    let connection = get_zbus_connection();
+    let signal_context =
+        SignalEmitter::new(&connection, "/org/freedesktop/portal/desktop").unwrap();
+    for barrier in &mut session.barriers {
+        if barrier.through(cursor_position) && barrier.status != BarrierStatus::Activated {
+            let _ = InputCapture::activated(
+                &signal_context,
+                session_handle.as_ref(),
+                ActivatedSignal {
+                    activation_id,
+                    cursor_position,
+                    barrier_id: barrier.barrier_id,
+                },
+            )
+            .await;
+            barrier.status = BarrierStatus::Activated;
+        }
+    }
     Some(())
 }
 
@@ -148,6 +169,10 @@ pub async fn append_capture_session(path: &str, session: InputCaptureData) {
 }
 
 pub async fn remove_capture_session(session_handle: ObjectPath<'_>) {
+    let mut sender = get_message_sender();
+    let _ = sender
+        .send(Message::StopCapture(session_handle.to_string()))
+        .await;
     let mut sessions = INPUT_CAPTURE_SESSIONS.lock().await;
     let Some(session) = sessions.remove(session_handle.as_str()) else {
         return;
@@ -243,6 +268,17 @@ struct GetZonesRet {
 }
 
 pub type BarrierId = u32;
+
+#[derive(Debug, Type, Serialize, Deserialize, Default, PartialEq, Eq, Copy, Clone)]
+pub enum BarrierStatus {
+    #[default]
+    Activated,
+    Deactivated,
+    Null,
+}
+
+// I need another enum to mark the position of the display
+// But why not active them all?
 #[derive(Debug, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 pub struct BarrierInfo {
@@ -250,11 +286,29 @@ pub struct BarrierInfo {
     barrier_id: BarrierId,
     #[serde(with = "as_value")]
     position: Position,
+    // just used to record something
+    // default is false
+    #[serde(with = "as_value", default)]
+    status: BarrierStatus,
 }
 
 impl BarrierInfo {
     fn valid(&self) -> bool {
         self.position.legal_check()
+    }
+
+    // FIXME: the logic is broken
+    // should know who is left and who is right
+    fn through(&self, position: CursorPosition) -> bool {
+        let position_x = position.x as i32;
+        let position_y = position.y as i32;
+        if position_x > self.position.x2 || position_x < self.position.x1 {
+            return false;
+        }
+        if position_y > self.position.y2 || position_y < self.position.y1 {
+            return false;
+        }
+        true
     }
 }
 
@@ -271,7 +325,6 @@ async fn capture_zones(session_handle: ObjectPath<'_>) -> Option<(u32, Vec<Zone>
     Some((session.zone_id.value(), session.zones.clone()))
 }
 
-#[allow(unused)]
 pub struct InputCapture {
     pub sender: FutSender<Message>,
     clients: HashMap<String, UnixStream>,
@@ -361,14 +414,6 @@ impl InputCapture {
             },
         )
         .await;
-        // TODO: not this place capture the layer
-        //let _ = self
-        //    .sender
-        //    .send(Message::CaptureLayer {
-        //        wl_output,
-        //        handle: session_handle.to_string(),
-        //    })
-        //    .await;
         Ok(PortalResponse::Success(CreateSessionRet {
             capabilities,
             session_id: session_handle.to_string(),
@@ -456,14 +501,6 @@ impl InputCapture {
         } else {
             get_monitor_info_from_socket(&connection)?
         };
-        // TODO: not this place capture the layer
-        //let _ = self
-        //    .sender
-        //    .send(Message::CaptureLayer {
-        //        wl_output,
-        //        handle: session_handle.to_string(),
-        //    })
-        //    .await;
         let capabilities = options.capabilities & self.capabilities();
         let restore_data = options.persist_mode.is_persist().then(|| {
             RestoreData::new(LuminousData {
@@ -479,8 +516,8 @@ impl InputCapture {
                 zones: vec![Zone {
                     x_offset: x,
                     y_offset: y,
-                    width: width as u32,
-                    height: height as u32,
+                    width,
+                    height,
                 }],
                 zone_id: ZoneId::unique(),
                 barriers: vec![],
@@ -515,7 +552,7 @@ impl InputCapture {
     // NOTE: this place deskflow will set the barriers here. We should only accept the one that the
     // virtual desktop has
     async fn set_pointer_barriers(
-        &self,
+        &mut self,
         _handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         _app_id: &str,
@@ -523,11 +560,23 @@ impl InputCapture {
         barriers: Vec<BarrierInfo>,
         zone_set: u32,
     ) -> zbus::fdo::Result<PortalResponse<BarrierRet>> {
-        let mut valid_barries = vec![];
+        let connection =
+            libwayshot::WayshotConnection::from_connection(get_wlconnection()).unwrap();
+        let mut valid_outputs = vec![];
         let mut failed_barries = vec![];
+        let mut valid_barries = vec![];
+        let available_outputs = connection.get_all_outputs();
         for barrier in barriers {
-            if barrier.valid() {
+            // NOTE: only accept if there is a virtual display can accept the region
+            if barrier.valid()
+                // FIXME: this logic means it will always be the left, so it is wrong
+                && let Some(output) = available_outputs.iter().find(|output| {
+                    output.logical_position().x == barrier.position.x1
+                        && output.logical_position().y == barrier.position.y1
+                })
+            {
                 valid_barries.push(barrier);
+                valid_outputs.push(output);
             } else {
                 failed_barries.push(barrier.barrier_id);
             }
@@ -541,8 +590,19 @@ impl InputCapture {
                 "no such session".to_owned(),
             )));
         }
-        // TODO: here we should update the information to backend, and let the barries work
+
         session.barriers = valid_barries;
+        for output in valid_outputs {
+            let _ = self
+                .sender
+                .send(Message::CaptureLayer {
+                    wl_output: output.wl_output.clone(),
+                    handle: session_handle.to_string(),
+                    position: output.logical_position(),
+                    size: output.logical_size(),
+                })
+                .await;
+        }
 
         Ok(PortalResponse::Success(BarrierRet { failed_barries }))
     }
@@ -587,18 +647,6 @@ impl InputCapture {
             .get_mut(session_handle.as_str())
             .ok_or(zbus::Error::Failure("no such session".to_owned()))?;
         session.step();
-        // FIXME: should not be activated here
-        //Self::activated(
-        //    &cxts,
-        //    session_handle,
-        //    ActivatedSignal {
-        //        activation_id: session.activation_id(),
-        //        cursor_position: session.cursor_position(),
-        //        // TODO: I should check it
-        //        barrier_id: 0,
-        //    },
-        //)
-        //.await?;
         Ok(PortalResponse::Success(EnDisableRet {}))
     }
 
@@ -614,15 +662,17 @@ impl InputCapture {
         let session = capture_sessions
             .get(session_handle.as_str())
             .ok_or(zbus::Error::Failure("no such session".to_owned()))?;
-        Self::disabled(
+
+        let _ = Self::deactivated(
             &cxts,
-            session_handle,
+            session_handle.as_ref(),
             DisableSignal {
                 activation_id: session.activation_id(),
                 cursor_position: session.cursor_position(),
             },
         )
-        .await?;
+        .await;
+        Self::disabled(&cxts, session_handle, HashMap::new()).await?;
         Ok(PortalResponse::Success(EnDisableRet {}))
     }
 
@@ -630,7 +680,7 @@ impl InputCapture {
     async fn disabled(
         signal_ctx: &SignalEmitter<'_>,
         session_handle: ObjectPath<'_>,
-        options: DisableSignal,
+        options: HashMap<String, Value<'_>>,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
@@ -644,7 +694,7 @@ impl InputCapture {
     async fn deactivated(
         signal_ctx: &SignalEmitter<'_>,
         session_handle: ObjectPath<'_>,
-        options: HashMap<String, Value<'_>>,
+        options: DisableSignal,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]

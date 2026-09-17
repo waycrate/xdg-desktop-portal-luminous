@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use iced::futures::channel::mpsc::{Sender, UnboundedSender};
 use iced::widget::{
@@ -108,10 +108,13 @@ enum ViewMode {
     Others,
 }
 
-#[derive(Debug)]
+#[allow(unused)]
+#[derive(Debug, Clone)]
 struct CaptureInfo {
     id: iced::window::Id,
     handle: String,
+    position: libwayshot::region::Position,
+    size: libwayshot::region::Size,
 }
 
 #[derive(Debug, Default)]
@@ -135,7 +138,7 @@ struct AreaSelectorGUI {
     usb_entries: Vec<UsbDeviceEntry>,
     prefers_dark: bool,
 
-    capture_info: Option<CaptureInfo>,
+    capture_infos: HashMap<String, Vec<CaptureInfo>>,
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +239,8 @@ pub enum Message {
     CaptureLayer {
         wl_output: WlOutput,
         handle: String,
+        position: libwayshot::region::Position,
+        size: libwayshot::region::Size,
     },
     CloseBackgroundPrompt {
         handle: String,
@@ -250,7 +255,7 @@ pub enum Message {
     },
     CloseUsbPrompt,
     ColorSchemeChanged(bool),
-    StopCapture(iced::window::Id),
+    StopCapture(String),
     IcedEvent(Event),
 }
 
@@ -612,7 +617,7 @@ impl AreaSelectorGUI {
             tombstoned_background_handles: VecDeque::new(),
             usb_entries: Vec::new(),
             prefers_dark: SettingsConfig::config_from_file().prefers_dark(),
-            capture_info: None,
+            capture_infos: HashMap::new(),
         }
     }
 
@@ -991,108 +996,134 @@ impl AreaSelectorGUI {
                 self.prefers_dark = prefers_dark;
                 Task::none()
             }
-            Message::CaptureLayer { wl_output, handle } => {
+            Message::CaptureLayer {
+                wl_output,
+                handle,
+                position,
+                size,
+            } => {
                 let id = iced::window::Id::unique();
-                self.capture_info = Some(CaptureInfo { id, handle });
+                let insert_info = CaptureInfo {
+                    id,
+                    position,
+                    size,
+                    handle: handle.clone(),
+                };
+                self.capture_infos
+                    .entry(handle)
+                    .and_modify(|infos| infos.push(insert_info.clone()))
+                    .or_insert(vec![insert_info]);
                 Task::done(Message::NewLayerShell {
                     settings: input_capture_layer_settings(wl_output),
                     id,
                 })
             }
-            Message::StopCapture(id) => {
-                self.capture_info = None;
-                close_window(id)
-            }
-            Message::IcedEvent(event) => {
-                let Some(CaptureInfo { handle, .. }) = &self.capture_info else {
+            Message::StopCapture(handle) => {
+                let Some(overlays) = self.capture_infos.remove(&handle) else {
                     return Task::none();
                 };
-                // TODO: use iced::window to get size, and map to the real position
-                // Since maybe the setting of barries still have something wrong, the remote control
-                // can never work, so it will be the job of next time
-                match event {
-                    Event::Mouse(mouse) => match mouse {
-                        iced::mouse::Event::CursorMoved { position } => {
-                            EIS_SENDER.send_event(
-                                handle.as_str(),
-                                InputRequest::PointerMotionAbsolute {
-                                    x: position.x as f64 + 1920.,
-                                    y: position.y as f64,
-                                },
-                            );
-                        }
-                        iced::mouse::Event::ButtonPressed(button) => {
-                            EIS_SENDER.send_event(
-                                handle,
-                                InputRequest::PointerButton {
-                                    button: from_icedmouse_to_u32(button) as i32,
-                                    state: 1,
-                                },
-                            );
-                        }
-                        iced::mouse::Event::ButtonReleased(button) => {
-                            EIS_SENDER.send_event(
-                                handle,
-                                InputRequest::PointerButton {
-                                    button: from_icedmouse_to_u32(button) as i32,
-                                    state: 0,
-                                },
-                            );
-                        }
-                        iced::mouse::Event::WheelScrolled { delta } => match delta {
-                            // NOTE: it may be the wrong implement
-                            iced::mouse::ScrollDelta::Lines { x, y } => {
-                                let (axis, steps) =
-                                    if x > y { (0, x as i32) } else { (1, y as i32) };
+                let tasks: Vec<Task<Message>> = overlays
+                    .into_iter()
+                    .map(|CaptureInfo { id, .. }| close_window(id))
+                    .collect();
+                Task::batch(tasks)
+            }
+            Message::IcedEvent(event) => {
+                for CaptureInfo {
+                    handle,
+                    position: display_pos,
+                    ..
+                } in self.capture_infos.values().flatten()
+                {
+                    // TODO: use iced::window to get size, and map to the real position
+                    // Since maybe the setting of barries still have something wrong, the remote control
+                    // can never work, so it will be the job of next time
+                    match event {
+                        Event::Mouse(mouse) => match mouse {
+                            iced::mouse::Event::CursorMoved { position } => {
                                 EIS_SENDER.send_event(
-                                    handle,
-                                    InputRequest::PointerAxisDiscrete { axis, steps },
-                                );
-                            }
-                            iced::mouse::ScrollDelta::Pixels { x, y } => {
-                                EIS_SENDER.send_event(
-                                    handle,
-                                    InputRequest::PointerAxis {
-                                        dx: x as f64,
-                                        dy: y as f64,
-                                        finish: true,
+                                    handle.as_str(),
+                                    InputRequest::PointerMotionAbsolute {
+                                        x: position.x as f64 + display_pos.x as f64,
+                                        y: position.y as f64 + display_pos.y as f64,
                                     },
                                 );
                             }
+                            iced::mouse::Event::ButtonPressed(button) => {
+                                EIS_SENDER.send_event(
+                                    handle,
+                                    InputRequest::PointerButton {
+                                        button: from_icedmouse_to_u32(button) as i32,
+                                        state: 1,
+                                    },
+                                );
+                            }
+                            iced::mouse::Event::ButtonReleased(button) => {
+                                EIS_SENDER.send_event(
+                                    handle,
+                                    InputRequest::PointerButton {
+                                        button: from_icedmouse_to_u32(button) as i32,
+                                        state: 0,
+                                    },
+                                );
+                            }
+                            iced::mouse::Event::WheelScrolled { delta } => match delta {
+                                // NOTE: it may be the wrong implement
+                                iced::mouse::ScrollDelta::Lines { x, y } => {
+                                    let (axis, steps) =
+                                        if x > y { (0, x as i32) } else { (1, y as i32) };
+                                    EIS_SENDER.send_event(
+                                        handle,
+                                        InputRequest::PointerAxisDiscrete { axis, steps },
+                                    );
+                                }
+                                iced::mouse::ScrollDelta::Pixels { x, y } => {
+                                    EIS_SENDER.send_event(
+                                        handle,
+                                        InputRequest::PointerAxis {
+                                            dx: x as f64,
+                                            dy: y as f64,
+                                            finish: true,
+                                        },
+                                    );
+                                }
+                            },
+                            _ => {}
                         },
+                        Event::Touch(touch) => match touch {
+                            iced::touch::Event::FingerMoved { id, position } => {
+                                EIS_SENDER.send_event(
+                                    handle,
+                                    InputRequest::TouchMotion {
+                                        slot: id.0 as u32,
+                                        x: position.x as f64,
+                                        y: position.y as f64,
+                                    },
+                                );
+                            }
+                            iced::touch::Event::FingerPressed { id, position } => {
+                                EIS_SENDER.send_event(
+                                    handle,
+                                    InputRequest::TouchDown {
+                                        slot: id.0 as u32,
+                                        x: position.x as f64,
+                                        y: position.y as f64,
+                                    },
+                                );
+                            }
+                            iced::touch::Event::FingerLifted { id, .. } => {
+                                EIS_SENDER.send_event(
+                                    handle,
+                                    InputRequest::TouchUp { slot: id.0 as u32 },
+                                );
+                            }
+                            _ => {}
+                        },
+                        Event::Keyboard(ref _keyboard) => {
+                            // TODO: I do not know how to do
+                        }
                         _ => {}
-                    },
-                    Event::Touch(touch) => match touch {
-                        iced::touch::Event::FingerMoved { id, position } => {
-                            EIS_SENDER.send_event(
-                                handle,
-                                InputRequest::TouchMotion {
-                                    slot: id.0 as u32,
-                                    x: position.x as f64,
-                                    y: position.y as f64,
-                                },
-                            );
-                        }
-                        iced::touch::Event::FingerPressed { id, position } => {
-                            EIS_SENDER.send_event(
-                                handle,
-                                InputRequest::TouchDown {
-                                    slot: id.0 as u32,
-                                    x: position.x as f64,
-                                    y: position.y as f64,
-                                },
-                            );
-                        }
-                        iced::touch::Event::FingerLifted { id, .. } => {
-                            EIS_SENDER
-                                .send_event(handle, InputRequest::TouchUp { slot: id.0 as u32 });
-                        }
-                        _ => {}
-                    },
-                    Event::Keyboard(_keyboard) => {
-                        // TODO: I do not know how to do
                     }
-                    _ => {}
                 }
 
                 Task::none()
@@ -1358,23 +1389,18 @@ impl AreaSelectorGUI {
             .into()
     }
 
-    fn capture_view(&self, id: iced::window::Id) -> Element<'_, Message> {
-        container(button("close").on_press(Message::StopCapture(id)))
-            .center_y(Length::Fill)
-            .center_x(Length::Fill)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
-    }
-
     fn view(&self, id: iced::window::Id) -> Element<'_, Message> {
         if let GuiMode::PermissionPrompt { id_valid, .. } = self.gui_mode {
             return self.view_permission_prompt(id, id_valid);
         }
-        if let Some(CaptureInfo { id: cap_id, .. }) = self.capture_info.as_ref()
-            && *cap_id == id
+        if self
+            .capture_infos
+            .values()
+            .flatten()
+            .find(|value| value.id == id)
+            .is_some()
         {
-            return self.capture_view(id);
+            return Space::new().into();
         }
         if self.gui_mode == GuiMode::BackgroundPrompt {
             return self.view_background_prompt(id);
