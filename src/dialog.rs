@@ -1037,9 +1037,16 @@ impl AreaSelectorGUI {
                 Task::batch(tasks)
             }
             Message::IcedEvent(CaptureEvent { id, event }) => {
-                println!("{event:?}");
-                if let iced::Event::Window(iced::window::Event::Opened { size, .. }) = event {
-                    self.window_sizes.insert(id, size);
+                if let iced::Event::Window(ref win_event) = event {
+                    match win_event {
+                        iced::window::Event::Opened { size, .. } => {
+                            self.window_sizes.insert(id, *size);
+                        }
+                        iced::window::Event::Closed => {
+                            self.window_sizes.remove(&id);
+                        }
+                        _ => {}
+                    }
                 }
                 for CaptureInfo {
                     handle,
