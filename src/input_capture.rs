@@ -271,10 +271,19 @@ pub type BarrierId = u32;
 
 #[derive(Debug, Type, Serialize, Deserialize, Default, PartialEq, Eq, Copy, Clone)]
 pub enum BarrierStatus {
-    #[default]
     Activated,
     Deactivated,
+    #[default]
     Null,
+}
+
+#[derive(Debug, Type, Serialize, Deserialize, Default, PartialEq, Eq, Copy, Clone)]
+pub enum CapturePlace {
+    #[default]
+    Right,
+    Left,
+    Top,
+    Bottom,
 }
 
 // I need another enum to mark the position of the display
@@ -290,6 +299,8 @@ pub struct BarrierInfo {
     // default is false
     #[serde(with = "as_value", default)]
     status: BarrierStatus,
+    #[serde(with = "as_value", default)]
+    placement: CapturePlace,
 }
 
 impl BarrierInfo {
@@ -297,18 +308,53 @@ impl BarrierInfo {
         self.position.legal_check()
     }
 
-    // FIXME: the logic is broken
-    // should know who is left and who is right
+    fn check_placement(&mut self, zone: Zone) {
+        // vertical
+        if self.position.x1 == self.position.x2 {
+            if self.position.x1 <= zone.x_offset {
+                self.placement = CapturePlace::Left;
+            } else {
+                self.placement = CapturePlace::Right;
+            }
+            return;
+        }
+        // horizontal
+        if self.position.y1 <= zone.y_offset {
+            self.placement = CapturePlace::Top;
+        } else {
+            self.placement = CapturePlace::Bottom;
+        }
+    }
+
+    fn check_output(&self, output_info: &libwayshot::OutputInfo) -> bool {
+        match self.placement {
+            CapturePlace::Right | CapturePlace::Bottom => {
+                output_info.logical_position().x == self.position.x1
+                    && output_info.logical_position().y == self.position.y1
+            }
+            placement => {
+                let logical_position = output_info.logical_position();
+                let logical_size = output_info.logical_size();
+                if placement == CapturePlace::Left {
+                    logical_position.x + logical_size.width as i32 == self.position.x1
+                        && logical_position.y == self.position.y1
+                } else {
+                    logical_position.x == self.position.x1
+                        && logical_position.y + logical_size.height as i32 == self.position.y1
+                }
+            }
+        }
+    }
+
     fn through(&self, position: CursorPosition) -> bool {
         let position_x = position.x as i32;
         let position_y = position.y as i32;
-        if position_x > self.position.x2 || position_x < self.position.x1 {
-            return false;
+        match self.placement {
+            CapturePlace::Right => position_x > self.position.x1,
+            CapturePlace::Left => position_x < self.position.x1,
+            CapturePlace::Top => position_y < self.position.y1,
+            CapturePlace::Bottom => position_y > self.position.y1,
         }
-        if position_y > self.position.y2 || position_y < self.position.y1 {
-            return false;
-        }
-        true
     }
 }
 
@@ -566,29 +612,31 @@ impl InputCapture {
         let mut failed_barries = vec![];
         let mut valid_barries = vec![];
         let available_outputs = connection.get_all_outputs();
-        for barrier in barriers {
+        let mut capture_sessions = INPUT_CAPTURE_SESSIONS.lock().await;
+        let session = capture_sessions
+            .get_mut(session_handle.as_str())
+            .ok_or(zbus::Error::Failure("no such session".to_owned()))?;
+
+        if session.zone_id.value() != zone_set {
+            return Err(zbus::fdo::Error::ZBus(zbus::Error::Failure(
+                "no such session".to_owned(),
+            )));
+        }
+        // NOTE: because we only have one zone, so it is safe
+        let zone = session.zones[0];
+        for mut barrier in barriers {
+            barrier.check_placement(zone);
             // NOTE: only accept if there is a virtual display can accept the region
             if barrier.valid()
-                // FIXME: this logic means it will always be the left, so it is wrong
-                && let Some(output) = available_outputs.iter().find(|output| {
-                    output.logical_position().x == barrier.position.x1
-                        && output.logical_position().y == barrier.position.y1
-                })
+                && let Some(output) = available_outputs
+                    .iter()
+                    .find(|output| barrier.check_output(output))
             {
                 valid_barries.push(barrier);
                 valid_outputs.push(output);
             } else {
                 failed_barries.push(barrier.barrier_id);
             }
-        }
-        let mut capture_sessions = INPUT_CAPTURE_SESSIONS.lock().await;
-        let session = capture_sessions
-            .get_mut(session_handle.as_str())
-            .ok_or(zbus::Error::Failure("no such session".to_owned()))?;
-        if session.zone_id.value() != zone_set {
-            return Err(zbus::fdo::Error::ZBus(zbus::Error::Failure(
-                "no such session".to_owned(),
-            )));
         }
 
         session.barriers = valid_barries;

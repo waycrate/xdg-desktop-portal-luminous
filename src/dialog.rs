@@ -139,6 +139,7 @@ struct AreaSelectorGUI {
     prefers_dark: bool,
 
     capture_infos: HashMap<String, Vec<CaptureInfo>>,
+    window_sizes: HashMap<iced::window::Id, iced::Size>,
 }
 
 #[derive(Debug, Clone)]
@@ -203,6 +204,12 @@ pub enum ShowMode {
     Others,
 }
 
+#[derive(Debug, Clone)]
+pub struct CaptureEvent {
+    id: iced::window::Id,
+    event: Event,
+}
+
 #[to_layer_message(multi)]
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -256,7 +263,7 @@ pub enum Message {
     CloseUsbPrompt,
     ColorSchemeChanged(bool),
     StopCapture(String),
-    IcedEvent(Event),
+    IcedEvent(CaptureEvent),
 }
 
 fn dialog_style(outlined: bool) -> impl Fn(&iced::Theme) -> container::Style + Copy {
@@ -618,6 +625,7 @@ impl AreaSelectorGUI {
             usb_entries: Vec::new(),
             prefers_dark: SettingsConfig::config_from_file().prefers_dark(),
             capture_infos: HashMap::new(),
+            window_sizes: HashMap::new(),
         }
     }
 
@@ -1028,24 +1036,34 @@ impl AreaSelectorGUI {
                     .collect();
                 Task::batch(tasks)
             }
-            Message::IcedEvent(event) => {
+            Message::IcedEvent(CaptureEvent { id, event }) => {
+                println!("{event:?}");
+                if let iced::Event::Window(iced::window::Event::Opened { size, .. }) = event {
+                    self.window_sizes.insert(id, size);
+                }
                 for CaptureInfo {
                     handle,
                     position: display_pos,
+                    id,
+                    size,
                     ..
                 } in self.capture_infos.values().flatten()
                 {
-                    // TODO: use iced::window to get size, and map to the real position
-                    // Since maybe the setting of barries still have something wrong, the remote control
-                    // can never work, so it will be the job of next time
                     match event {
                         Event::Mouse(mouse) => match mouse {
                             iced::mouse::Event::CursorMoved { position } => {
+                                let Some(window_size) = self.window_sizes.get(id) else {
+                                    continue;
+                                };
+                                let real_x =
+                                    (position.x / window_size.width) as f64 * (size.width as f64);
+                                let real_y =
+                                    (position.y / window_size.height) as f64 * (size.height as f64);
                                 EIS_SENDER.send_event(
                                     handle.as_str(),
                                     InputRequest::PointerMotionAbsolute {
-                                        x: position.x as f64 + display_pos.x as f64,
-                                        y: position.y as f64 + display_pos.y as f64,
+                                        x: real_x + display_pos.x as f64,
+                                        y: real_y + display_pos.y as f64,
                                     },
                                 );
                             }
@@ -1544,7 +1562,12 @@ impl AreaSelectorGUI {
 
     fn subscription(&self) -> iced::Subscription<Message> {
         iced::Subscription::batch(vec![
-            event::listen().map(Message::IcedEvent),
+            event::listen_with(|event, status, id| match status {
+                iced::event::Status::Captured => None,
+                iced::event::Status::Ignored => {
+                    Some(Message::IcedEvent(CaptureEvent { id, event }))
+                }
+            }),
             iced::Subscription::run(|| {
                 iced::stream::channel(100, |mut output: Sender<Message>| async move {
                     use iced::futures::channel::mpsc::{channel, unbounded};
