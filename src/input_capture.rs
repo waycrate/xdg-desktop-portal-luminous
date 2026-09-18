@@ -253,7 +253,7 @@ struct ActivatedSignal {
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
-struct DisableSignal {
+struct DeactivatedSignal {
     #[serde(with = "as_value")]
     activation_id: u32,
     #[serde(with = "as_value")]
@@ -714,7 +714,7 @@ impl InputCapture {
         let _ = Self::deactivated(
             &cxts,
             session_handle.as_ref(),
-            DisableSignal {
+            DeactivatedSignal {
                 activation_id: session.activation_id(),
                 cursor_position: session.cursor_position(),
             },
@@ -742,7 +742,7 @@ impl InputCapture {
     async fn deactivated(
         signal_ctx: &SignalEmitter<'_>,
         session_handle: ObjectPath<'_>,
-        options: DisableSignal,
+        options: DeactivatedSignal,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
