@@ -53,8 +53,18 @@ const FONT_SEMIBOLD: Font = Font {
 };
 
 pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_exwlshell::Error> {
-    unsafe { std::env::set_var("RUST_LOG", "xdg-desktop-protal-luminous=info") }
-    tracing_subscriber::fmt().init();
+    use tracing_subscriber::filter::LevelFilter;
+    use tracing_subscriber::fmt::time::LocalTime;
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::filter::EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy()
+                .add_directive("usvg=off".parse().unwrap())
+                .add_directive("wgpu_hal::vulkan=off".parse().unwrap()),
+        )
+        .with_timer(LocalTime::rfc_3339())
+        .init();
     tracing::info!("luminous Start");
     let connection = get_wlconnection();
     daemon(
