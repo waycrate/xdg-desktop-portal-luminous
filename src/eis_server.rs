@@ -567,7 +567,7 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
                         let Some(session) = state.sessions.get_mut(&session_handle) else {
                             return;
                         };
-                        session.handle_input_request(request.clone());
+                        session.handle_input_request(request);
                         // resend to update the status
                         let _ = state.sender.send(InputEvent {
                             session_handle,
