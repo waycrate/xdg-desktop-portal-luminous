@@ -118,6 +118,24 @@ struct CaptureInfo {
 }
 
 #[derive(Debug, Default)]
+struct WindowInfo {
+    size: iced::Size,
+    position: iced::Point,
+}
+
+impl WindowInfo {
+    fn new(position: libwayshot::region::Position) -> Self {
+        Self {
+            size: iced::Size::default(),
+            position: iced::Point {
+                x: position.x as f32,
+                y: position.y as f32,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 struct AreaSelectorGUI {
     gui_mode: GuiMode,
     mode: ViewMode,
@@ -139,7 +157,9 @@ struct AreaSelectorGUI {
     prefers_dark: bool,
 
     capture_infos: HashMap<String, Vec<CaptureInfo>>,
-    window_sizes: HashMap<iced::window::Id, iced::Size>,
+    window_infos: HashMap<iced::window::Id, WindowInfo>,
+    focus_id: Option<iced::window::Id>,
+    current_pos: Option<iced::Point>,
 }
 
 #[derive(Debug, Clone)]
@@ -625,7 +645,9 @@ impl AreaSelectorGUI {
             usb_entries: Vec::new(),
             prefers_dark: SettingsConfig::config_from_file().prefers_dark(),
             capture_infos: HashMap::new(),
-            window_sizes: HashMap::new(),
+            window_infos: HashMap::new(),
+            focus_id: None,
+            current_pos: None,
         }
     }
 
@@ -1017,6 +1039,7 @@ impl AreaSelectorGUI {
                     size,
                     handle: handle.clone(),
                 };
+                self.window_infos.insert(id, WindowInfo::new(position));
                 self.capture_infos
                     .entry(handle)
                     .and_modify(|infos| infos.push(insert_info.clone()))
@@ -1037,118 +1060,158 @@ impl AreaSelectorGUI {
                 Task::batch(tasks)
             }
             Message::IcedEvent(CaptureEvent { id, event }) => {
+                let Some(CaptureInfo { handle, size, .. }) = self
+                    .capture_infos
+                    .values()
+                    .flatten()
+                    .find(|info| info.id == id)
+                else {
+                    return Task::none();
+                };
                 if let iced::Event::Window(ref win_event) = event {
                     match win_event {
                         iced::window::Event::Opened { size, .. } => {
-                            self.window_sizes.insert(id, *size);
+                            let Some(window_info) = self.window_infos.get_mut(&id) else {
+                                return Task::none();
+                            };
+                            window_info.size = *size;
                         }
                         iced::window::Event::Closed => {
-                            self.window_sizes.remove(&id);
+                            self.focus_id = None;
+                            self.window_infos.remove(&id);
+                        }
+                        iced::window::Event::Focused => {
+                            if self.window_infos.get(&id).is_none() {
+                                return Task::none();
+                            };
+
+                            self.focus_id = Some(id);
+                        }
+                        iced::window::Event::Unfocused => {
+                            if self.window_infos.get(&id).is_none() {
+                                return Task::none();
+                            };
+                            self.focus_id = None;
                         }
                         _ => {}
                     }
                 }
-                for CaptureInfo {
-                    handle,
-                    position: display_pos,
-                    id,
-                    size,
-                    ..
-                } in self.capture_infos.values().flatten()
-                {
-                    match event {
-                        Event::Mouse(mouse) => match mouse {
-                            iced::mouse::Event::CursorMoved { position } => {
-                                let Some(window_size) = self.window_sizes.get(id) else {
-                                    continue;
-                                };
-                                let real_x =
-                                    (position.x / window_size.width) as f64 * (size.width as f64);
-                                let real_y =
-                                    (position.y / window_size.height) as f64 * (size.height as f64);
+
+                match event {
+                    Event::Mouse(mouse) => match mouse {
+                        iced::mouse::Event::CursorMoved { position } => {
+                            let Some(window_info) = self.window_infos.get(&id) else {
+                                return Task::none();
+                            };
+                            if self.current_pos.is_none() {
                                 EIS_SENDER.send_event(
                                     handle.as_str(),
-                                    InputRequest::PointerMotionAbsolute {
-                                        x: real_x + display_pos.x as f64,
-                                        y: real_y + display_pos.y as f64,
+                                    InputRequest::PointerMotion {
+                                        dx: window_info.position.x as f64,
+                                        dy: window_info.position.y as f64,
                                     },
                                 );
+                                self.current_pos = Some(window_info.position);
                             }
-                            iced::mouse::Event::ButtonPressed(button) => {
+                            if window_info.size.width == 0. || window_info.size.height == 0. {
+                                return Task::none();
+                            }
+                            let Some(current_pos) = self.current_pos.as_mut() else {
+                                return Task::none();
+                            };
+                            let real_x = (position.x / window_info.size.width)
+                                * (size.width as f32)
+                                + size.width as f32;
+                            let real_y = (position.y / window_info.size.height)
+                                * (size.width as f32)
+                                + size.width as f32;
+                            let real_pos = iced::Point {
+                                x: real_x,
+                                y: real_y,
+                            };
+                            let vector = real_pos - *current_pos;
+                            *current_pos = real_pos;
+                            // NOTE: deskflow did not support absmotion
+                            EIS_SENDER.send_event(
+                                handle.as_str(),
+                                InputRequest::PointerMotion {
+                                    dx: vector.x as f64,
+                                    dy: vector.y as f64,
+                                },
+                            );
+                        }
+                        iced::mouse::Event::ButtonPressed(button) => {
+                            EIS_SENDER.send_event(
+                                handle,
+                                InputRequest::PointerButton {
+                                    button: from_icedmouse_to_u32(button) as i32,
+                                    state: 1,
+                                },
+                            );
+                        }
+                        iced::mouse::Event::ButtonReleased(button) => {
+                            EIS_SENDER.send_event(
+                                handle,
+                                InputRequest::PointerButton {
+                                    button: from_icedmouse_to_u32(button) as i32,
+                                    state: 0,
+                                },
+                            );
+                        }
+                        iced::mouse::Event::WheelScrolled { delta } => match delta {
+                            // NOTE: it may be the wrong implement
+                            iced::mouse::ScrollDelta::Lines { x, y } => {
+                                let (axis, steps) =
+                                    if x > y { (0, x as i32) } else { (1, y as i32) };
                                 EIS_SENDER.send_event(
                                     handle,
-                                    InputRequest::PointerButton {
-                                        button: from_icedmouse_to_u32(button) as i32,
-                                        state: 1,
-                                    },
+                                    InputRequest::PointerAxisDiscrete { axis, steps },
                                 );
                             }
-                            iced::mouse::Event::ButtonReleased(button) => {
+                            iced::mouse::ScrollDelta::Pixels { x, y } => {
                                 EIS_SENDER.send_event(
                                     handle,
-                                    InputRequest::PointerButton {
-                                        button: from_icedmouse_to_u32(button) as i32,
-                                        state: 0,
+                                    InputRequest::PointerAxis {
+                                        dx: x as f64,
+                                        dy: y as f64,
+                                        finish: true,
                                     },
                                 );
                             }
-                            iced::mouse::Event::WheelScrolled { delta } => match delta {
-                                // NOTE: it may be the wrong implement
-                                iced::mouse::ScrollDelta::Lines { x, y } => {
-                                    let (axis, steps) =
-                                        if x > y { (0, x as i32) } else { (1, y as i32) };
-                                    EIS_SENDER.send_event(
-                                        handle,
-                                        InputRequest::PointerAxisDiscrete { axis, steps },
-                                    );
-                                }
-                                iced::mouse::ScrollDelta::Pixels { x, y } => {
-                                    EIS_SENDER.send_event(
-                                        handle,
-                                        InputRequest::PointerAxis {
-                                            dx: x as f64,
-                                            dy: y as f64,
-                                            finish: true,
-                                        },
-                                    );
-                                }
-                            },
-                            _ => {}
                         },
-                        Event::Touch(touch) => match touch {
-                            iced::touch::Event::FingerMoved { id, position } => {
-                                EIS_SENDER.send_event(
-                                    handle,
-                                    InputRequest::TouchMotion {
-                                        slot: id.0 as u32,
-                                        x: position.x as f64,
-                                        y: position.y as f64,
-                                    },
-                                );
-                            }
-                            iced::touch::Event::FingerPressed { id, position } => {
-                                EIS_SENDER.send_event(
-                                    handle,
-                                    InputRequest::TouchDown {
-                                        slot: id.0 as u32,
-                                        x: position.x as f64,
-                                        y: position.y as f64,
-                                    },
-                                );
-                            }
-                            iced::touch::Event::FingerLifted { id, .. } => {
-                                EIS_SENDER.send_event(
-                                    handle,
-                                    InputRequest::TouchUp { slot: id.0 as u32 },
-                                );
-                            }
-                            _ => {}
-                        },
-                        Event::Keyboard(ref _keyboard) => {
-                            // TODO: I do not know how to do
+                        _ => {}
+                    },
+                    Event::Touch(touch) => match touch {
+                        iced::touch::Event::FingerMoved { id, position } => {
+                            EIS_SENDER.send_event(
+                                handle,
+                                InputRequest::TouchMotion {
+                                    slot: id.0 as u32,
+                                    x: position.x as f64,
+                                    y: position.y as f64,
+                                },
+                            );
+                        }
+                        iced::touch::Event::FingerPressed { id, position } => {
+                            EIS_SENDER.send_event(
+                                handle,
+                                InputRequest::TouchDown {
+                                    slot: id.0 as u32,
+                                    x: position.x as f64,
+                                    y: position.y as f64,
+                                },
+                            );
+                        }
+                        iced::touch::Event::FingerLifted { id, .. } => {
+                            EIS_SENDER
+                                .send_event(handle, InputRequest::TouchUp { slot: id.0 as u32 });
                         }
                         _ => {}
+                    },
+                    Event::Keyboard(_keyboard) => {
+                        // TODO: I do not know how to do
                     }
+                    _ => {}
                 }
 
                 Task::none()

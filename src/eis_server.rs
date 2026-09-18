@@ -127,7 +127,7 @@ impl ContextState {
                     device.start_emulating(self.sequence);
                     pointer_button.button(
                         button as u32,
-                        if state == 0 {
+                        if state == 1 {
                             eis::button::ButtonState::Press
                         } else {
                             eis::button::ButtonState::Released
@@ -144,7 +144,7 @@ impl ContextState {
                     device.start_emulating(self.sequence);
                     keyboard.key(
                         keycode as u32,
-                        if state == 0 {
+                        if state == 1 {
                             eis::keyboard::KeyState::Press
                         } else {
                             eis::keyboard::KeyState::Released
