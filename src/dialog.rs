@@ -1081,14 +1081,14 @@ impl AreaSelectorGUI {
                             self.window_infos.remove(&id);
                         }
                         iced::window::Event::Focused => {
-                            if self.window_infos.get(&id).is_none() {
+                            if !self.window_infos.contains_key(&id) {
                                 return Task::none();
                             };
 
                             self.focus_id = Some(id);
                         }
                         iced::window::Event::Unfocused => {
-                            if self.window_infos.get(&id).is_none() {
+                            if !self.window_infos.contains_key(&id) {
                                 return Task::none();
                             };
                             self.focus_id = None;
