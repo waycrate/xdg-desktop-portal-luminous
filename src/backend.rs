@@ -2,7 +2,7 @@ use crate::access::AccessBackend;
 use crate::background::{BackgroundBackend, PendingBackgroundResponses};
 use crate::clipboard::Clipboard;
 use crate::dialog::{CopySelect, Message};
-use crate::input_capture::InputCapture;
+use crate::input_capture::{self, InputCapture};
 use crate::remotedesktop::RemoteDesktopBackend;
 use crate::screencast::ScreenCastBackend;
 use crate::screenshot::ScreenShotBackend;
@@ -28,11 +28,12 @@ use std::sync::LazyLock;
 use std::sync::OnceLock;
 
 static SESSION: OnceLock<zbus::Connection> = OnceLock::new();
+static MESSAGE_SENDER: OnceLock<Sender<Message>> = OnceLock::new();
 static WL_CONNECTION: LazyLock<WlConnection> =
     LazyLock::new(|| WlConnection::connect_to_env().unwrap());
 const SYSTEMD_SIGNAL_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
-fn get_connection() -> zbus::Connection {
+pub fn get_zbus_connection() -> zbus::Connection {
     if let Some(cnx) = SESSION.get() {
         cnx.clone()
     } else {
@@ -44,10 +45,21 @@ pub fn get_wlconnection() -> WlConnection {
     WL_CONNECTION.clone()
 }
 
+pub fn get_message_sender() -> Sender<Message> {
+    if let Some(cnx) = MESSAGE_SENDER.get() {
+        cnx.clone()
+    } else {
+        panic!("Cannot get message sender");
+    }
+}
+
 fn set_connection(connection: Connection) {
     SESSION.set(connection).expect("Cannot set a OnceLock");
 }
 
+fn set_dialog_sender(sender: Sender<Message>) {
+    MESSAGE_SENDER.set(sender).expect("Cannot set a OnceLock");
+}
 fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
     let (mut tx, rx) = channel(1);
 
@@ -111,7 +123,7 @@ async fn async_watch<P: AsRef<Path>>(
     path: P,
     mut dialog_sender: Sender<Message>,
 ) -> notify::Result<()> {
-    let connection = get_connection();
+    let connection = get_zbus_connection();
     let (mut watcher, mut rx) = async_watcher()?;
 
     let signal_context =
@@ -207,13 +219,14 @@ pub async fn backend(
         .build()
         .await?;
 
+    set_dialog_sender(sender);
     set_connection(conn);
     tokio::spawn(crate::background::route_background_dialog_responses(
         receiver_background,
         pending_background_responses,
     ));
 
-    let background_connection = get_connection();
+    let background_connection = get_zbus_connection();
     tokio::spawn(async move {
         if let Err(e) = watch_background_applications(background_connection).await {
             tracing::info!("Cannot watch systemd app scopes: {e}");
@@ -236,11 +249,14 @@ pub async fn backend(
     std::thread::spawn(move || {
         loop {
             let event = receiver.lock().unwrap().recv().unwrap();
-            runtime.block_on(remotedesktop::handle_input_event(event));
+            runtime.block_on(async {
+                remotedesktop::handle_input_event(event.clone()).await;
+                input_capture::handle_input_event(event).await;
+            });
         }
     });
 
-    let connection = get_connection();
+    let connection = get_zbus_connection();
 
     let signal_context =
         SignalEmitter::new(&connection, "/org/freedesktop/portal/desktop").unwrap();
