@@ -17,7 +17,6 @@ use crate::{
     utils::{InputEvent, InputRequest},
 };
 use enumflags2::BitFlags;
-#[allow(unused)]
 use futures::{SinkExt, channel::mpsc::Sender as FutSender};
 use reis::eis;
 use serde::{Deserialize, Serialize};
