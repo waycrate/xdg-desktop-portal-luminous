@@ -238,7 +238,7 @@ impl AppData {
         self.virtual_pointer.axis_discrete(
             time,
             Self::portal_axis(axis),
-            steps as f64 * 10.0,
+            steps as f64 * 12.0,
             steps,
         );
         self.virtual_pointer.frame();

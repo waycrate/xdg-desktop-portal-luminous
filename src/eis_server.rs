@@ -429,7 +429,7 @@ impl State {
                                 session_handle: session_handle.to_string(),
                                 request: InputRequest::PointerAxisDiscrete {
                                     axis: 1, // Horizontal
-                                    steps: e.discrete_dx,
+                                    steps: e.discrete_dx / 12,
                                 },
                             });
                         }
@@ -438,7 +438,7 @@ impl State {
                                 session_handle: session_handle.to_string(),
                                 request: InputRequest::PointerAxisDiscrete {
                                     axis: 0, // Vertical
-                                    steps: e.discrete_dy,
+                                    steps: e.discrete_dy / 12,
                                 },
                             });
                         }
