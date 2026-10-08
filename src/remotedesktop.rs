@@ -254,6 +254,7 @@ pub struct RemoteDesktopBackend {
     last_file: Option<UnixStream>,
     sender: FutSender<Message>,
     receiver: FutReceiver<CopySelect>,
+    region: (u32, u32, u32, u32),
 }
 
 impl RemoteDesktopBackend {
@@ -262,6 +263,7 @@ impl RemoteDesktopBackend {
             last_file: None,
             sender,
             receiver,
+            region: (0, 0, 1, 1),
         }
     }
 }
@@ -356,7 +358,7 @@ impl RemoteDesktopBackend {
     }
 
     async fn start(
-        &self,
+        &mut self,
         _request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         _app_id: String,
@@ -477,6 +479,7 @@ impl RemoteDesktopBackend {
         }
         let remote_control =
             RemoteControl::init(x as u32, y as u32, space_width as u32, space_height as u32);
+        self.region = (x as u32, y as u32, width as u32, height as u32);
         let restore_data = current_session.persist_mode.is_persist().then(|| {
             RestoreData::new(LuminousData {
                 display: output_name,
@@ -659,6 +662,7 @@ impl RemoteDesktopBackend {
             .send(EisServerMsg::NewListener(
                 listener,
                 session_handle.to_string(),
+                self.region,
             ))
             .unwrap();
 
