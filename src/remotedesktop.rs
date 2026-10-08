@@ -492,6 +492,7 @@ impl RemoteDesktopBackend {
             restore_data.clone(),
         ))
         .await;
+        drop(locked_sessions);
         let clipboard_enabled = clipboard_requested
             && crate::clipboard::ensure_clipboard_session(&session_handle, dbus_connection.clone())
                 .await;
