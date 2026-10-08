@@ -675,6 +675,7 @@ impl InputCapture {
             .send(EisServerMsg::NewListener(
                 listener,
                 session_handle.to_string(),
+                (0, 0, 1, 1),
             ))
             .unwrap();
 
