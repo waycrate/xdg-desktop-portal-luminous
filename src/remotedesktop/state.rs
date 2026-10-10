@@ -235,11 +235,16 @@ impl AppData {
 
     pub fn notify_pointer_axis_discrete(&self, axis: u32, steps: i32) {
         let time = self.duration_u32();
+        // `value` is the continuous scroll in pixels (touchpad coordinates),
+        // not the value120 unit. A physical wheel click produces ~15 px of
+        // continuous scroll, so scale steps (value120 units, 120/click) down.
+        let value = (steps as f64 / 120.0) * 15.0;
+        let discrete = steps / 120;
         self.virtual_pointer.axis_discrete(
             time,
             Self::portal_axis(axis),
-            steps as f64 * 10.0,
-            steps,
+            value,
+            discrete,
         );
         self.virtual_pointer.frame();
     }
