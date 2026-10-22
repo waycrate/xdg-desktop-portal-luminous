@@ -13,7 +13,6 @@ use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, LazyLock};
 
-use enumflags2::BitFlags;
 use reis::eis;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -79,7 +78,7 @@ struct RemoteStartReturnValue {
     #[serde(with = "as_variant")]
     streams: Vec<Stream>,
     #[serde(with = "as_variant")]
-    devices: BitFlags<DeviceType>,
+    devices: DeviceType,
     #[serde(with = "as_variant")]
     clipboard_enabled: bool,
     #[serde(with = "as_variant")]
@@ -142,7 +141,7 @@ pub struct SelectDevicesOptions {
     /// A string that will be used as the last element of the handle.
     /// The device types to request remote controlling of. Default is all.
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
-    pub types: Option<BitFlags<DeviceType>>,
+    pub types: Option<DeviceType>,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub restore_data: Option<RestoreData>,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]

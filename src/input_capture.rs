@@ -16,7 +16,6 @@ use crate::{
     session::{PersistMode, SESSIONS},
     utils::{InputEvent, InputRequest},
 };
-use enumflags2::BitFlags;
 use futures::{SinkExt, channel::mpsc::Sender as FutSender};
 use reis::eis;
 use serde::{Deserialize, Serialize};
@@ -196,14 +195,14 @@ pub type SupportedCapabilities = DeviceType;
 #[zvariant(signature = "dict")]
 struct CreateSessionOptions {
     #[serde(with = "as_variant")]
-    capabilities: BitFlags<SupportedCapabilities>,
+    capabilities: SupportedCapabilities,
 }
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct StartSessionOptions {
     #[serde(with = "as_variant")]
-    capabilities: BitFlags<SupportedCapabilities>,
+    capabilities: SupportedCapabilities,
     #[serde(with = "as_variant", default)]
     persist_mode: PersistMode,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
@@ -214,18 +213,18 @@ struct StartSessionOptions {
 #[zvariant(signature = "dict")]
 struct StartResult {
     #[serde(with = "as_variant")]
-    capabilities: BitFlags<SupportedCapabilities>,
+    capabilities: SupportedCapabilities,
     #[serde(with = "as_variant")]
     clipboard_enabled: bool,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     restore_data: Option<RestoreData>,
 }
 
-#[derive(Type, Debug, Default,  Deserialize)]
+#[derive(Type, Debug, Default, Deserialize, Serialize)]
 #[zvariant(signature = "dict")]
 struct CreateSessionRet {
     #[serde(with = "as_variant")]
-    capabilities: BitFlags<SupportedCapabilities>,
+    capabilities: SupportedCapabilities,
     #[serde(with = "as_variant")]
     session_id: String,
 }
@@ -380,7 +379,7 @@ impl InputCapture {
             clients: HashMap::new(),
         }
     }
-    fn capabilities(&self) -> BitFlags<SupportedCapabilities> {
+    fn capabilities(&self) -> SupportedCapabilities {
         SupportedCapabilities::Pointer
             | SupportedCapabilities::Keyboard
             | SupportedCapabilities::TouchScreen

@@ -56,7 +56,6 @@ tracing-subscriber = { version = "0.3.23", features = [
 ] }
 tracing = "0.1.44"
 url = { version = "2.5", features = ["serde"] }
-serde_repr = "0.1"
 image = { version = "=0.24", default-features = false, features = [
 	"jpeg",
 	"png",

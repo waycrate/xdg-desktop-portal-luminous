@@ -10,8 +10,6 @@ use zbus::{
     as_variant::{self, optional},
 };
 
-use enumflags2::BitFlags;
-
 use serde::{Deserialize, Serialize};
 
 use futures::{
@@ -51,7 +49,7 @@ pub struct SelectSourcesOptions {
     /// A string that will be used as the last element of the handle.
     /// What types of content to record.    
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
-    pub types: Option<BitFlags<SourceType>>,
+    pub types: Option<SourceType>,
     /// Whether to allow selecting multiple sources.
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub multiple: Option<bool>,
@@ -142,7 +140,7 @@ impl ScreenCastBackend {
         if self.toplevel_capture_support {
             (SourceType::Monitor | SourceType::Window).bits()
         } else {
-            BitFlags::from_flag(SourceType::Monitor).bits()
+            SourceType::Monitor.bits()
         }
     }
 
