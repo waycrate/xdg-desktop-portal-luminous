@@ -413,12 +413,13 @@ impl RemoteDesktopBackend {
         let connection =
             libwayshot::WayshotConnection::from_connection(get_wlconnection()).unwrap();
         let RemoteInfo {
-            width,
-            height,
+            space_width,
+            space_height,
             x,
             y,
             wl_output,
             output_name,
+            ..
         } = if let Some(RestoreData {
             vendor_name,
             version,
@@ -432,12 +433,18 @@ impl RemoteDesktopBackend {
                 .iter()
                 .find(|output_info| output_info.name == data.display)
         {
-            let libwayshot::Size { width, height } = space_size(&connection);
+            let libwayshot::Size {
+                width: space_width,
+                height: space_height,
+            } = space_size(&connection);
 
             let libwayshot::region::Position { x, y } = display.logical_region.inner.position;
+            let libwayshot::Size { width, height } = display.physical_size;
             RemoteInfo {
                 x,
                 y,
+                space_width,
+                space_height,
                 width,
                 height,
                 output_name: display.name.to_owned(),
@@ -462,14 +469,15 @@ impl RemoteDesktopBackend {
             streams.push(Stream(
                 node_id,
                 StreamProperties {
-                    size: (width, height),
+                    size: (space_width, space_height),
                     source_type: SourceType::Monitor,
                     ..Default::default()
                 },
             ));
             cast_thread = Some(cast_thread_target);
         }
-        let remote_control = RemoteControl::init(x as u32, y as u32, width as u32, height as u32);
+        let remote_control =
+            RemoteControl::init(x as u32, y as u32, space_width as u32, space_height as u32);
         let restore_data = current_session.persist_mode.is_persist().then(|| {
             RestoreData::new(LuminousData {
                 display: output_name,
@@ -662,8 +670,10 @@ impl RemoteDesktopBackend {
 pub struct RemoteInfo {
     pub x: i32,
     pub y: i32,
-    pub width: i32,
-    pub height: i32,
+    pub space_width: i32,
+    pub space_height: i32,
+    pub width: u32,
+    pub height: u32,
     pub output_name: String,
     pub wl_output: wl_output::WlOutput,
 }
@@ -689,16 +699,21 @@ pub fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
 pub fn get_monitor_info_from_socket(
     connection: &WayshotConnection,
 ) -> zbus::fdo::Result<RemoteInfo> {
-    let libwayshot::Size { width, height } = space_size(connection);
+    let libwayshot::Size {
+        width: space_width,
+        height: space_height,
+    } = space_size(connection);
     let outputs = connection.get_all_outputs();
     if outputs.len() == 1 {
         let output = &outputs[0];
 
         let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
-        //let libwayshot::Size { width, height } = output.physical_size;
+        let libwayshot::Size { width, height } = output.physical_size;
         return Ok(RemoteInfo {
             x,
             y,
+            space_width,
+            space_height,
             width,
             height,
             output_name: output.name.to_owned(),
@@ -710,12 +725,14 @@ pub fn get_monitor_info_from_socket(
         let index = get_selection_from_socket(monitors)?;
         let output = &outputs[index as usize];
         let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
-        //let libwayshot::Size { width, height } = output.physical_size;
+        let libwayshot::Size { width, height } = output.physical_size;
         Ok(RemoteInfo {
             x,
             y,
             width,
             height,
+            space_width,
+            space_height,
             output_name: output.name.to_owned(),
             wl_output: output.wl_output.clone(),
         })
@@ -733,11 +750,14 @@ pub fn get_monitor_info_from_socket(
         let screen_info = info.screen_info;
 
         let libwaysip::Position { x, y } = screen_info.get_position();
+        let libwaysip::Size { width, height } = screen_info.get_size();
         Ok(RemoteInfo {
             x,
             y,
-            width,
-            height,
+            width: width as u32,
+            height: height as u32,
+            space_width,
+            space_height,
             output_name: screen_info.name.to_owned(),
             wl_output: screen_info.wl_output,
         })
