@@ -6,8 +6,7 @@ use futures::{SinkExt, StreamExt, channel::mpsc::Receiver};
 use serde::Deserialize;
 use tokio::sync::oneshot;
 use zbus::{
-    fdo, interface,
-    Dict, ObjectPath, OwnedObjectPath, OwnedVariant, Type, Variant, as_variant,
+    Dict, ObjectPath, OwnedObjectPath, OwnedVariant, Type, Variant, as_variant, fdo, interface,
 };
 
 use crate::dialog::{Message, UsbDeviceEntry};
@@ -58,14 +57,12 @@ fn prop_str(value: &OwnedVariant) -> Option<String> {
 
 /// Converts accepted access options back into their wire representation.
 fn access_to_wire(access: &AccessOptions) -> OwnedVariant {
-    let mut dict = Dict::new(
-        &zbus::Signature::Str,
-        &zbus::Signature::Variant,
-    );
+    let mut dict = Dict::new(&zbus::Signature::Str, &zbus::Signature::Variant);
     if access.writable {
         // Only mention writable when actually requested, so the echo stays
         // verbatim for read-only acquires.
-        dict.add("writable".to_string(), Variant::Bool(true)).unwrap();
+        dict.add("writable".to_string(), Variant::Bool(true))
+            .unwrap();
     }
     OwnedVariant::try_from(Variant::Dict(dict)).expect("dict converts to owned value")
 }
@@ -335,10 +332,7 @@ mod tests {
 
     /// Builds a `a{sv}` dictionary value from `(key, value)` pairs.
     fn wire_dict_value<const N: usize>(entries: [(&str, Variant<'static>); N]) -> Variant<'static> {
-        let mut dict = Dict::new(
-            &zbus::Signature::Str,
-            &zbus::Signature::Variant,
-        );
+        let mut dict = Dict::new(&zbus::Signature::Str, &zbus::Signature::Variant);
         for (key, value) in entries {
             dict.add(key.to_string(), value).unwrap();
         }
@@ -437,8 +431,7 @@ mod tests {
         let access: HashMap<String, Variant<'static>> =
             HashMap::from([("writable".to_string(), Variant::Bool(true))]);
         let frame = ("dev-0".to_string(), info, access);
-        let context =
-            zbus::wire::serialized::Context::new(zbus::wire::Endian::Little, 0);
+        let context = zbus::wire::serialized::Context::new(zbus::wire::Endian::Little, 0);
         let encoded = zbus::wire::to_bytes(context, &frame).unwrap();
         let decoded: UsbDeviceData = encoded.deserialize().unwrap().0;
 
@@ -477,11 +470,9 @@ mod tests {
                 )],
             });
 
-        let context =
-            zbus::wire::serialized::Context::new(zbus::wire::Endian::Little, 0);
+        let context = zbus::wire::serialized::Context::new(zbus::wire::Endian::Little, 0);
         let encoded = zbus::wire::to_bytes(context, &response).unwrap();
-        let decoded: (u32, HashMap<String, zbus::Variant<'_>>) =
-            encoded.deserialize().unwrap().0;
+        let decoded: (u32, HashMap<String, zbus::Variant<'_>>) = encoded.deserialize().unwrap().0;
         assert_eq!(decoded.0, 0);
         assert_eq!(decoded.1.len(), 1);
     }
