@@ -1,9 +1,7 @@
-use enumflags2::{BitFlags, bitflags};
-use zbus::{interface, object_server::SignalEmitter, zvariant::OwnedObjectPath};
+use zbus::{OwnedObjectPath, interface, object_server::SignalEmitter};
 
 use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
-use zbus::zvariant::Type;
+use zbus::Type;
 
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
@@ -44,54 +42,72 @@ pub async fn remove_session(session: &Session) -> bool {
     true
 }
 
-#[bitflags]
-#[derive(Serialize_repr, Default, Deserialize_repr, PartialEq, Eq, Copy, Clone, Debug, Type)]
-#[repr(u32)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Copy, Clone, Debug, Type)]
 /// A bit flag for the available sources to record.
-pub enum SourceType {
-    #[default]
-    /// A monitor.
-    Monitor,
-    /// A specific window
-    Window,
-    /// Virtual
-    Virtual,
+pub struct SourceType(u32);
+
+impl Default for SourceType {
+    fn default() -> Self {
+        Self::Monitor
+    }
 }
 
-#[bitflags]
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug, Copy, Clone, Type, Default)]
-#[repr(u32)]
+bitflags::bitflags! {
+    impl SourceType: u32 {
+        /// A monitor.
+        const Monitor = 0x1;
+        /// A specific window
+        const Window = 0x2;
+        /// Virtual
+        const Virtual = 0x3;
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Copy, Clone, Type)]
 /// A bit flag for the possible cursor modes.
-pub enum CursorMode {
-    #[default]
-    /// The cursor is not part of the screen cast stream.
-    Hidden = 1,
-    /// The cursor is embedded as part of the stream buffers.
-    Embedded = 2,
-    /// The cursor is not part of the screen cast stream, but sent as PipeWire
-    /// stream metadata.
-    Metadata = 4,
+pub struct CursorMode(u32);
+impl Default for CursorMode {
+    fn default() -> Self {
+        Self::Hidden
+    }
+}
+bitflags::bitflags! {
+    impl CursorMode: u32 {
+        /// The cursor is not part of the screen cast stream.
+        const Hidden = 1;
+        /// The cursor is embedded as part of the stream buffers.
+        const Embedded = 2;
+        /// The cursor is not part of the screen cast stream, but sent as PipeWire
+        /// stream metadata.
+        const Metadata = 4;
+    }
 }
 
 // Remote
-#[bitflags]
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug, Copy, Clone, Type, Default)]
-#[repr(u32)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Copy, Clone, Type)]
 /// A bit flag for the possible cursor modes.
-pub enum DeviceType {
-    #[default]
-    /// The cursor is not part of the screen cast stream.
-    Keyboard = 1,
-    /// The cursor is embedded as part of the stream buffers.
-    Pointer = 2,
-    /// The cursor is not part of the screen cast stream, but sent as PipeWire
-    /// stream metadata.
-    TouchScreen = 4,
+pub struct DeviceType(u32);
+
+impl Default for DeviceType {
+    fn default() -> Self {
+        Self::Keyboard
+    }
+}
+bitflags::bitflags! {
+    impl DeviceType: u32 {
+        /// The cursor is not part of the screen cast stream.
+        const Keyboard = 1;
+        /// The cursor is embedded as part of the stream buffers.
+        const Pointer = 2;
+        /// The cursor is not part of the screen cast stream, but sent as PipeWire
+        /// stream metadata.
+        const TouchScreen = 4;
+    }
 }
 
 impl CursorMode {
     pub fn show_cursor(&self) -> bool {
-        !matches!(self, CursorMode::Hidden)
+        self.bits() != Self::Hidden.bits()
     }
 }
 
@@ -126,12 +142,12 @@ impl PersistMode {
 pub struct Session {
     pub session_type: SessionType,
     pub handle_path: OwnedObjectPath,
-    pub source_type: BitFlags<SourceType>,
+    pub source_type: SourceType,
     pub multiple: bool,
     pub cursor_mode: CursorMode,
     pub persist_mode: PersistMode,
 
-    pub device_type: BitFlags<DeviceType>,
+    pub device_type: DeviceType,
     pub screen_share_enabled: bool,
     pub clipboard_requested: bool,
     pub restore_data: Option<RestoreData>,
@@ -142,11 +158,11 @@ impl Session {
         Self {
             session_type,
             handle_path: path.into(),
-            source_type: SourceType::Monitor.into(),
+            source_type: SourceType::Monitor,
             multiple: false,
             cursor_mode: CursorMode::Hidden,
             persist_mode: PersistMode::DoNot,
-            device_type: DeviceType::Keyboard.into(),
+            device_type: DeviceType::Keyboard,
             screen_share_enabled: false,
             clipboard_requested: false,
             restore_data: None,

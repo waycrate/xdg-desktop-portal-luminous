@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use zbus::{
-    fdo, interface,
-    zvariant::{ObjectPath, OwnedValue, Type, as_value::optional},
-};
+use zbus::{ObjectPath, OwnedVariant, Type, as_variant::optional, fdo, interface};
 
 use serde::{Deserialize, Serialize};
 
@@ -47,7 +44,7 @@ impl AccessBackend {
         _sub_title: String,
         _body: String,
         _options: AccessOption,
-    ) -> fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
+    ) -> fdo::Result<PortalResponse<HashMap<String, OwnedVariant>>> {
         Ok(PortalResponse::Success(HashMap::new()))
     }
     // add code here

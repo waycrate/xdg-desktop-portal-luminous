@@ -16,7 +16,6 @@ use crate::{
     session::{PersistMode, SESSIONS},
     utils::{InputEvent, InputRequest},
 };
-use enumflags2::BitFlags;
 use futures::{SinkExt, channel::mpsc::Sender as FutSender};
 use reis::eis;
 use serde::{Deserialize, Serialize};
@@ -28,12 +27,10 @@ use std::{
 };
 use tokio::sync::Mutex;
 use zbus::{
+    DeserializeDict, Fd, ObjectPath, SerializeDict, Type, Variant,
+    as_variant::{self, optional},
     interface,
     object_server::SignalEmitter,
-    zvariant::{
-        DeserializeDict, Fd, ObjectPath, SerializeDict, Type, Value,
-        as_value::{self, optional},
-    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -197,16 +194,16 @@ pub type SupportedCapabilities = DeviceType;
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct CreateSessionOptions {
-    #[serde(with = "as_value")]
-    capabilities: BitFlags<SupportedCapabilities>,
+    #[serde(with = "as_variant")]
+    capabilities: SupportedCapabilities,
 }
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct StartSessionOptions {
-    #[serde(with = "as_value")]
-    capabilities: BitFlags<SupportedCapabilities>,
-    #[serde(with = "as_value", default)]
+    #[serde(with = "as_variant")]
+    capabilities: SupportedCapabilities,
+    #[serde(with = "as_variant", default)]
     persist_mode: PersistMode,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     restore_data: Option<RestoreData>,
@@ -215,20 +212,20 @@ struct StartSessionOptions {
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct StartResult {
-    #[serde(with = "as_value")]
-    capabilities: BitFlags<SupportedCapabilities>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
+    capabilities: SupportedCapabilities,
+    #[serde(with = "as_variant")]
     clipboard_enabled: bool,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     restore_data: Option<RestoreData>,
 }
 
-#[derive(Type, Debug, Default, Serialize, Deserialize)]
+#[derive(Type, Debug, Default, Deserialize, Serialize)]
 #[zvariant(signature = "dict")]
 struct CreateSessionRet {
-    #[serde(with = "as_value")]
-    capabilities: BitFlags<SupportedCapabilities>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
+    capabilities: SupportedCapabilities,
+    #[serde(with = "as_variant")]
     session_id: String,
 }
 
@@ -242,20 +239,20 @@ struct EnDisableRet {}
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct ActivatedSignal {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     activation_id: u32,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     cursor_position: CursorPosition,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     barrier_id: BarrierId,
 }
 
 #[derive(Type, Debug, Default, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct DeactivatedSignal {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     activation_id: u32,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     cursor_position: CursorPosition,
 }
 
@@ -290,15 +287,15 @@ pub enum CapturePlace {
 #[derive(Debug, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 pub struct BarrierInfo {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     barrier_id: BarrierId,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     position: Position,
     // just used to record something
     // default is false
-    #[serde(with = "as_value", default)]
+    #[serde(with = "as_variant", default)]
     status: BarrierStatus,
-    #[serde(with = "as_value", default)]
+    #[serde(with = "as_variant", default)]
     placement: CapturePlace,
 }
 
@@ -360,7 +357,7 @@ impl BarrierInfo {
 #[derive(Debug, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct BarrierRet {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     failed_barries: Vec<u32>,
 }
 
@@ -382,7 +379,7 @@ impl InputCapture {
             clients: HashMap::new(),
         }
     }
-    fn capabilities(&self) -> BitFlags<SupportedCapabilities> {
+    fn capabilities(&self) -> SupportedCapabilities {
         SupportedCapabilities::Pointer
             | SupportedCapabilities::Keyboard
             | SupportedCapabilities::TouchScreen
@@ -470,7 +467,7 @@ impl InputCapture {
         &self,
         session_handle: ObjectPath<'_>,
         _app_id: &str,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<CreateSessionRet2> {
         let current_session = Session::new(session_handle.clone(), SessionType::InputCapture);
@@ -586,7 +583,7 @@ impl InputCapture {
         _handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         _app_id: &str,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
     ) -> zbus::fdo::Result<PortalResponse<GetZonesRet>> {
         let (zone_set, zones) = capture_zones(session_handle)
             .await
@@ -601,7 +598,7 @@ impl InputCapture {
         _handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         _app_id: &str,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         barriers: Vec<BarrierInfo>,
         zone_set: u32,
     ) -> zbus::fdo::Result<PortalResponse<BarrierRet>> {
@@ -659,7 +656,7 @@ impl InputCapture {
         &mut self,
         session_handle: ObjectPath<'_>,
         _app_id: &str,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
     ) -> zbus::fdo::Result<Fd<'_>> {
         let listener = eis::Listener::bind_auto()
             .map_err(|e| zbus::Error::Failure(format!("Failed to create EIS listener: {}", e)))?;
@@ -685,7 +682,7 @@ impl InputCapture {
         &self,
         session_handle: ObjectPath<'_>,
         _app_id: &str,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         //#[zbus(signal_emitter)] cxts: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<PortalResponse<EnDisableRet>> {
         enable_ei_client(session_handle.clone()).await;
@@ -700,7 +697,7 @@ impl InputCapture {
     async fn disable(
         &mut self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         #[zbus(signal_emitter)] cxts: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<PortalResponse<EnDisableRet>> {
         self.clients.remove(session_handle.as_str());
@@ -727,7 +724,7 @@ impl InputCapture {
     async fn disabled(
         signal_ctx: &SignalEmitter<'_>,
         session_handle: ObjectPath<'_>,
-        options: HashMap<String, Value<'_>>,
+        options: HashMap<String, Variant<'_>>,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]

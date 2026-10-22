@@ -5,14 +5,12 @@ use libwayshot::{
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
-use zbus::zvariant::{Type, Value};
 use zbus::{
+    ObjectPath,
+    as_variant::{self, optional},
     fdo, interface,
-    zvariant::{
-        ObjectPath,
-        as_value::{self, optional},
-    },
 };
+use zbus::{Type, Variant};
 
 use crate::dialog::{
     CopySelect, Message, PermissionMode, PermissionResult, TopLevelInfo, WlOutputInfo,
@@ -30,21 +28,21 @@ use libwaysip::WaySip;
 #[derive(Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct Screenshot {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     uri: url::Url,
 }
 
 #[derive(Clone, Copy, PartialEq, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct Color {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     color: [f64; 3],
 }
 
 #[derive(Type, Debug, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 pub struct ScreenshotOption {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     interactive: bool,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     modal: Option<bool>,
@@ -206,7 +204,7 @@ impl ScreenShotBackend {
         _handle: ObjectPath<'_>,
         _app_id: String,
         _parent_window: String,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
     ) -> fdo::Result<PortalResponse<Color>> {
         let wayshot_connection = WayshotConnection::new()
             .map_err(|_| zbus::Error::Failure("Cannot update outputInfos".to_string()))?;

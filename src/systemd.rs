@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use zbus::{Result, zvariant};
+use zbus::Result;
 
 const APP_SCOPE_PREFIX: &str = "app-";
 const SCOPE_SUFFIX: &str = ".scope";
@@ -15,13 +15,13 @@ pub trait Systemd1 {
     fn subscribe(&self) -> Result<()>;
 
     #[zbus(signal)]
-    fn unit_new(&self, id: &str, unit: zvariant::OwnedObjectPath) -> Result<()>;
+    fn unit_new(&self, id: &str, unit: zbus::OwnedObjectPath) -> Result<()>;
 
     #[zbus(signal)]
-    fn unit_removed(&self, id: &str, unit: zvariant::OwnedObjectPath) -> Result<()>;
+    fn unit_removed(&self, id: &str, unit: zbus::OwnedObjectPath) -> Result<()>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, zvariant::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, zbus::Type)]
 #[zvariant(signature = "(ssssssouso)")]
 pub struct Unit {
     pub name: String,
@@ -30,10 +30,10 @@ pub struct Unit {
     pub active_state: String,
     pub sub_state: String,
     pub following: String,
-    pub unit_object: zvariant::OwnedObjectPath,
+    pub unit_object: zbus::OwnedObjectPath,
     pub job_id: u32,
     pub job_type: String,
-    pub job_object: zvariant::OwnedObjectPath,
+    pub job_object: zbus::OwnedObjectPath,
 }
 
 impl Unit {

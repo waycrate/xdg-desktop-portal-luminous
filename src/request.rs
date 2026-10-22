@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use futures::{SinkExt, channel::mpsc::Sender};
 use tokio::sync::oneshot;
-use zbus::{interface, zvariant::OwnedObjectPath};
+use zbus::{OwnedObjectPath, interface};
 
 use crate::dialog::Message;
 

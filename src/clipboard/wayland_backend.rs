@@ -26,7 +26,7 @@ use wayland_protocols::ext::data_control::v1::client::{
     ext_data_control_offer_v1::{self, ExtDataControlOfferV1},
     ext_data_control_source_v1::{self, ExtDataControlSourceV1},
 };
-use zbus::zvariant::OwnedObjectPath;
+use zbus::OwnedObjectPath;
 
 static CLIPBOARD_SERIAL: AtomicU32 = AtomicU32::new(1);
 

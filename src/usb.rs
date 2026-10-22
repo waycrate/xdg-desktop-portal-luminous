@@ -6,8 +6,7 @@ use futures::{SinkExt, StreamExt, channel::mpsc::Receiver};
 use serde::Deserialize;
 use tokio::sync::oneshot;
 use zbus::{
-    fdo, interface,
-    zvariant::{Dict, ObjectPath, OwnedObjectPath, OwnedValue, Type, Value, as_value},
+    Dict, ObjectPath, OwnedObjectPath, OwnedVariant, Type, Variant, as_variant, fdo, interface,
 };
 
 use crate::dialog::{Message, UsbDeviceEntry};
@@ -33,49 +32,47 @@ struct DeviceInfo {
     /// `ID_MODEL_FROM_DATABASE`, …).
     #[serde(
         rename = "properties",
-        with = "as_value::optional",
+        with = "as_variant::optional",
         skip_serializing_if = "Option::is_none",
         default
     )]
-    properties: Option<HashMap<String, OwnedValue>>,
+    properties: Option<HashMap<String, OwnedVariant>>,
 }
 
 /// The `access options` dictionary: `writable` (b), default false.
 #[derive(Debug, Default, Type, Deserialize)]
 #[zvariant(signature = "dict")]
 struct AccessOptions {
-    #[serde(rename = "writable", with = "as_value", default)]
+    #[serde(rename = "writable", with = "as_variant", default)]
     writable: bool,
 }
 
 /// Reads a udev property that arrived variant-wrapped.
-fn prop_str(value: &OwnedValue) -> Option<String> {
+fn prop_str(value: &OwnedVariant) -> Option<String> {
     match &**value {
-        Value::Str(string) => Some(string.to_string()),
+        Variant::Str(string) => Some(string.to_string()),
         _ => None,
     }
 }
 
 /// Converts accepted access options back into their wire representation.
-fn access_to_wire(access: &AccessOptions) -> OwnedValue {
-    let mut dict = Dict::new(
-        &zbus::zvariant::Signature::Str,
-        &zbus::zvariant::Signature::Variant,
-    );
+fn access_to_wire(access: &AccessOptions) -> OwnedVariant {
+    let mut dict = Dict::new(&zbus::Signature::Str, &zbus::Signature::Variant);
     if access.writable {
         // Only mention writable when actually requested, so the echo stays
         // verbatim for read-only acquires.
-        dict.add("writable".to_string(), Value::Bool(true)).unwrap();
+        dict.add("writable".to_string(), Variant::Bool(true))
+            .unwrap();
     }
-    OwnedValue::try_from(Value::Dict(dict)).expect("dict converts to owned value")
+    OwnedVariant::try_from(Variant::Dict(dict)).expect("dict converts to owned value")
 }
 
 /// Results of a successful acquire: identifier plus echoed access options.
 #[derive(Type, Debug, serde::Serialize)]
 #[zvariant(signature = "dict")]
 struct AcquireDevicesResult {
-    #[serde(with = "as_value")]
-    devices: Vec<(String, OwnedValue)>,
+    #[serde(with = "as_variant")]
+    devices: Vec<(String, OwnedVariant)>,
 }
 
 /// Decodes hex escapes in udev strings (`\x20` for space and friends).
@@ -212,7 +209,7 @@ impl UsbBackend {
         _parent_window: String,
         app_id: String,
         devices: Vec<UsbDeviceData>,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> fdo::Result<PortalResponse<AcquireDevicesResult>> {
         tracing::info!(
@@ -334,25 +331,22 @@ mod tests {
     use super::*;
 
     /// Builds a `a{sv}` dictionary value from `(key, value)` pairs.
-    fn wire_dict_value<const N: usize>(entries: [(&str, Value<'static>); N]) -> Value<'static> {
-        let mut dict = Dict::new(
-            &zbus::zvariant::Signature::Str,
-            &zbus::zvariant::Signature::Variant,
-        );
+    fn wire_dict_value<const N: usize>(entries: [(&str, Variant<'static>); N]) -> Variant<'static> {
+        let mut dict = Dict::new(&zbus::Signature::Str, &zbus::Signature::Variant);
         for (key, value) in entries {
             dict.add(key.to_string(), value).unwrap();
         }
-        Value::Dict(dict)
+        Variant::Dict(dict)
     }
 
     /// udev properties as they arrive: variant-wrapped strings.
-    fn owned_props<const N: usize>(entries: [(&str, &str); N]) -> HashMap<String, OwnedValue> {
+    fn owned_props<const N: usize>(entries: [(&str, &str); N]) -> HashMap<String, OwnedVariant> {
         entries
             .into_iter()
             .map(|(key, value)| {
                 (
                     key.to_string(),
-                    OwnedValue::try_from(Value::from(value))
+                    OwnedVariant::try_from(Variant::from(value))
                         .expect("string converts to owned value"),
                 )
             })
@@ -430,16 +424,15 @@ mod tests {
     fn input_deserialization_unwraps_variants() {
         // Same shape as the real message body: `sa{sv}a{sv}` where every
         // dictionary entry value is variant-framed.
-        let info: HashMap<String, Value<'static>> = HashMap::from([(
+        let info: HashMap<String, Variant<'static>> = HashMap::from([(
             "properties".to_string(),
-            wire_dict_value([("ID_SERIAL", Value::from("Logitech_USB_Receiver"))]),
+            wire_dict_value([("ID_SERIAL", Variant::from("Logitech_USB_Receiver"))]),
         )]);
-        let access: HashMap<String, Value<'static>> =
-            HashMap::from([("writable".to_string(), Value::Bool(true))]);
+        let access: HashMap<String, Variant<'static>> =
+            HashMap::from([("writable".to_string(), Variant::Bool(true))]);
         let frame = ("dev-0".to_string(), info, access);
-        let context =
-            zbus::zvariant::serialized::Context::new_dbus(zbus::zvariant::Endian::Little, 0);
-        let encoded = zbus::zvariant::to_bytes(context, &frame).unwrap();
+        let context = zbus::wire::serialized::Context::new(zbus::wire::Endian::Little, 0);
+        let encoded = zbus::wire::to_bytes(context, &frame).unwrap();
         let decoded: UsbDeviceData = encoded.deserialize().unwrap().0;
 
         assert_eq!(decoded.id, "dev-0");
@@ -457,10 +450,10 @@ mod tests {
         // Absent key falls back to the documented default (false).
         let frame = (
             "dev-1".to_string(),
-            HashMap::<String, Value<'static>>::new(),
-            HashMap::<String, Value<'static>>::new(),
+            HashMap::<String, Variant<'static>>::new(),
+            HashMap::<String, Variant<'static>>::new(),
         );
-        let encoded = zbus::zvariant::to_bytes(context, &frame).unwrap();
+        let encoded = zbus::wire::to_bytes(context, &frame).unwrap();
         let decoded: UsbDeviceData = encoded.deserialize().unwrap().0;
         assert!(!decoded.access.writable);
     }
@@ -477,11 +470,9 @@ mod tests {
                 )],
             });
 
-        let context =
-            zbus::zvariant::serialized::Context::new_dbus(zbus::zvariant::Endian::Little, 0);
-        let encoded = zbus::zvariant::to_bytes(context, &response).unwrap();
-        let decoded: (u32, HashMap<String, zbus::zvariant::Value<'_>>) =
-            encoded.deserialize().unwrap().0;
+        let context = zbus::wire::serialized::Context::new(zbus::wire::Endian::Little, 0);
+        let encoded = zbus::wire::to_bytes(context, &response).unwrap();
+        let decoded: (u32, HashMap<String, zbus::Variant<'_>>) = encoded.deserialize().unwrap().0;
         assert_eq!(decoded.0, 0);
         assert_eq!(decoded.1.len(), 1);
     }

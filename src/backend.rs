@@ -174,16 +174,16 @@ pub async fn backend(
         usb_active_claim.clone(),
     ));
 
-    let conn = connection::Builder::session()?
-        .name("org.freedesktop.impl.portal.desktop.luminous")?
-        .serve_at("/org/freedesktop/portal/desktop", AccessBackend)?
+    let conn = connection::Builder::session()
+        .name("org.freedesktop.impl.portal.desktop.luminous")
+        .serve_at("/org/freedesktop/portal/desktop", AccessBackend)
         .serve_at(
             "/org/freedesktop/portal/desktop",
             ScreenShotBackend {
                 sender: sender.clone(),
                 receiver: receiver_shot,
             },
-        )?
+        )
         .serve_at(
             "/org/freedesktop/portal/desktop",
             ScreenCastBackend {
@@ -191,31 +191,31 @@ pub async fn backend(
                 sender: sender.clone(),
                 receiver: receiver_cast,
             },
-        )?
+        )
         .serve_at(
             "/org/freedesktop/portal/desktop",
             BackgroundBackend {
                 sender: sender.clone(),
                 pending_responses: pending_background_responses.clone(),
             },
-        )?
+        )
         .serve_at(
             "/org/freedesktop/portal/desktop",
             RemoteDesktopBackend::new(sender.clone(), receiver_remote),
-        )?
-        .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)?
+        )
+        .serve_at("/org/freedesktop/portal/desktop", SettingsBackend)
         .serve_at(
             "/org/freedesktop/portal/desktop",
             InputCapture::new(sender.clone()),
-        )?
-        .serve_at("/org/freedesktop/portal/desktop", Clipboard)?
+        )
+        .serve_at("/org/freedesktop/portal/desktop", Clipboard)
         .serve_at(
             "/org/freedesktop/portal/desktop",
             UsbBackend {
                 sender: sender.clone(),
                 active_claim: usb_active_claim,
             },
-        )?
+        )
         .build()
         .await?;
 

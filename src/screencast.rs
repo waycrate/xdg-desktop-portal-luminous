@@ -5,12 +5,10 @@ use libwayshot::{OutputInfo, TopLevel};
 use stream_message::SERVER_SOCK;
 use zbus::interface;
 
-use zbus::zvariant::{
-    ObjectPath, OwnedValue, Type, Value,
-    as_value::{self, optional},
+use zbus::{
+    ObjectPath, OwnedVariant, Type, Variant,
+    as_variant::{self, optional},
 };
-
-use enumflags2::BitFlags;
 
 use serde::{Deserialize, Serialize};
 
@@ -40,7 +38,7 @@ use crate::dialog::{CopySelect, Message, TopLevelInfo, WlOutputInfo};
 /// Specified options for a [`Screencast::create_session`] request.
 #[zvariant(signature = "dict")]
 struct SessionCreateResult {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     session_id: String,
 }
 
@@ -51,7 +49,7 @@ pub struct SelectSourcesOptions {
     /// A string that will be used as the last element of the handle.
     /// What types of content to record.    
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
-    pub types: Option<BitFlags<SourceType>>,
+    pub types: Option<SourceType>,
     /// Whether to allow selecting multiple sources.
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     pub multiple: Option<bool>,
@@ -76,9 +74,9 @@ struct StreamProperties {
     id: Option<String>,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     position: Option<(i32, i32)>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     size: (i32, i32),
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     source_type: SourceType,
 }
 
@@ -86,9 +84,9 @@ struct StreamProperties {
 #[derive(Clone, Default, Debug, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct StartReturnValue {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     streams: Vec<Stream>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     persist_mode: u32,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     restore_token: Option<String>,
@@ -142,7 +140,7 @@ impl ScreenCastBackend {
         if self.toplevel_capture_support {
             (SourceType::Monitor | SourceType::Window).bits()
         } else {
-            BitFlags::from_flag(SourceType::Monitor).bits()
+            SourceType::Monitor.bits()
         }
     }
 
@@ -151,7 +149,7 @@ impl ScreenCastBackend {
         request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         app_id: String,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<PortalResponse<SessionCreateResult>> {
         tracing::info!(
@@ -182,7 +180,7 @@ impl ScreenCastBackend {
         session_handle: ObjectPath<'_>,
         _app_id: String,
         options: SelectSourcesOptions,
-    ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
+    ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedVariant>>> {
         let mut locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
             .iter()
@@ -201,7 +199,7 @@ impl ScreenCastBackend {
         session_handle: ObjectPath<'_>,
         _app_id: String,
         _parent_window: String,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
     ) -> zbus::fdo::Result<PortalResponse<StartReturnValue>> {
         let cast_sessions = CAST_SESSIONS.lock().await;
         if let Some(session) = cast_sessions

@@ -13,9 +13,7 @@ use libwayshot::WayshotConnection;
 use serde::Serialize;
 use tokio::sync::{Mutex, oneshot};
 use zbus::{
-    fdo, interface,
-    object_server::SignalEmitter,
-    zvariant::{ObjectPath, OwnedObjectPath, Type, as_value},
+    ObjectPath, OwnedObjectPath, Type, as_variant, fdo, interface, object_server::SignalEmitter,
 };
 
 use crate::{
@@ -148,14 +146,14 @@ pub enum AppStatus {
 
 impl Serialize for AppStatus {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        zbus::zvariant::Value::U32(*self as u32).serialize(serializer)
+        zbus::Variant::U32(*self as u32).serialize(serializer)
     }
 }
 
 #[derive(Clone, Copy, Debug, Type, Serialize)]
 #[zvariant(signature = "dict")]
 pub struct NotifyBackgroundResult {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     result: u32,
 }
 
@@ -623,7 +621,7 @@ pub(crate) async fn get_app_state_impl(
 pub fn unit_name_from_systemd_signal(message: &zbus::Message) -> Option<String> {
     message
         .body()
-        .deserialize::<(String, zbus::zvariant::OwnedObjectPath)>()
+        .deserialize::<(String, zbus::OwnedObjectPath)>()
         .ok()
         .map(|(unit_name, _)| unit_name)
 }
