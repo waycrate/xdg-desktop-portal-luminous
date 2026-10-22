@@ -240,12 +240,8 @@ impl AppData {
         // continuous scroll, so scale steps (value120 units, 120/click) down.
         let value = (steps as f64 / 120.0) * 15.0;
         let discrete = steps / 120;
-        self.virtual_pointer.axis_discrete(
-            time,
-            Self::portal_axis(axis),
-            value,
-            discrete,
-        );
+        self.virtual_pointer
+            .axis_discrete(time, Self::portal_axis(axis), value, discrete);
         self.virtual_pointer.frame();
     }
 

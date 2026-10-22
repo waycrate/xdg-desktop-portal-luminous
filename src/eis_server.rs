@@ -22,6 +22,14 @@ use std::sync::{Arc, LazyLock, Mutex as StdMutex};
 type EisServerSender = Sender<EisServerMsg>;
 type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
 
+#[derive(Debug, Clone, Copy)]
+pub struct EisRegion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
     let (tx, rx) = start();
     (tx, Arc::new(StdMutex::new(rx)))
@@ -57,11 +65,11 @@ struct ContextState {
     connection: Option<Connection>,
     sequence: u32,
     instant: Instant,
-    region: (u32, u32, u32, u32),
+    region: EisRegion,
 }
 
 impl ContextState {
-    fn new(region: (u32, u32, u32, u32)) -> Self {
+    fn new(region: EisRegion) -> Self {
         Self {
             seat: None,
             device_keyboard: None,
@@ -289,13 +297,16 @@ fn add_device(
     name: &str,
     capabilities: BitFlags<DeviceCapability>,
     before_done_cb: impl for<'a> FnOnce(&'a reis::request::Device),
-    region: (u32, u32, u32, u32),
+    EisRegion {
+        x,
+        y,
+        width,
+        height,
+    }: EisRegion,
     seat: &reis::request::Seat,
 ) -> reis::request::Device {
     let device = seat.add_device(Some(name), DeviceType::Virtual, capabilities, |device| {
-        device
-            .device()
-            .region(region.0, region.1, region.2, region.3, 1.0);
+        device.device().region(x, y, width, height, 1.0);
         before_done_cb(device);
     });
     device.resumed();
@@ -329,7 +340,7 @@ impl State {
         &mut self,
         context: eis::Context,
         session_handle: String,
-        region: (u32, u32, u32, u32),
+        region: EisRegion,
     ) -> io::Result<calloop::PostAction> {
         tracing::info!(
             "New connection for session {}: {:?}",
@@ -507,7 +518,7 @@ impl State {
 
 #[allow(clippy::enum_variant_names)]
 pub enum EisServerMsg {
-    NewListener(eis::Listener, String, (u32, u32, u32, u32)),
+    NewListener(eis::Listener, String, EisRegion),
     RemoveListener(String),
     StopContext(String),
     ActiveContext(String),
