@@ -1,6 +1,7 @@
 use crate::backend::get_message_sender;
 use crate::dialog::Message;
 use crate::eis_server::EIS_SENDER;
+use crate::eis_server::EisRegion;
 use crate::eis_server::EisServerMsg;
 use crate::{
     PortalResponse,
@@ -675,7 +676,12 @@ impl InputCapture {
             .send(EisServerMsg::NewListener(
                 listener,
                 session_handle.to_string(),
-                (0, 0, 1, 1),
+                EisRegion {
+                    x: 0,
+                    y: 0,
+                    width: 1,
+                    height: 1,
+                },
             ))
             .unwrap();
 

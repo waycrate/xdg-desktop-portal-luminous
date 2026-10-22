@@ -35,7 +35,7 @@ use crate::session::{
 use crate::settings::WHITE_LIST_MAINTAINER;
 use crate::utils::get_selection_from_socket;
 
-use crate::eis_server::{EIS_SERVER, EisServerMsg};
+use crate::eis_server::{EIS_SERVER, EisRegion, EisServerMsg};
 
 use crate::utils::{InputEvent, InputRequest};
 
@@ -255,7 +255,7 @@ pub struct RemoteDesktopBackend {
     last_file: Option<UnixStream>,
     sender: FutSender<Message>,
     receiver: FutReceiver<CopySelect>,
-    region: (u32, u32, u32, u32),
+    region: EisRegion,
 }
 
 impl RemoteDesktopBackend {
@@ -264,7 +264,12 @@ impl RemoteDesktopBackend {
             last_file: None,
             sender,
             receiver,
-            region: (0, 0, 1, 1),
+            region: EisRegion {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
         }
     }
 }
@@ -480,7 +485,12 @@ impl RemoteDesktopBackend {
         }
         let remote_control =
             RemoteControl::init(x as u32, y as u32, space_width as u32, space_height as u32);
-        self.region = (x as u32, y as u32, width as u32, height as u32);
+        self.region = EisRegion {
+            x: x as u32,
+            y: y as u32,
+            width: space_width as u32,
+            height: space_height as u32,
+        };
         let restore_data = current_session.persist_mode.is_persist().then(|| {
             RestoreData::new(LuminousData {
                 display: output_name,
