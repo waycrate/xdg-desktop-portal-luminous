@@ -158,11 +158,11 @@ impl Session {
         Self {
             session_type,
             handle_path: path.into(),
-            source_type: SourceType::Monitor.into(),
+            source_type: SourceType::Monitor,
             multiple: false,
             cursor_mode: CursorMode::Hidden,
             persist_mode: PersistMode::DoNot,
-            device_type: DeviceType::Keyboard.into(),
+            device_type: DeviceType::Keyboard,
             screen_share_enabled: false,
             clipboard_requested: false,
             restore_data: None,
