@@ -17,9 +17,9 @@ use enumflags2::BitFlags;
 use reis::eis;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use zbus::zvariant::{
-    Fd, ObjectPath, OwnedObjectPath, OwnedValue, Type, Value,
-    as_value::{self, optional},
+use zbus::{
+    Fd, ObjectPath, OwnedObjectPath, OwnedVariant, Type, Variant,
+    as_variant::{self, optional},
 };
 use zbus::{interface, object_server::ResponseDispatchNotifier};
 
@@ -50,7 +50,7 @@ use futures::{
 /// Specified options for a [`Screencast::create_session`] request.
 #[zvariant(signature = "dict")]
 struct SessionCreateResult {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     handle_token: String,
 }
 
@@ -66,9 +66,9 @@ struct StreamProperties {
     id: Option<String>,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     position: Option<(i32, i32)>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     size: (i32, i32),
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     source_type: SourceType,
 }
 
@@ -76,13 +76,13 @@ struct StreamProperties {
 #[derive(Clone, Default, Debug, Type, Serialize, Deserialize)]
 #[zvariant(signature = "dict")]
 struct RemoteStartReturnValue {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     streams: Vec<Stream>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     devices: BitFlags<DeviceType>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     clipboard_enabled: bool,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     screen_share_enabled: bool,
     #[serde(with = "optional", skip_serializing_if = "Option::is_none", default)]
     restore_data: Option<RestoreData>,
@@ -113,7 +113,7 @@ fn remote_start_other() -> ResponseDispatchNotifier<PortalResponse<RemoteStartRe
 pub struct RestoreData {
     pub vendor_name: String,
     pub version: u32,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     pub data: LuminousData,
 }
 
@@ -232,7 +232,7 @@ async fn notify_input_event(
     Ok(())
 }
 
-fn option_bool(options: &HashMap<String, Value<'_>>, key: &str) -> bool {
+fn option_bool(options: &HashMap<String, Variant<'_>>, key: &str) -> bool {
     options
         .get(key)
         .and_then(|value| value.downcast_ref::<bool>().ok())
@@ -284,7 +284,7 @@ impl RemoteDesktopBackend {
         request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         app_id: String,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         #[zbus(object_server)] server: &zbus::ObjectServer,
     ) -> zbus::fdo::Result<PortalResponse<SessionCreateResult>> {
         tracing::info!(
@@ -340,7 +340,7 @@ impl RemoteDesktopBackend {
         session_handle: ObjectPath<'_>,
         _app_id: String,
         options: SelectDevicesOptions,
-    ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedValue>>> {
+    ) -> zbus::fdo::Result<PortalResponse<HashMap<String, OwnedVariant>>> {
         let mut locked_sessions = SESSIONS.lock().await;
         let Some(index) = locked_sessions
             .iter()
@@ -362,7 +362,7 @@ impl RemoteDesktopBackend {
         session_handle: ObjectPath<'_>,
         _app_id: String,
         _parent_window: String,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         #[zbus(connection)] dbus_connection: &zbus::Connection,
     ) -> zbus::fdo::Result<ResponseDispatchNotifier<PortalResponse<RemoteStartReturnValue>>> {
         let mut locked_sessions = SESSIONS.lock().await;
@@ -512,7 +512,7 @@ impl RemoteDesktopBackend {
     async fn notify_pointer_motion(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         dx: f64,
         dy: f64,
     ) -> zbus::fdo::Result<()> {
@@ -522,7 +522,7 @@ impl RemoteDesktopBackend {
     async fn notify_pointer_motion_absolute(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         _steam: u32,
         x: f64,
         y: f64,
@@ -533,7 +533,7 @@ impl RemoteDesktopBackend {
     async fn notify_pointer_button(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         button: i32,
         state: u32,
     ) -> zbus::fdo::Result<()> {
@@ -547,7 +547,7 @@ impl RemoteDesktopBackend {
     async fn notify_pointer_axis(
         &self,
         session_handle: ObjectPath<'_>,
-        options: HashMap<String, Value<'_>>,
+        options: HashMap<String, Variant<'_>>,
         dx: f64,
         dy: f64,
     ) -> zbus::fdo::Result<()> {
@@ -565,7 +565,7 @@ impl RemoteDesktopBackend {
     async fn notify_pointer_axis_discrete(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         axis: u32,
         steps: i32,
     ) -> zbus::fdo::Result<()> {
@@ -579,7 +579,7 @@ impl RemoteDesktopBackend {
     async fn notify_keyboard_keycode(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         keycode: i32,
         state: u32,
     ) -> zbus::fdo::Result<()> {
@@ -593,7 +593,7 @@ impl RemoteDesktopBackend {
     async fn notify_keyboard_keysym(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         keysym: i32,
         state: u32,
     ) -> zbus::fdo::Result<()> {
@@ -607,7 +607,7 @@ impl RemoteDesktopBackend {
     async fn notify_touch_down(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         _stream: u32,
         slot: u32,
         x: f64,
@@ -619,7 +619,7 @@ impl RemoteDesktopBackend {
     async fn notify_touch_motion(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         _stream: u32,
         slot: u32,
         x: f64,
@@ -631,7 +631,7 @@ impl RemoteDesktopBackend {
     async fn notify_touch_up(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
         slot: u32,
     ) -> zbus::fdo::Result<()> {
         notify_input_event(session_handle, InputRequest::TouchUp { slot }).await
@@ -642,7 +642,7 @@ impl RemoteDesktopBackend {
         &mut self,
         session_handle: ObjectPath<'_>,
         _app_id: String,
-        _options: HashMap<String, Value<'_>>,
+        _options: HashMap<String, Variant<'_>>,
     ) -> zbus::fdo::Result<Fd<'_>> {
         let listener = eis::Listener::bind_auto()
             .map_err(|e| zbus::Error::Failure(format!("Failed to create EIS listener: {}", e)))?;

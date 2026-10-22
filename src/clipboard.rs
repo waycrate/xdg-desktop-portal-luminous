@@ -9,12 +9,10 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, mpsc, oneshot, watch};
 use zbus::{
+    Fd, ObjectPath, OwnedObjectPath, OwnedVariant, Type,
+    as_variant::{self, optional},
     interface,
     object_server::SignalEmitter,
-    zvariant::{
-        Fd, ObjectPath, OwnedObjectPath, OwnedValue, Type,
-        as_value::{self, optional},
-    },
 };
 
 use crate::session::{SESSIONS, SessionType};
@@ -48,9 +46,9 @@ struct SetSelectionOptions {
 #[derive(Debug, Type, Serialize)]
 #[zvariant(signature = "dict")]
 struct SelectionOwnerChangedOptions {
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     mime_types: Vec<String>,
-    #[serde(with = "as_value")]
+    #[serde(with = "as_variant")]
     session_is_owner: bool,
 }
 
@@ -82,7 +80,7 @@ impl Clipboard {
     async fn request_clipboard(
         &self,
         session_handle: ObjectPath<'_>,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
     ) -> zbus::fdo::Result<()> {
         let mut sessions = SESSIONS.lock().await;
         let Some(session) = sessions

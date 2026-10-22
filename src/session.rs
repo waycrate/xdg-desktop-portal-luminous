@@ -1,9 +1,9 @@
 use enumflags2::{BitFlags, bitflags};
-use zbus::{interface, object_server::SignalEmitter, zvariant::OwnedObjectPath};
+use zbus::{interface, object_server::SignalEmitter, OwnedObjectPath};
 
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use zbus::zvariant::Type;
+use zbus::Type;
 
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;

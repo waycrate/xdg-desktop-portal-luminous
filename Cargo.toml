@@ -19,18 +19,22 @@ keywords = ["wayland"]
 
 [workspace.dependencies]
 serde = "1.0.229"
-serde_json = "1.0.151"
-thiserror = "2.0.20"
+serde_json = "1.0.154"
+thiserror = "2.0.21"
 stream_message = { path = "./stream_message", version = "0.1.20" }
 
 [dependencies]
-zbus = { version = "5.19", default-features = false, features = [
+zbus = { version = "6.0", default-features = false, features = [
 	"tokio",
 	"url",
+	"proxy",
+	"service",
+	"object-manager",
+	"tracing"
 ] }
 stream_message.workspace = true
 
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.54.1", features = ["full"] }
 iced = { features = [
 	"tokio",
 	"debug",
@@ -69,7 +73,7 @@ pipewire = "0.10.1"
 
 libwayshot = { version = "0.9.0", features = ["screencast"] }
 
-rustix = { version = "1.1.4", features = ["fs", "use-libc"] }
+rustix = { version = "1.1.5", features = ["fs", "use-libc"] }
 
 # REMOTE
 wayland-protocols = { version = "0.32.13", default-features = false, features = [
@@ -87,15 +91,15 @@ os_pipe = { version = "1.2", features = ["io_safety"] }
 wayland-protocols-misc = { version = "0.3.12", features = ["client"] }
 xkbcommon = "0.9.0"
 tempfile = "3.27.0"
-thiserror = "2.0.20"
-toml = "1.1.6"
-csscolorparser = "0.8.4"
+thiserror = "2.0.21"
+toml = "1.1.8"
+csscolorparser = "0.9.0"
 notify = "8.2.0"
 futures = "0.3.34"
 libwaysip = "0.7.0"
 reis = { version = "0.7.1", features = ["tokio", "calloop"] }
 sctk = { package = "smithay-client-toolkit", version = "0.20.0" }
 
-calloop = "0.14.4"
+calloop = "0.14.5"
 calloop-wayland-source = "0.4.1"
 iced_exwlshell = "0.20.1"

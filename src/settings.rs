@@ -3,7 +3,7 @@ mod white_list;
 use tokio::sync::Mutex;
 use zbus::{fdo, interface, object_server::SignalEmitter};
 
-use zbus::zvariant::{OwnedValue, Type, Value};
+use zbus::{OwnedVariant, Type, Variant};
 
 const DEFAULT_COLOR: u32 = 0;
 const DARK_COLOR: u32 = 1;
@@ -32,7 +32,7 @@ pub use self::white_list::WHITE_LIST_MAINTAINER;
 pub static SETTING_CONFIG: LazyLock<Arc<Mutex<SettingsConfig>>> =
     LazyLock::new(|| Arc::new(Mutex::new(SettingsConfig::config_from_file())));
 
-#[derive(Clone, Copy, PartialEq, Type, OwnedValue, Value)]
+#[derive(Clone, Copy, PartialEq, Type, OwnedVariant, Variant)]
 pub struct AccentColor {
     red: f64,
     green: f64,
@@ -59,13 +59,13 @@ impl SettingsBackend {
         1
     }
 
-    async fn read(&self, namespace: String, key: String) -> fdo::Result<OwnedValue> {
+    async fn read(&self, namespace: String, key: String) -> fdo::Result<OwnedVariant> {
         if namespace != APPEARANCE {
             return Err(zbus::fdo::Error::Failed("No such namespace".to_string()));
         }
         let config = SETTING_CONFIG.lock().await;
         if key == COLOR_SCHEME {
-            return Ok(OwnedValue::from(config.get_color_scheme()));
+            return Ok(OwnedVariant::from(config.get_color_scheme()));
         }
         if key == ACCENT_COLOR {
             return Ok(AccentColor::new(config.get_accent_color())
@@ -73,10 +73,10 @@ impl SettingsBackend {
                 .unwrap());
         }
         if key == CONTRAST {
-            return Ok(OwnedValue::from(config.get_contrast()));
+            return Ok(OwnedVariant::from(config.get_contrast()));
         }
         if key == REDUCED_MOTION {
-            return Ok(OwnedValue::from(config.get_reduced_motion()));
+            return Ok(OwnedVariant::from(config.get_reduced_motion()));
         }
         Err(zbus::fdo::Error::Failed("No such key".to_string()))
     }
@@ -84,23 +84,23 @@ impl SettingsBackend {
     async fn read_all(
         &self,
         namespaces: Vec<&str>,
-    ) -> fdo::Result<HashMap<String, HashMap<String, OwnedValue>>> {
+    ) -> fdo::Result<HashMap<String, HashMap<String, OwnedVariant>>> {
         if !namespaces.contains(&APPEARANCE) {
             return Err(zbus::fdo::Error::Failed("No such namespace".to_string()));
         }
-        let mut output_setting = HashMap::<String, OwnedValue>::new();
+        let mut output_setting = HashMap::<String, OwnedVariant>::new();
         let config = SETTING_CONFIG.lock().await;
         output_setting.insert(COLOR_SCHEME.to_string(), config.get_color_scheme().into());
         output_setting.insert(
             ACCENT_COLOR.to_string(),
-            OwnedValue::try_from(AccentColor::new(config.get_accent_color())).unwrap(),
+            OwnedVariant::try_from(AccentColor::new(config.get_accent_color())).unwrap(),
         );
         output_setting.insert(CONTRAST.to_string(), config.get_contrast().into());
         output_setting.insert(
             REDUCED_MOTION.to_string(),
             config.get_reduced_motion().into(),
         );
-        let output = HashMap::<String, HashMap<String, OwnedValue>>::from_iter([(
+        let output = HashMap::<String, HashMap<String, OwnedVariant>>::from_iter([(
             APPEARANCE.to_string(),
             output_setting,
         )]);
@@ -112,7 +112,7 @@ impl SettingsBackend {
         ctxt: &SignalEmitter<'_>,
         namespace: String,
         key: String,
-        value: OwnedValue,
+        value: OwnedVariant,
     ) -> zbus::Result<()>;
     // add code here
 }
