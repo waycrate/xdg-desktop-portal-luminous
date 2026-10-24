@@ -34,7 +34,7 @@ use crate::session::{
 use crate::settings::WHITE_LIST_MAINTAINER;
 use crate::utils::get_selection_from_socket;
 
-use crate::eis_server::{EIS_SERVER, EisServerMsg};
+use crate::eis_server::{EIS_SERVER, EisRegion, EisServerMsg};
 
 use crate::utils::{InputEvent, InputRequest};
 
@@ -254,6 +254,7 @@ pub struct RemoteDesktopBackend {
     last_file: Option<UnixStream>,
     sender: FutSender<Message>,
     receiver: FutReceiver<CopySelect>,
+    region: EisRegion,
 }
 
 impl RemoteDesktopBackend {
@@ -262,6 +263,12 @@ impl RemoteDesktopBackend {
             last_file: None,
             sender,
             receiver,
+            region: EisRegion {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
         }
     }
 }
@@ -356,7 +363,7 @@ impl RemoteDesktopBackend {
     }
 
     async fn start(
-        &self,
+        &mut self,
         _request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         _app_id: String,
@@ -477,6 +484,12 @@ impl RemoteDesktopBackend {
         }
         let remote_control =
             RemoteControl::init(x as u32, y as u32, space_width as u32, space_height as u32);
+        self.region = EisRegion {
+            x: x as u32,
+            y: y as u32,
+            width: space_width as u32,
+            height: space_height as u32,
+        };
         let restore_data = current_session.persist_mode.is_persist().then(|| {
             RestoreData::new(LuminousData {
                 display: output_name,
@@ -492,6 +505,7 @@ impl RemoteDesktopBackend {
             restore_data.clone(),
         ))
         .await;
+        drop(locked_sessions);
         let clipboard_enabled = clipboard_requested
             && crate::clipboard::ensure_clipboard_session(&session_handle, dbus_connection.clone())
                 .await;
@@ -658,6 +672,7 @@ impl RemoteDesktopBackend {
             .send(EisServerMsg::NewListener(
                 listener,
                 session_handle.to_string(),
+                self.region,
             ))
             .unwrap();
 
