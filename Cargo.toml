@@ -101,4 +101,4 @@ sctk = { package = "smithay-client-toolkit", version = "0.20.0" }
 
 calloop = "0.14.5"
 calloop-wayland-source = "0.4.1"
-iced_exwlshell = "0.20.1"
+iced_exwlshell = "0.21.0"

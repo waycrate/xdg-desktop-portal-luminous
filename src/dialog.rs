@@ -73,18 +73,14 @@ pub fn dialog(toplevel_capture_support: bool) -> Result<(), iced_exwlshell::Erro
         AreaSelectorGUI::update,
         AreaSelectorGUI::view,
     )
-    .settings(iced_exwlshell::Settings {
-        with_connection: Some(connection.into()),
-        layer_settings: LayerShellSettings {
-            exclusive_zone: 0,
-            anchor: Anchor::all(),
-            keyboard_interactivity: KeyboardInteractivity::OnDemand,
-            start_mode: StartMode::Background,
-
-            ..Default::default()
-        },
+    .layer_settings(LayerShellSettings {
+        exclusive_zone: 0,
+        anchor: Anchor::all(),
+        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+        start_mode: StartMode::Background,
         ..Default::default()
     })
+    .with_connection(connection)
     .subscription(AreaSelectorGUI::subscription)
     .theme(AreaSelectorGUI::theme)
     .run()
