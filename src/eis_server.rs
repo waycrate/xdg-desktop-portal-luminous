@@ -30,6 +30,17 @@ pub struct EisRegion {
     pub height: u32,
 }
 
+impl Default for EisRegion {
+    fn default() -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        }
+    }
+}
+
 pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
     let (tx, rx) = start();
     (tx, Arc::new(StdMutex::new(rx)))

@@ -263,12 +263,7 @@ impl RemoteDesktopBackend {
             last_file: None,
             sender,
             receiver,
-            region: EisRegion {
-                x: 0,
-                y: 0,
-                width: 1,
-                height: 1,
-            },
+            region: EisRegion::default(),
         }
     }
 }

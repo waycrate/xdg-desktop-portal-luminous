@@ -371,6 +371,7 @@ async fn capture_zones(session_handle: ObjectPath<'_>) -> Option<(u32, Vec<Zone>
 pub struct InputCapture {
     pub sender: FutSender<Message>,
     clients: HashMap<String, UnixStream>,
+    region: EisRegion,
 }
 
 impl InputCapture {
@@ -378,6 +379,7 @@ impl InputCapture {
         Self {
             sender,
             clients: HashMap::new(),
+            region: EisRegion::default(),
         }
     }
     fn capabilities(&self) -> SupportedCapabilities {
@@ -544,6 +546,12 @@ impl InputCapture {
         } else {
             get_monitor_info_from_socket(&connection)?
         };
+        self.region = EisRegion {
+            x: x as u32,
+            y: y as u32,
+            width: width as u32,
+            height: height as u32,
+        };
         let capabilities = options.capabilities & self.capabilities();
         let restore_data = options.persist_mode.is_persist().then(|| {
             RestoreData::new(LuminousData {
@@ -673,12 +681,7 @@ impl InputCapture {
             .send(EisServerMsg::NewListener(
                 listener,
                 session_handle.to_string(),
-                EisRegion {
-                    x: 0,
-                    y: 0,
-                    width: 1,
-                    height: 1,
-                },
+                self.region,
             ))
             .unwrap();
 
