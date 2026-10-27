@@ -549,8 +549,8 @@ impl InputCapture {
         self.region = EisRegion {
             x: x as u32,
             y: y as u32,
-            width: width as u32,
-            height: height as u32,
+            width,
+            height,
         };
         let capabilities = options.capabilities & self.capabilities();
         let restore_data = options.persist_mode.is_persist().then(|| {
