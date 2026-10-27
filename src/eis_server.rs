@@ -22,6 +22,25 @@ use std::sync::{Arc, LazyLock, Mutex as StdMutex};
 type EisServerSender = Sender<EisServerMsg>;
 type InputEventReceiver = Arc<StdMutex<Receiver<InputEvent>>>;
 
+#[derive(Debug, Clone, Copy)]
+pub struct EisRegion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Default for EisRegion {
+    fn default() -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        }
+    }
+}
+
 pub static EIS_SERVER: LazyLock<(EisServerSender, InputEventReceiver)> = LazyLock::new(|| {
     let (tx, rx) = start();
     (tx, Arc::new(StdMutex::new(rx)))
@@ -57,10 +76,11 @@ struct ContextState {
     connection: Option<Connection>,
     sequence: u32,
     instant: Instant,
+    region: EisRegion,
 }
 
 impl ContextState {
-    fn new() -> Self {
+    fn new(region: EisRegion) -> Self {
         Self {
             seat: None,
             device_keyboard: None,
@@ -73,6 +93,7 @@ impl ContextState {
             connection: None,
             sequence: 0,
             instant: Instant::now(),
+            region,
         }
     }
     fn handle_input_request(&mut self, request: InputRequest) {
@@ -196,6 +217,7 @@ impl ContextState {
                         "keyboard",
                         BitFlags::from_flag(DeviceCapability::Keyboard),
                         advertise_keyboard_keymap,
+                        self.region,
                         &request.seat,
                     ));
                 }
@@ -208,6 +230,7 @@ impl ContextState {
                             | DeviceCapability::Button
                             | DeviceCapability::Scroll,
                         |_| {},
+                        self.region,
                         &request.seat,
                     ));
                 }
@@ -217,6 +240,7 @@ impl ContextState {
                         "touch",
                         BitFlags::from_flag(DeviceCapability::Touch),
                         |_| {},
+                        self.region,
                         &request.seat,
                     ));
                 }
@@ -230,6 +254,7 @@ impl ContextState {
                             | DeviceCapability::Button
                             | DeviceCapability::Scroll,
                         |_| {},
+                        self.region,
                         &request.seat,
                     ));
                 }
@@ -238,6 +263,7 @@ impl ContextState {
                         "scroll",
                         BitFlags::from_flag(DeviceCapability::Scroll),
                         |_| {},
+                        self.region,
                         &request.seat,
                     ));
                 }
@@ -246,6 +272,7 @@ impl ContextState {
                         "button",
                         BitFlags::from_flag(DeviceCapability::Button),
                         |_| {},
+                        self.region,
                         &request.seat,
                     ));
                 }
@@ -254,6 +281,7 @@ impl ContextState {
                         "text",
                         DeviceCapability::Text.into(),
                         |_| {},
+                        self.region,
                         &request.seat,
                     ));
                 }
@@ -280,14 +308,18 @@ fn add_device(
     name: &str,
     capabilities: BitFlags<DeviceCapability>,
     before_done_cb: impl for<'a> FnOnce(&'a reis::request::Device),
+    EisRegion {
+        x,
+        y,
+        width,
+        height,
+    }: EisRegion,
     seat: &reis::request::Seat,
 ) -> reis::request::Device {
-    let device = seat.add_device(
-        Some(name),
-        DeviceType::Virtual,
-        capabilities,
-        before_done_cb,
-    );
+    let device = seat.add_device(Some(name), DeviceType::Virtual, capabilities, |device| {
+        device.device().region(x, y, width, height, 1.0);
+        before_done_cb(device);
+    });
     device.resumed();
     device
 }
@@ -319,6 +351,7 @@ impl State {
         &mut self,
         context: eis::Context,
         session_handle: String,
+        region: EisRegion,
     ) -> io::Result<calloop::PostAction> {
         tracing::info!(
             "New connection for session {}: {:?}",
@@ -327,7 +360,7 @@ impl State {
         );
 
         let source = EisRequestSource::new(context, Id::unique().0);
-        let context_state = ContextState::new();
+        let context_state = ContextState::new(region);
         let session_handle_clone = session_handle.clone();
         self.sessions.insert(session_handle, context_state);
         self.handle
@@ -496,7 +529,7 @@ impl State {
 
 #[allow(clippy::enum_variant_names)]
 pub enum EisServerMsg {
-    NewListener(eis::Listener, String),
+    NewListener(eis::Listener, String, EisRegion),
     RemoveListener(String),
     StopContext(String),
     ActiveContext(String),
@@ -521,7 +554,7 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
         let _ = handle.insert_source(msg_channel, |event, _, state| {
             if let calloop::channel::Event::Msg(msg) = event {
                 match msg {
-                    EisServerMsg::NewListener(listener, session_handle) => {
+                    EisServerMsg::NewListener(listener, session_handle, region) => {
                         let listener_source = EisListenerSource::new(listener);
                         let session_handle_2 = session_handle.clone();
                         let token = state
@@ -529,7 +562,11 @@ pub fn start() -> (Sender<EisServerMsg>, Receiver<InputEvent>) {
                             .insert_source(
                                 listener_source,
                                 move |context, (), state: &mut State| {
-                                    state.handle_new_connection(context, session_handle.clone())
+                                    state.handle_new_connection(
+                                        context,
+                                        session_handle.clone(),
+                                        region,
+                                    )
                                 },
                             )
                             .unwrap();
