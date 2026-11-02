@@ -600,7 +600,7 @@ impl AreaSelectorGUI {
                 Some(Message::ShowModeChange(ShowMode::Others)),
             ));
         }
-        button_list.append(&mut vec![
+        button_list.extend(vec![
             self.tab_button(
                 "Screen",
                 self.mode == ViewMode::Screens,
