@@ -440,7 +440,9 @@ impl RemoteDesktopBackend {
             } = space_size(&connection);
 
             let libwayshot::region::Position { x, y } = display.logical_region.inner.position;
-            let libwayshot::Size { width, height } = display.physical_size;
+            // EIS / virtual-pointer coords are compositor-logical (fractional scale).
+            // Match input_capture, which already uses logical_region.
+            let libwayshot::region::Size { width, height } = display.logical_region.inner.size;
             RemoteInfo {
                 x,
                 y,
@@ -694,7 +696,8 @@ pub fn space_size(connection: &WayshotConnection) -> libwayshot::Size<i32> {
     let outputs = connection.get_all_outputs();
     for output in outputs {
         let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
-        let libwayshot::Size { width, height } = output.physical_size;
+        // Match input_capture: logical size so absolute pointer coords match the compositor.
+        let libwayshot::region::Size { width, height } = output.logical_region.inner.size;
         space_width = space_width.max(width as i32 + x);
         space_height = space_height.max(height as i32 + y)
     }
@@ -717,7 +720,7 @@ pub fn get_monitor_info_from_socket(
         let output = &outputs[0];
 
         let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
-        let libwayshot::Size { width, height } = output.physical_size;
+        let libwayshot::region::Size { width, height } = output.logical_region.inner.size;
         return Ok(RemoteInfo {
             x,
             y,
@@ -734,7 +737,7 @@ pub fn get_monitor_info_from_socket(
         let index = get_selection_from_socket(monitors)?;
         let output = &outputs[index as usize];
         let libwayshot::region::Position { x, y } = output.logical_region.inner.position;
-        let libwayshot::Size { width, height } = output.physical_size;
+        let libwayshot::region::Size { width, height } = output.logical_region.inner.size;
         Ok(RemoteInfo {
             x,
             y,
