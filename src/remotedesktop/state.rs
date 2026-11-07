@@ -156,8 +156,8 @@ impl AppData {
 
     pub fn notify_pointer_motion_absolute(&self, x: f64, y: f64) {
         let time = self.duration_u32();
-        let x = x as u32 + self.x;
-        let y = y as u32 + self.y;
+        let x = x.round() as u32 + self.x;
+        let y = y.round() as u32 + self.y;
         self.virtual_pointer
             .motion_absolute(time, x, y, self.space_width, self.space_height);
         self.virtual_pointer.frame();
