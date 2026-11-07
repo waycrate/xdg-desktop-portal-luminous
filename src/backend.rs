@@ -248,11 +248,43 @@ pub async fn backend(
     let runtime = tokio::runtime::Handle::current();
     std::thread::spawn(move || {
         loop {
-            let event = receiver.lock().unwrap().recv().unwrap();
-            runtime.block_on(async {
-                remotedesktop::handle_input_event(event.clone()).await;
-                input_capture::handle_input_event(event).await;
-            });
+            let first = {
+                let rx = receiver.lock().unwrap();
+                match rx.recv() {
+                    Ok(event) => event,
+                    Err(_) => return,
+                }
+            };
+
+            // Drain a burst so high-rate mice do not pay tokio per packet.
+            let mut batch = vec![first];
+            {
+                let rx = receiver.lock().unwrap();
+                while let Ok(event) = rx.try_recv() {
+                    batch.push(event);
+                    if batch.len() >= 64 {
+                        break;
+                    }
+                }
+            }
+
+            // Fast path covers RemoteDesktop clients (e.g. Deskflow). Fallback is
+            // for Input Capture or events before the remote sender was registered.
+            let mut pending = Vec::new();
+            for event in batch {
+                if !remotedesktop::dispatch_input_event_fast(&event) {
+                    pending.push(event);
+                }
+            }
+
+            if !pending.is_empty() {
+                runtime.block_on(async {
+                    for event in pending {
+                        remotedesktop::handle_input_event(event.clone()).await;
+                        input_capture::handle_input_event(event).await;
+                    }
+                });
+            }
         }
     });
 

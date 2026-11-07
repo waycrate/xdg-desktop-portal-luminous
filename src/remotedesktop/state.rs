@@ -156,8 +156,9 @@ impl AppData {
 
     pub fn notify_pointer_motion_absolute(&self, x: f64, y: f64) {
         let time = self.duration_u32();
-        let x = x as u32 + self.x;
-        let y = y as u32 + self.y;
+        // Round instead of truncate so slow moves feel less stair-steppy.
+        let x = x.round().max(0.0) as u32 + self.x;
+        let y = y.round().max(0.0) as u32 + self.y;
         self.virtual_pointer
             .motion_absolute(time, x, y, self.space_width, self.space_height);
         self.virtual_pointer.frame();

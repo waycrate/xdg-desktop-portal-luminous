@@ -11,7 +11,9 @@ use wayland_client::protocol::wl_output;
 use std::collections::HashMap;
 use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex as StdMutex};
+
+use calloop::channel::Sender as CalloopSender;
 
 use reis::eis;
 use serde::{Deserialize, Serialize};
@@ -194,12 +196,25 @@ impl RemoteSessionData {
 pub static REMOTE_SESSIONS: LazyLock<Arc<Mutex<Vec<RemoteSessionData>>>> =
     LazyLock::new(|| Arc::new(Mutex::new(Vec::new())));
 
+/// Sync fast-path for EIS→virtual-pointer. Avoids tokio mutex/block_on per mouse event.
+pub static REMOTE_CONTROL_SENDERS: LazyLock<StdMutex<HashMap<String, CalloopSender<InputRequest>>>> =
+    LazyLock::new(|| StdMutex::new(HashMap::new()));
+
 pub async fn append_remote_session(session: RemoteSessionData) {
+    if let Ok(mut map) = REMOTE_CONTROL_SENDERS.lock() {
+        map.insert(
+            session.session_handle.clone(),
+            session.remote_control.sender.clone(),
+        );
+    }
     let mut sessions = REMOTE_SESSIONS.lock().await;
     sessions.push(session)
 }
 
 pub async fn remove_remote_session(session_handle: ObjectPath<'_>) {
+    if let Ok(mut map) = REMOTE_CONTROL_SENDERS.lock() {
+        map.remove(session_handle.as_str());
+    }
     let mut sessions = REMOTE_SESSIONS.lock().await;
     let Some(index) = sessions
         .iter()
@@ -212,14 +227,33 @@ pub async fn remove_remote_session(session_handle: ObjectPath<'_>) {
     sessions.remove(index);
 }
 
+/// Hot path used by the EIS bridge thread. Returns true if a remote session got the event.
+pub fn dispatch_input_event_fast(event: &InputEvent) -> bool {
+    let Ok(map) = REMOTE_CONTROL_SENDERS.lock() else {
+        return false;
+    };
+    let Some(sender) = map.get(&event.session_handle) else {
+        return false;
+    };
+    sender.send(event.request.clone()).is_ok()
+}
+
 async fn notify_input_event(
     session_handle: ObjectPath<'_>,
     event: InputRequest,
 ) -> zbus::fdo::Result<()> {
+    if let Ok(map) = REMOTE_CONTROL_SENDERS.lock()
+        && let Some(sender) = map.get(session_handle.as_str())
+    {
+        sender
+            .send(event)
+            .map_err(|_| zbus::Error::Failure("Send failed".to_string()))?;
+        return Ok(());
+    }
     let mut remote_sessions = REMOTE_SESSIONS.lock().await;
     let Some(session) = remote_sessions
         .iter_mut()
-        .find(|session| session.session_handle == session_handle.to_string())
+        .find(|session| session.session_handle == session_handle.as_str())
     else {
         return Ok(());
     };
