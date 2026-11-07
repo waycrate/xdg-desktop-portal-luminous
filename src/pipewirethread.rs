@@ -184,21 +184,23 @@ impl StreamingData {
             let plane_len = bo.plane_count() as usize;
             let data_len = datas.len();
             let loop_len = plane_len.min(data_len);
+            let bo_height = bo.height();
             #[allow(clippy::needless_range_loop)]
             for index in 0..loop_len {
                 let data = &mut datas[index];
                 let plane_fd = bo.fd_for_plane(index as i32).unwrap();
                 let plane_offset = bo.offset(index as i32);
-                let plane_stride = bo.stride();
+                let plane_stride = bo.stride_for_plane(index as i32);
+                let plane_size = plane_stride * bo_height;
                 data.type_ = spa::sys::SPA_DATA_DmaBuf;
                 data.flags = 0;
                 data.fd = plane_fd.into_raw_fd() as _;
                 data.data = std::ptr::null_mut();
-                data.maxsize = width * height * 4;
+                data.maxsize = plane_offset + plane_size;
                 data.mapoffset = 0;
 
                 let chunk = unsafe { &mut *data.chunk };
-                chunk.size = height * plane_stride;
+                chunk.size = plane_size;
                 chunk.offset = plane_offset;
                 chunk.stride = plane_stride as i32;
             }
