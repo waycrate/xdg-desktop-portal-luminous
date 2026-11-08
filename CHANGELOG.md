@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.22] - 2026-11-08
+
+### Fixed
+
+- fix: pipewire thread loop by [Gigas002](https://github.com/Gigas002) in [#246](https://github.com/waycrate/xdg-desktop-portal-luminous/pull/246)
+- Fix Deskflow RemoteDesktop integration on Wayland in by [brendensuarez](https://github.com/brendensuarez) [#237](https://github.com/waycrate/xdg-desktop-portal-luminous/pull/237)
+
+### Changed
+- update iced_exwlshell to 0.21.3
+- Sync to zbus6
+- feat: implement org.freedesktop.portal.Usb by [MuntasirSZN](https://github.com/MuntasirSZN) in  [#226](https://github.com/waycrate/xdg-desktop-portal-luminous/pull/226) 
+- Send EIS Keymap by [Nuhiat-Arefin](https://github.com/Nuhiat-Arefin) in [#223](https://github.com/waycrate/xdg-desktop-portal-luminous/pull/223)
+
+[0.1.22]: https://github.com/waycrate/xdg-desktop-portal-luminous/compare/v0.1.22-v0.1.21
+
 ## [0.1.21] - 2026-08-01
 
 ### Fixed
