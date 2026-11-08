@@ -2660,9 +2660,9 @@ dependencies = [
 
 [[package]]
 name = "libwayshot"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2091a51ba887965be06c011f7d5b90f3c706791892359f8af5aa0a81a15a310e"
+checksum = "f970abf8d42b2b2d66b7f2ac5522199bebdbc74592ab9dd4ddacf731a3c48cb3"
 dependencies = [
  "drm 0.15.0",
  "gbm",
@@ -2774,7 +2774,7 @@ checksum = "7f66e8d5d03f609abc3a39e6f08e4164ebf1447a732906d39eb9b99b7919ef39"
 
 [[package]]
 name = "lumious_headless_helper"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "dialoguer",
  "signal-hook",
@@ -4826,7 +4826,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stream_message"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "serde",
  "serde_json",
@@ -6390,7 +6390,7 @@ checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 
 [[package]]
 name = "xdg-desktop-portal-luminous"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "anyhow",
  "bitflags 2.13.2",
