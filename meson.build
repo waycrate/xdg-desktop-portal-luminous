@@ -1,15 +1,15 @@
 project(
   'xdg-desktop-portal-luminous',
   'rust',
-  version: '0.1.19',
+  version: '0.1.22',
   meson_version: '>= 1.1.0',
 )
 
-cargo = find_program('cargo', version: '>= 1.85')
+cargo = find_program('cargo', version: '>= 1.99')
 
 helper_name = 'lumious_headless_helper'
 
-find_program('rustc', version: '>= 1.85')
+find_program('rustc', version: '>= 1.99')
 
 if get_option('debug')
   command_main = [
@@ -64,13 +64,13 @@ global_conf = configuration_data()
 
 global_conf.set('xdg_install_dir', xdg_install_dir)
 
-configure_file(
+xdpl_systemd_service = configure_file(
   input: 'misc/xdg-desktop-portal-luminous.service.in',
   output: 'xdg-desktop-portal-luminous.service',
   configuration: global_conf,
 )
 
-configure_file(
+xdpl_service = configure_file(
   input: 'misc/org.freedesktop.impl.portal.desktop.luminous.service.in',
   output: 'org.freedesktop.impl.portal.desktop.luminous.service',
   configuration: global_conf,
@@ -98,11 +98,11 @@ custom_target(
 install_data('misc/luminous.portal', install_dir: portal_dir)
 
 install_data(
-  meson.project_build_root() / 'org.freedesktop.impl.portal.desktop.luminous.service',
+  xdpl_service,
   install_dir: dbus1_dir,
 )
 
 install_data(
-  meson.project_build_root() / 'xdg-desktop-portal-luminous.service',
+  xdpl_systemd_service,
   install_dir: system_dir,
 )
