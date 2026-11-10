@@ -90,3 +90,4 @@ Build time requirements are marked with `*`.
 1. xkbcommon *
 1. wayland
 1. wayland-protocols *
+1. glib-2.0 *
