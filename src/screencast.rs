@@ -132,7 +132,7 @@ impl ScreenCastBackend {
 
     #[zbus(property)]
     fn available_cursor_modes(&self) -> u32 {
-        (CursorMode::Hidden | CursorMode::Embedded).bits()
+        (CursorMode::Hidden | CursorMode::Embedded | CursorMode::Metadata).bits()
     }
 
     #[zbus(property)]
